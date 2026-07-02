@@ -5,6 +5,25 @@ export * from './commitment'
 export * from './config'
 export * from './indexer'
 export * from './indexerClient'
+export {
+  controllerEventTypes,
+  duskDomainsIndexedEventTypes,
+  feeConfigEventTypes,
+  isControllerEventType,
+  isFeeConfigEventType,
+  isLifecycleEventType,
+  isReferralEventType,
+  isResolverEventType,
+  isReverseEventType,
+  isSubnameEventType,
+  isTreasuryEventType,
+  lifecycleEventTypes,
+  referralEventTypes,
+  resolverEventTypes,
+  reverseEventTypes,
+  subnameEventTypes,
+  treasuryEventTypes,
+} from './indexerEventCatalog.mjs'
 export * from './indexerKit'
 export * from './liveConfirmation'
 export * from './localDevWallet'
