@@ -14,6 +14,10 @@
     "./internal": {
       "types": "./src/internal.ts",
       "import": "./src/internal.ts"
+    },
+    "./event-catalog": {
+      "types": "./src/indexerEventCatalog.d.mts",
+      "import": "./src/indexerEventCatalog.mjs"
     }
   },
   "files": [

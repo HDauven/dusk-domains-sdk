@@ -7,6 +7,7 @@ The SDK has two package entrypoints:
 ```ts
 import { ... } from '@hdauven/dusk-domains-sdk'
 import { ... } from '@hdauven/dusk-domains-sdk/internal'
+import { ... } from '@hdauven/dusk-domains-sdk/event-catalog'
 ```
 
 ## Public Entry Point
@@ -27,6 +28,19 @@ Stable-ish exports:
 - indexed event envelope helpers and projector helpers
 
 The public entrypoint must not require app components, React, browser-only globals, private deployment material, mnemonics, operator secrets or the Dusk Domains contract source tree.
+
+## Event Catalog Entry Point
+
+The event catalog entrypoint is a Node-safe JavaScript export for standalone indexers and event decoders:
+
+```js
+import {
+  duskDomainsIndexedEventTypes,
+  isDuskDomainsIndexedEventType,
+} from '@hdauven/dusk-domains-sdk/event-catalog'
+```
+
+Use this entrypoint when plain Node must route decoded Dusk Domains events without compiling TypeScript source. Keep the catalog additive unless a contract redeploy intentionally changes the event schema.
 
 ## Internal Entry Point
 

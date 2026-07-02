@@ -59,5 +59,6 @@ Before updating a downstream app or indexer to a new SDK ref:
 - `npm run typecheck`
 - `npm run build`
 - check `docs/public-surface.md` for accidental internal promotion
+- if the indexer changed, verify `@hdauven/dusk-domains-sdk/event-catalog` still loads under plain Node
 - update downstream package lockfiles
 - run downstream build and relevant smoke tests
