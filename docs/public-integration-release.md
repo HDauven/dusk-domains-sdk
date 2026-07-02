@@ -67,14 +67,14 @@ Third parties should not rely on:
 
 ## Package Layout
 
-Proposed package names:
+Current private package names and possible public names:
 
 | Package | Contents |
 | --- | --- |
-| `@dusk-domains/sdk` | Direct on-chain client, combined client, record/name/principal helpers, manifest validation, and public call builders. |
+| `@hdauven/dusk-domains-sdk` now, possible `@dusk-domains/sdk` later | Direct on-chain client, combined client, record/name/principal helpers, manifest validation, and public call builders. |
 | `@dusk-domains/artifacts` | Release manifest, method manifest, call examples, data-driver WASM files, optional contract WASM checksums. |
 | `@dusk-domains/indexer-client` | HTTP client, response guards, and stable v1 API types. |
-| `@dusk-domains/indexer` | Public indexer server when released with the surface check passing. |
+| `@hdauven/dusk-domains-indexer` now, possible `@dusk-domains/indexer` later | Public indexer server when released with the surface check passing. |
 
 The first beta can publish these from this repo. A separate public repo is optional later if contract source remains private.
 
@@ -142,7 +142,7 @@ The SDK exposes manifest helpers:
 import {
   contractsFromDuskDomainsReleaseManifest,
   validateDuskDomainsReleaseManifest,
-} from '@dusk-domains/sdk'
+} from '@hdauven/dusk-domains-sdk'
 
 const response = await fetch('https://artifacts.example/dusk-domains/devnet/manifest.json')
 const parsed = validateDuskDomainsReleaseManifest(await response.json())
@@ -172,7 +172,7 @@ Use one manifest-rooted client for public integrations:
 ```ts
 import {
   createDuskDomainsClientFromManifest,
-} from '@dusk-domains/sdk'
+} from '@hdauven/dusk-domains-sdk'
 ```
 
 ```ts
@@ -317,7 +317,7 @@ import {
   applyDuskDomainsIndexedEvent,
   createDuskDomainsProjector,
   normalizeDuskDomainsIndexedEventEnvelope,
-} from '@dusk-domains/sdk'
+} from '@hdauven/dusk-domains-sdk'
 
 const projector = createDuskDomainsProjector()
 

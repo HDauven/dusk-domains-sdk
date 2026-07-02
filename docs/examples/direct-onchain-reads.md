@@ -15,7 +15,7 @@ Use direct reads when trust matters and the caller already knows the name or end
 import {
   createDuskDomainsOnChainClient,
   createDuskDomainsOnChainReadTransport,
-} from '@dusk-domains/sdk'
+} from '@hdauven/dusk-domains-sdk'
 
 const domains = createDuskDomainsOnChainClient({
   read: createDuskDomainsOnChainReadTransport(duskConnectApp, contracts),
