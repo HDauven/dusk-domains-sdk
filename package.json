@@ -1,0 +1,40 @@
+{
+  "name": "@hdauven/dusk-domains-sdk",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "TypeScript SDK and integration helpers for Dusk Domains.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./internal": {
+      "types": "./dist/internal.d.ts",
+      "import": "./dist/internal.js"
+    }
+  },
+  "files": [
+    "dist",
+    "docs",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepare": "npm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@dusk/connect": "npm:@jsr/dusk__connect@^0.1.0",
+    "@dusk/w3sper": "npm:@jsr/dusk__w3sper@^1.6.0",
+    "@noble/hashes": "^2.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.3",
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.9"
+  }
+}
