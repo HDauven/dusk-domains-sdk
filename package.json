@@ -4,20 +4,20 @@
   "version": "0.0.0",
   "type": "module",
   "description": "TypeScript SDK and integration helpers for Dusk Domains.",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
     },
     "./internal": {
-      "types": "./dist/internal.d.ts",
-      "import": "./dist/internal.js"
+      "types": "./src/internal.ts",
+      "import": "./src/internal.ts"
     }
   },
   "files": [
-    "dist",
+    "src",
     "docs",
     "README.md"
   ],
