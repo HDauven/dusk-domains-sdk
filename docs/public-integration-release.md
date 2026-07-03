@@ -216,7 +216,10 @@ The compatibility report checks:
 
 - indexer health;
 - indexer event schema version against the manifest;
+- indexer API version against the manifest;
 - required API routes;
+- deployment chain ID and core/treasury contract IDs when `/health` exposes deployment binding;
+- SQLite schema version when `/health` is served from SQLite/WAL mode;
 - reported block lag;
 - whether the indexer reports replayed event history.
 

@@ -57,10 +57,13 @@ export type DuskNamesIndexerClient = DuskNamesReadTransport & {
 
 export type DuskNamesIndexerHealth = {
   ok: boolean
+  apiVersion?: string
   generatedAt: string
   source: string
   mode: string
   schemaVersion?: string | number
+  eventSchemaVersion?: string | number
+  readModelSchemaVersion?: string | number
   currentBlockHeight: number | null
   finalizedBlockHeight?: number | null
   lagBlocks?: number | null
@@ -73,6 +76,38 @@ export type DuskNamesIndexerHealth = {
   } | null
   routes: string[]
   names: number
+  package?: {
+    name?: string
+    version?: string
+    sourceCommit?: string | null
+    sdk?: {
+      package?: string
+      dependency?: string
+    }
+  }
+  deployment?: {
+    chainId?: string | null
+    chainIds?: string[]
+    deploymentStartHeight?: number | null
+    lastEventBlockHeight?: number | null
+    complete?: boolean
+    missingContracts?: string[]
+    conflictedContracts?: string[]
+    contracts?: Record<string, {
+      contractKey?: string
+      contractId?: string | null
+      contractIds?: string[]
+      eventCount?: number
+      firstBlockHeight?: number | null
+      lastBlockHeight?: number | null
+      contractIdConflict?: boolean
+    }>
+  }
+  sqlite?: {
+    schemaVersion?: string | number | null
+    expectedSchemaVersion?: string | number | null
+    journalMode?: string | null
+  }
   warnings?: Array<{
     code?: string
     message?: string

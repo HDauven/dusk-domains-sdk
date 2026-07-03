@@ -4,6 +4,7 @@ import {
   createDuskDomainsClientFromManifest,
   createDuskDomainsIndexerClient,
   createDuskDomainsOnChainClient,
+  checkDuskDomainsIndexerCompatibilityFromHealth,
 } from './client'
 import {
   createDuskNamesOnChainClient,
@@ -197,16 +198,25 @@ describe('Dusk Domains SDK mode packaging', () => {
         if (String(url) === 'https://indexer.example/health') {
           return Response.json({
             ok: true,
+            apiVersion: 'v1',
             generatedAt: '2026-06-27T00:00:00.000Z',
             source: 'local-indexer-event-log',
             mode: 'event-log',
             schemaVersion: 1,
+            eventSchemaVersion: '1',
             currentBlockHeight: 120,
             finalizedBlockHeight: 118,
             lagBlocks: 2,
             eventCount: 7,
             routes: manifest.indexer.routes,
             names: 3,
+            deployment: {
+              chainId: manifest.chainId,
+              contracts: {
+                core: { contractId: manifest.contracts.core.contractId },
+                treasury: { contractId: manifest.contracts.treasury.contractId },
+              },
+            },
           })
         }
         return Response.json(null, { status: 404 })
@@ -262,6 +272,49 @@ describe('Dusk Domains SDK mode packaging', () => {
           }),
         ]),
       },
+    })
+  })
+
+  it('detects incompatible indexer deployment bindings from health metadata', () => {
+    const manifest = releaseManifest()
+    const compatibility = checkDuskDomainsIndexerCompatibilityFromHealth({
+      manifest,
+      health: {
+        ok: true,
+        apiVersion: 'v1',
+        generatedAt: '2026-06-27T00:00:00.000Z',
+        source: 'local-indexer-sqlite',
+        mode: 'sqlite',
+        schemaVersion: 1,
+        eventSchemaVersion: '1',
+        currentBlockHeight: 120,
+        finalizedBlockHeight: 120,
+        lagBlocks: 0,
+        eventCount: 7,
+        routes: manifest.indexer.routes,
+        names: 3,
+        sqlite: {
+          schemaVersion: 2,
+          expectedSchemaVersion: 1,
+        },
+        deployment: {
+          chainId: 'dusk:wrong',
+          contracts: {
+            core: { contractId: `0x${'99'.repeat(32)}` },
+            treasury: { contractId: manifest.contracts.treasury.contractId },
+          },
+        },
+      },
+    })
+
+    expect(compatibility).toMatchObject({
+      ok: false,
+      status: 'incompatible',
+      checks: expect.arrayContaining([
+        expect.objectContaining({ id: 'deployment_chain', status: 'fail' }),
+        expect.objectContaining({ id: 'deployment_core', status: 'fail' }),
+        expect.objectContaining({ id: 'sqlite_schema', status: 'fail' }),
+      ]),
     })
   })
 

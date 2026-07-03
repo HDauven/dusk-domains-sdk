@@ -55,6 +55,7 @@ export function isIndexerHealth(value: unknown): value is {
   return (
     isRecord(value) &&
     typeof value.ok === 'boolean' &&
+    (value.apiVersion === undefined || typeof value.apiVersion === 'string') &&
     typeof value.generatedAt === 'string' &&
     typeof value.source === 'string' &&
     typeof value.mode === 'string' &&
@@ -62,6 +63,16 @@ export function isIndexerHealth(value: unknown): value is {
       value.schemaVersion === undefined ||
       typeof value.schemaVersion === 'string' ||
       typeof value.schemaVersion === 'number'
+    ) &&
+    (
+      value.eventSchemaVersion === undefined ||
+      typeof value.eventSchemaVersion === 'string' ||
+      typeof value.eventSchemaVersion === 'number'
+    ) &&
+    (
+      value.readModelSchemaVersion === undefined ||
+      typeof value.readModelSchemaVersion === 'string' ||
+      typeof value.readModelSchemaVersion === 'number'
     ) &&
     (typeof value.currentBlockHeight === 'number' || value.currentBlockHeight === null) &&
     isNullableNumber(value.finalizedBlockHeight) &&

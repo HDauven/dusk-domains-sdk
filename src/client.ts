@@ -11,6 +11,7 @@ import {
   createDuskNamesIndexerClient,
   type DuskNamesIndexerClient,
   type DuskNamesIndexerClientOptions,
+  type DuskNamesIndexerHealth,
 } from './indexerClient'
 import { namehashHex } from './namehash'
 import type { NameResult } from './namePolicy'
@@ -43,6 +44,7 @@ export type DuskDomainsOnChainReadTransport = DuskNamesOnChainReadTransport
 export type DuskDomainsOnChainRecordKey = DuskNamesOnChainRecordKey
 export type DuskDomainsIndexerClient = DuskNamesIndexerClient
 export type DuskDomainsIndexerClientOptions = DuskNamesIndexerClientOptions
+export type DuskDomainsIndexerHealth = DuskNamesIndexerHealth
 
 export type DuskDomainsClientOptions = {
   onChain?: DuskNamesOnChainClient
@@ -100,14 +102,19 @@ export type DuskDomainsIndexerCompatibility = {
     eventSchemaVersion: string | null
   }
   indexer: {
+    apiVersion: string | null
     source: string
     mode: string
     schemaVersion: string | null
+    eventSchemaVersion: string | null
     currentBlockHeight: number | null
     finalizedBlockHeight: number | null
     lagBlocks: number | null
     eventCount: number | null
     names: number
+    package: DuskNamesIndexerHealth['package'] | null
+    deployment: DuskNamesIndexerHealth['deployment'] | null
+    sqlite: DuskNamesIndexerHealth['sqlite'] | null
   }
   checks: DuskDomainsCompatibilityCheck[]
 }
@@ -175,7 +182,7 @@ export function createDuskDomainsClient(options: DuskDomainsClientOptions): Dusk
     getRecord: requireOnChain(onChain, 'getRecord'),
     getPrimaryNameOnChain: requireOnChain(onChain, 'getPrimaryName'),
     verifyPrimaryNameOnChain: requireOnChain(onChain, 'verifyPrimaryName'),
-    checkIndexer: () => checkIndexerCompatibility({ indexer, manifest, maxIndexerLagBlocks }),
+  checkIndexer: () => checkIndexerCompatibility({ indexer, manifest, maxIndexerLagBlocks }),
     verifyIndexedName: (indexed) => verifyIndexedName({ indexed, onChain, manifest, contracts }),
     verifyIndexedResolution: (response, key = 'moonlight_address') => verifyIndexedResolution({
       response,
@@ -317,37 +324,90 @@ async function checkIndexerCompatibility(options: {
     return failure('read_transport_missing', error instanceof Error ? error.message : String(error))
   }
 
+  return success(checkDuskDomainsIndexerCompatibilityFromHealth({
+    health,
+    manifest: options.manifest,
+    maxIndexerLagBlocks: options.maxIndexerLagBlocks,
+  }))
+}
+
+export function checkDuskDomainsIndexerCompatibilityFromHealth(options: {
+  health: DuskNamesIndexerHealth
+  manifest?: DuskDomainsReleaseManifest | null
+  maxIndexerLagBlocks?: number
+}): DuskDomainsIndexerCompatibility {
+  const manifest = options.manifest ?? null
+  const maxIndexerLagBlocks = options.maxIndexerLagBlocks ?? 12
+  const health = options.health
   const checks: DuskDomainsCompatibilityCheck[] = []
   pushCheck(checks, 'health', health.ok, health.ok
     ? 'Indexer health is ok.'
     : 'Indexer health is degraded.')
 
-  const healthSchemaVersion = health.schemaVersion === undefined || health.schemaVersion === null
-    ? null
-    : String(health.schemaVersion)
+  if (manifest?.indexer.apiVersion && health.apiVersion) {
+    pushCheck(checks, 'api_version', health.apiVersion === manifest.indexer.apiVersion, health.apiVersion === manifest.indexer.apiVersion
+      ? `Indexer API version ${health.apiVersion} matches manifest.`
+      : `Indexer API version ${health.apiVersion} does not match manifest API version ${manifest.indexer.apiVersion}.`)
+  } else {
+    pushCheck(checks, 'api_version', null, 'Indexer or manifest does not report a comparable API version.')
+  }
 
-  if (options.manifest?.eventSchemaVersion && healthSchemaVersion) {
+  const healthSchemaVersion = versionString(health.schemaVersion)
+  const healthEventSchemaVersion = versionString(health.eventSchemaVersion ?? health.schemaVersion)
+
+  if (manifest?.eventSchemaVersion && healthEventSchemaVersion) {
     pushCheck(
       checks,
       'event_schema',
-      healthSchemaVersion === options.manifest.eventSchemaVersion,
-      `Indexer schema ${healthSchemaVersion} ${healthSchemaVersion === options.manifest.eventSchemaVersion ? 'matches' : 'does not match'} manifest schema ${options.manifest.eventSchemaVersion}.`,
+      healthEventSchemaVersion === manifest.eventSchemaVersion,
+      `Indexer event schema ${healthEventSchemaVersion} ${healthEventSchemaVersion === manifest.eventSchemaVersion ? 'matches' : 'does not match'} manifest schema ${manifest.eventSchemaVersion}.`,
     )
   } else {
     pushCheck(checks, 'event_schema', null, 'Indexer or manifest does not report a comparable event schema version.')
   }
 
-  const missingRoutes = (options.manifest?.indexer.routes ?? [])
+  const missingRoutes = (manifest?.indexer.routes ?? [])
     .filter((route) => !health.routes.includes(route))
   pushCheck(checks, 'routes', missingRoutes.length === 0, missingRoutes.length === 0
     ? 'Indexer exposes all manifest routes.'
     : `Indexer is missing manifest routes: ${missingRoutes.join(', ')}.`)
 
+  const deployment = health.deployment ?? null
+  if (manifest?.chainId && deployment?.chainId) {
+    pushCheck(checks, 'deployment_chain', deployment.chainId === manifest.chainId, deployment.chainId === manifest.chainId
+      ? `Indexer deployment chain ${deployment.chainId} matches manifest.`
+      : `Indexer deployment chain ${deployment.chainId} does not match manifest chain ${manifest.chainId}.`)
+  } else {
+    pushCheck(checks, 'deployment_chain', null, 'Indexer health does not prove deployment chain binding.')
+  }
+
+  if (manifest) {
+    for (const contractKey of ['core', 'treasury'] as const) {
+      const indexedContract = deployment?.contracts?.[contractKey]?.contractId ?? null
+      const manifestContract = manifest.contracts[contractKey]?.contractId ?? null
+      if (indexedContract && manifestContract) {
+        pushCheck(checks, `deployment_${contractKey}`, indexedContract === manifestContract, indexedContract === manifestContract
+          ? `Indexer ${contractKey} contract matches manifest.`
+          : `Indexer ${contractKey} contract ${indexedContract} does not match manifest ${manifestContract}.`)
+      } else {
+        pushCheck(checks, `deployment_${contractKey}`, null, `Indexer health does not prove ${contractKey} contract binding.`)
+      }
+    }
+  }
+
+  if (health.sqlite) {
+    const sqliteVersion = versionString(health.sqlite.schemaVersion)
+    const expectedSqliteVersion = versionString(health.sqlite.expectedSchemaVersion)
+    pushCheck(checks, 'sqlite_schema', Boolean(sqliteVersion && expectedSqliteVersion && sqliteVersion === expectedSqliteVersion), sqliteVersion && expectedSqliteVersion && sqliteVersion === expectedSqliteVersion
+      ? `SQLite schema version ${sqliteVersion} is current.`
+      : `SQLite schema version ${sqliteVersion ?? 'unknown'} does not match expected ${expectedSqliteVersion ?? 'unknown'}.`)
+  }
+
   if (typeof health.lagBlocks === 'number') {
     pushCheck(
       checks,
       'lag',
-      health.lagBlocks <= options.maxIndexerLagBlocks,
+      health.lagBlocks <= maxIndexerLagBlocks,
       `Indexer lag is ${health.lagBlocks} block(s).`,
     )
   } else {
@@ -365,26 +425,31 @@ async function checkIndexerCompatibility(options: {
   const warned = checks.some((check) => check.status === 'warn')
   const partialHistory = checks.some((check) => check.id === 'history' && check.status === 'warn')
 
-  return success({
+  return {
     ok: !failed,
     status: failed ? 'incompatible' : partialHistory ? 'partial_history' : warned ? 'degraded' : 'compatible',
     manifest: {
-      network: options.manifest?.network ?? null,
-      chainId: options.manifest?.chainId ?? null,
-      eventSchemaVersion: options.manifest?.eventSchemaVersion ?? null,
+      network: manifest?.network ?? null,
+      chainId: manifest?.chainId ?? null,
+      eventSchemaVersion: manifest?.eventSchemaVersion ?? null,
     },
     indexer: {
+      apiVersion: health.apiVersion ?? null,
       source: health.source,
       mode: health.mode,
       schemaVersion: healthSchemaVersion,
+      eventSchemaVersion: healthEventSchemaVersion,
       currentBlockHeight: health.currentBlockHeight,
       finalizedBlockHeight: health.finalizedBlockHeight ?? null,
       lagBlocks: health.lagBlocks ?? null,
       eventCount: health.eventCount ?? null,
       names: health.names,
+      package: health.package ?? null,
+      deployment,
+      sqlite: health.sqlite ?? null,
     },
     checks,
-  })
+  }
 }
 
 async function verifyIndexedName(options: {
@@ -526,6 +591,11 @@ function pushCheck(
     status: ok === true ? 'pass' : ok === false ? 'fail' : 'warn',
     message,
   })
+}
+
+function versionString(value: unknown) {
+  if (value === undefined || value === null || value === '') return null
+  return String(value)
 }
 
 function requireOnChain<Key extends keyof DuskNamesOnChainClient>(

@@ -21,6 +21,7 @@ Stable-ish exports:
 - `createDuskDomainsOnChainClient`
 - `createDuskDomainsIndexerClient`
 - `createDuskDomainsReadWriteClient`
+- `checkDuskDomainsIndexerCompatibilityFromHealth`
 - `namehash`, `namehashHex`
 - record helpers such as `createResolverRecord`, `getRecordDefinition` and `validateRecordValue`
 - principal display/normalization helpers
@@ -28,6 +29,8 @@ Stable-ish exports:
 - indexed event envelope helpers and projector helpers
 
 The public entrypoint must not require app components, React, browser-only globals, private deployment material, mnemonics, operator secrets or the Dusk Domains contract source tree.
+
+`checkDuskDomainsIndexerCompatibilityFromHealth` is the release-manifest/indexer handshake helper. It validates API version, event schema version, route manifest, block lag, event history, deployment chain and core/treasury contract IDs when `/health` exposes them.
 
 ## Event Catalog Entry Point
 
