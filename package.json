@@ -32,7 +32,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@dusk/connect": "npm:@jsr/dusk__connect@^0.1.0",
+    "@dusk/connect": "npm:@jsr/dusk__connect@^0.2.0",
     "@dusk/w3sper": "npm:@jsr/dusk__w3sper@^1.6.0",
     "@noble/hashes": "^2.2.0"
   },
