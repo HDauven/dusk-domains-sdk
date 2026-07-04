@@ -1,6 +1,6 @@
 # Public SDK Surface
 
-Status: private beta boundary
+Status: pre-production public boundary
 
 The SDK has two package entrypoints:
 
@@ -72,4 +72,4 @@ Promote an internal helper only when all of these are true:
 
 ## Current Package Name
 
-The package is private and scoped as `@hdauven/dusk-domains-sdk`. A later public release can rename or republish it, but downstream code should currently depend on a specific Git commit or tag.
+The package is pre-production and scoped as `@hdauven/dusk-domains-sdk`. A later package-manager release can rename or republish it, but downstream code should currently depend on a specific Git commit or tag.

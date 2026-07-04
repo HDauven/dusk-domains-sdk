@@ -1,6 +1,6 @@
 # Release Versioning
 
-Status: private beta policy
+Status: pre-production beta policy
 
 Dusk Domains integrations must be pinned to a specific SDK source and contract deployment. Do not treat `main` as a stable protocol version.
 
@@ -17,7 +17,7 @@ Track these independently:
 
 ## Dependency Rule
 
-For private beta, consumers should use an exact Git ref:
+For pre-production beta, consumers should use an exact Git ref:
 
 ```json
 {

@@ -67,7 +67,7 @@ Third parties should not rely on:
 
 ## Package Layout
 
-Current private package names and possible public names:
+Current package names and possible package-manager names:
 
 | Package | Contents |
 | --- | --- |
