@@ -36,6 +36,7 @@ Use internal entrypoints only from first-party Dusk Domains apps and operator to
 
 ```ts
 import { coreCompleteRegistrationRuntimeCall } from '@hdauven/dusk-domains-sdk/writes'
+import { createDuskNamesLiveApp } from '@hdauven/dusk-domains-sdk/connect'
 import { installLocalDevDuskWallet } from '@hdauven/dusk-domains-sdk/local-dev'
 ```
 
@@ -52,10 +53,13 @@ Value-bearing flows should verify indexed discovery with canonical reads before 
 
 - `@hdauven/dusk-domains-sdk`: public client, records, namehashing, principals and release manifests.
 - `@hdauven/dusk-domains-sdk/internal`: first-party internal surface.
-- `@hdauven/dusk-domains-sdk/writes`: contract call builders, Dusk Connect adapters and transaction helpers.
+- `@hdauven/dusk-domains-sdk/writes`: contract call builders, wire args and transaction helpers.
+- `@hdauven/dusk-domains-sdk/connect`: Dusk Connect adapter for first-party browser apps.
 - `@hdauven/dusk-domains-sdk/local-dev`: local browser wallet shim for development.
 - `@hdauven/dusk-domains-sdk/write-proof`: browser write proof capture helpers.
 - `@hdauven/dusk-domains-sdk/event-catalog`: indexed event catalog.
+
+`@dusk/connect` is an optional peer dependency. Install it in browser apps that import `@hdauven/dusk-domains-sdk/connect` or `@hdauven/dusk-domains-sdk/local-dev`.
 
 ## Source Layout
 

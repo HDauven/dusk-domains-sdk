@@ -20,6 +20,10 @@
       "types": "./src/writes.ts",
       "import": "./src/writes.ts"
     },
+    "./connect": {
+      "types": "./src/connect.ts",
+      "import": "./src/connect.ts"
+    },
     "./local-dev": {
       "types": "./src/local-dev.ts",
       "import": "./src/local-dev.ts"
@@ -49,11 +53,19 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@dusk/connect": "npm:@jsr/dusk__connect@^0.2.0",
-    "@dusk/w3sper": "npm:@jsr/dusk__w3sper@^1.6.0",
     "@noble/hashes": "^2.2.0"
   },
+  "peerDependencies": {
+    "@dusk/connect": "^0.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@dusk/connect": {
+      "optional": true
+    }
+  },
   "devDependencies": {
+    "@dusk/connect": "npm:@jsr/dusk__connect@^0.2.0",
+    "@dusk/w3sper": "npm:@jsr/dusk__w3sper@^1.6.0",
     "@types/node": "^24.12.3",
     "typescript": "~6.0.2",
     "vitest": "^4.1.9"

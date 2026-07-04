@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
   createDuskNamesConnectApp,
+  type DuskNamesContractCallParams,
+  type DuskNamesWriteContractCallParams,
+} from '../connect'
+import {
   DUSK_NAME_CONTRACTS,
   coreCompleteRegistrationRuntimeCall,
   coreGetNameCall,
   coreSetRecordSenderRuntimeCall,
   submitDuskNameWrite,
-  type DuskNamesContractCallParams,
-  type DuskNamesWriteContractCallParams,
 } from '../writes'
 
 describe('Dusk Domains live Dusk Connect app adapter', () => {

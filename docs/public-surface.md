@@ -8,6 +8,7 @@ The SDK has focused package entrypoints:
 import { ... } from '@hdauven/dusk-domains-sdk'
 import { ... } from '@hdauven/dusk-domains-sdk/event-catalog'
 import { ... } from '@hdauven/dusk-domains-sdk/writes'
+import { ... } from '@hdauven/dusk-domains-sdk/connect'
 import { ... } from '@hdauven/dusk-domains-sdk/local-dev'
 import { ... } from '@hdauven/dusk-domains-sdk/write-proof'
 import { ... } from '@hdauven/dusk-domains-sdk/internal'
