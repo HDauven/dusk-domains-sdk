@@ -29,8 +29,8 @@
       "import": "./src/write-proof.ts"
     },
     "./event-catalog": {
-      "types": "./src/indexerEventCatalog.d.mts",
-      "import": "./src/indexerEventCatalog.mjs"
+      "types": "./src/indexer/events/indexerEventCatalog.d.mts",
+      "import": "./src/indexer/events/indexerEventCatalog.mjs"
     }
   },
   "files": [

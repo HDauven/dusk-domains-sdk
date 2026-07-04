@@ -1,1 +1,1 @@
-export * from './writeProof'
+export * from './proof/writeProof'

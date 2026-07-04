@@ -21,7 +21,7 @@ export {
   type DuskDomainsReadSource,
   type DuskDomainsReadSourceKind,
   type DuskDomainsResolvedName,
-} from './client'
+} from './client/client'
 export {
   applyDuskDomainsIndexedEvent,
   createDuskDomainsProjector,
@@ -31,16 +31,16 @@ export {
   normalizeDuskDomainsIndexedEventEnvelope,
   type DuskDomainsIndexedEvent,
   type DuskDomainsIndexedEventEnvelope,
-} from './indexerKit'
+} from './indexer/indexerKit'
 export {
   contractsFromDuskDomainsReleaseManifest,
   validateDuskDomainsReleaseManifest,
   type DuskDomainsReleaseManifest,
-} from './releaseManifest'
+} from './runtime/releaseManifest'
 export {
   namehash,
   namehashHex,
-} from './namehash'
+} from './core/namehash'
 export {
   authorityHexFromPublicSender,
   contractPrincipalFromWalletAccount,
@@ -53,7 +53,7 @@ export {
   type DuskPrincipal,
   type DuskPrincipalKind,
   type DuskPrincipalResult,
-} from './principal'
+} from './core/principal'
 export {
   createResolverRecord,
   getRecordDefinition,
@@ -66,11 +66,11 @@ export {
   type ResolverRecord,
   type ResolverRecordKey,
   type StaticRecordKey,
-} from './records'
+} from './core/records'
 export {
   createDuskDomainsReadWriteClient,
   createDuskNamesClient,
-} from './sdk'
+} from './client/sdk'
 export type {
   DuskEndpoint,
   DuskDomainsClient as DuskDomainsTransportClient,
@@ -86,7 +86,7 @@ export type {
   EndpointDisplayName,
   PrimaryNameVerification,
   ResolvedName,
-} from './sdkTypes'
+} from './client/sdkTypes'
 export type {
   DuskNamesOnChainRecordKey,
-} from './sdkOnChain'
+} from './onchain/sdkOnChain'

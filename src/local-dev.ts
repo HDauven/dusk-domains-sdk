@@ -1,1 +1,1 @@
-export * from './localDevWallet'
+export * from './dev/localDevWallet'
