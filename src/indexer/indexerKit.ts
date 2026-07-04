@@ -1,3 +1,4 @@
+import type { ActivityEntry } from './activity'
 import {
   createLifecycleEventProjector,
 } from './lifecycleProjector'
@@ -11,9 +12,15 @@ import {
   isReverseEventType,
   isSubnameEventType,
   isTreasuryEventType,
-} from './events/indexerEventCatalog.mjs'
+} from './events/indexerEventCatalog'
 import type {
   FeeConfigEvent,
+  IndexedFeeConfig,
+  IndexedReferralState,
+  IndexedRegistrationCommitment,
+  IndexedReversePrimaryName,
+  IndexedSubname,
+  IndexedTreasuryState,
   IndexerEventMeta,
   NameLifecycleEvent,
   ReferralEvent,
@@ -25,7 +32,7 @@ import type {
 } from './indexerTypes'
 import type { LifecycleEventProjector } from './indexerProjectorTypes'
 
-export { duskDomainsIndexedEventTypes } from './events/indexerEventCatalog.mjs'
+export { duskDomainsIndexedEventTypes } from './events/indexerEventCatalog'
 
 export type DuskDomainsIndexedEvent =
   | NameLifecycleEvent
@@ -42,12 +49,22 @@ export type DuskDomainsIndexedEventEnvelope = {
   meta?: IndexerEventMeta
 }
 
+export type DuskDomainsIndexedEventApplication =
+  | ActivityEntry
+  | IndexedRegistrationCommitment
+  | IndexedReversePrimaryName
+  | IndexedSubname
+  | IndexedTreasuryState
+  | IndexedReferralState
+  | IndexedFeeConfig
+  | null
+
 export const createDuskDomainsProjector = createLifecycleEventProjector
 
 export function applyDuskDomainsIndexedEvent(
   projector: LifecycleEventProjector,
   envelope: DuskDomainsIndexedEventEnvelope,
-) {
+): DuskDomainsIndexedEventApplication {
   const normalized = normalizeDuskDomainsIndexedEventEnvelope(envelope)
   const meta = normalized.meta ?? {}
   const event = normalized.event

@@ -1,3 +1,13 @@
+/**
+ * Public SDK entrypoint for resolving, verifying and indexing Dusk Domains.
+ *
+ * This module is the stable surface intended for wallets, explorers, dApps and
+ * independently operated indexers. Browser wallet adapters and first-party
+ * write helpers are intentionally kept out of the JSR export surface.
+ *
+ * @module
+ */
+
 export {
   createDuskDomainsClient,
   createDuskDomainsClientFromManifest,

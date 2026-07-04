@@ -1,0 +1,34 @@
+{
+  "name": "@duskdomains/sdk",
+  "version": "0.1.0",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts",
+    "./event-catalog": "./src/indexer/events/indexerEventCatalog.ts"
+  },
+  "publish": {
+    "include": [
+      "LICENSE",
+      "README.md",
+      "src/**/*.ts",
+      "src/**/*.mts",
+      "src/**/*.mjs"
+    ],
+    "exclude": [
+      "src/**/*.test.ts",
+      "src/**/*.test.mjs",
+      "src/**/*test-fixtures*",
+      "src/internal.ts",
+      "src/connect.ts",
+      "src/writes.ts",
+      "src/local-dev.ts",
+      "src/write-proof.ts",
+      "src/dev/**",
+      "src/proof/**",
+      "src/wallet/**",
+      "src/writes/**",
+      "src/indexer/events/indexerEventCatalog.d.mts",
+      "src/indexer/events/indexerEventCatalog.mjs"
+    ]
+  }
+}

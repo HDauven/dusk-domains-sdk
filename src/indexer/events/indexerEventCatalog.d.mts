@@ -1,3 +1,9 @@
+/**
+ * Event type catalog for Dusk Domains indexer implementations.
+ *
+ * @module
+ */
+
 export const controllerEventTypes: readonly string[]
 export const lifecycleEventTypes: readonly string[]
 export const resolverEventTypes: readonly string[]

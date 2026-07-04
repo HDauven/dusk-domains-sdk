@@ -1,3 +1,9 @@
+/**
+ * Event type catalog for Dusk Domains indexer implementations.
+ *
+ * @module
+ */
+
 export const controllerEventTypes = Object.freeze([
   'registration_committed',
   'registration_revealed',

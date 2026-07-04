@@ -22,7 +22,7 @@ export {
   reverseEventTypes,
   subnameEventTypes,
   treasuryEventTypes,
-} from './indexer/events/indexerEventCatalog.mjs'
+} from './indexer/events/indexerEventCatalog'
 export * from './indexer/indexerKit'
 export * from './writes/liveConfirmation'
 export * from './core/namePolicy'

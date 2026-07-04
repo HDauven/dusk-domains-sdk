@@ -97,25 +97,25 @@ export function typedPrincipalFromWalletAccount(account: string): DuskPrincipalR
   }
 }
 
-export function principalKey(principal: DuskPrincipal | null | undefined) {
+export function principalKey(principal: DuskPrincipal | null | undefined): string {
   if (!principal) return ''
   return `${principal.kind.toLowerCase()}:${bytesToHex(Uint8Array.from(principal.bytes))}`
 }
 
-export function principalLabel(principal: DuskPrincipal | null | undefined) {
+export function principalLabel(principal: DuskPrincipal | null | undefined): string {
   if (!principal) return '-'
   if (principal.kind === 'Moonlight') return 'Moonlight wallet'
   if (principal.kind === 'Contract') return 'Contract'
   return 'Direct principal'
 }
 
-export function principalShortValue(principal: DuskPrincipal | null | undefined) {
+export function principalShortValue(principal: DuskPrincipal | null | undefined): string {
   if (!principal) return '-'
   const hex = `0x${bytesToHex(Uint8Array.from(principal.bytes))}`
   return `${hex.slice(0, 10)}...${hex.slice(-6)}`
 }
 
-export function authorityHexFromPublicSender(publicSender: Uint8Array) {
+export function authorityHexFromPublicSender(publicSender: Uint8Array): string {
   if (publicSender.length !== PUBLIC_SENDER_KEY_BYTES) {
     throw new Error(`Dusk public sender keys must be ${PUBLIC_SENDER_KEY_BYTES} bytes.`)
   }
@@ -126,11 +126,11 @@ export function authorityHexFromPublicSender(publicSender: Uint8Array) {
   return `0x${bytesToHex(blake2b(material, { dkLen: 32 }))}`
 }
 
-function isMoonlightPublicKeyLength(length: number) {
+function isMoonlightPublicKeyLength(length: number): boolean {
   return length === PUBLIC_SENDER_KEY_BYTES || length === BLS_PUBLIC_KEY_BYTES
 }
 
-function hexToBytes32(value: string, label: string) {
+function hexToBytes32(value: string, label: string): Uint8Array {
   const normalized = value.trim().toLowerCase()
   if (!/^0x[a-f0-9]{64}$/.test(normalized)) {
     throw new Error(`${label} must be a 32-byte hex string.`)
@@ -142,7 +142,7 @@ function hexToBytes32(value: string, label: string) {
   return bytes
 }
 
-export function decodeBase58(value: string) {
+export function decodeBase58(value: string): Uint8Array | null {
   const bytes: number[] = []
   const digits: number[] = []
 
@@ -165,7 +165,7 @@ export function decodeBase58(value: string) {
   return new Uint8Array(bytes)
 }
 
-export function encodeBase58(value: Uint8Array | number[]) {
+export function encodeBase58(value: Uint8Array | number[]): string {
   const source = value instanceof Uint8Array ? value : Uint8Array.from(value)
   const digits = [0]
 

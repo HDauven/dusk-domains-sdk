@@ -153,7 +153,7 @@ const staticDefinitions: Record<StaticRecordKey, RecordDefinition> = {
   },
 }
 
-export const STATIC_RECORD_DEFINITIONS = Object.values(staticDefinitions)
+export const STATIC_RECORD_DEFINITIONS: RecordDefinition[] = Object.values(staticDefinitions)
 
 export function getRecordDefinition(key: ResolverRecordKey): RecordDefinition | undefined {
   if (isStaticRecordKey(key)) return staticDefinitions[key]
@@ -162,7 +162,7 @@ export function getRecordDefinition(key: ResolverRecordKey): RecordDefinition | 
   return undefined
 }
 
-export function validateRecordValue(key: ResolverRecordKey, value: string) {
+export function validateRecordValue(key: ResolverRecordKey, value: string): string[] {
   const definition = getRecordDefinition(key)
   if (!definition) return [`Unsupported resolver record key: ${key}`]
 
@@ -173,7 +173,7 @@ export function validateRecordValue(key: ResolverRecordKey, value: string) {
 export function createResolverRecord(
   key: ResolverRecordKey,
   value: string,
-  updatedAt = new Date().toISOString(),
+  updatedAt: string = new Date().toISOString(),
 ): ResolverRecord {
   const definition = getRecordDefinition(key)
 

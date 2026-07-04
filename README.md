@@ -7,15 +7,24 @@ The SDK gives wallets, explorers, dApps and indexers a stable way to work with D
 ## Install
 
 ```bash
-npm install @hdauven/dusk-domains-sdk
+deno add jsr:@duskdomains/sdk
+npx jsr add @duskdomains/sdk
 ```
 
-The package is currently private and pre-production. Pin exact versions or commit hashes until public releases are cut.
+For npm projects, install the JSR npm compatibility package with an alias:
+
+```json
+{
+  "dependencies": {
+    "@duskdomains/sdk": "npm:@jsr/duskdomains__sdk@^0.1.0"
+  }
+}
+```
 
 ## Usage
 
 ```ts
-import { createDuskDomainsClientFromManifest } from '@hdauven/dusk-domains-sdk'
+import { createDuskDomainsClientFromManifest } from '@duskdomains/sdk'
 
 const domains = await createDuskDomainsClientFromManifest({
   manifestUrl: 'https://artifacts.example/dusk-domains/testnet/manifest.json',
@@ -29,15 +38,7 @@ const record = await domains.resolveName('aurora.dusk', 'moonlight_address')
 Use the public entrypoint for third-party integrations:
 
 ```ts
-import { namehashHex, createDuskDomainsClientFromManifest } from '@hdauven/dusk-domains-sdk'
-```
-
-Use internal entrypoints only from first-party Dusk Domains apps and operator tooling:
-
-```ts
-import { coreCompleteRegistrationRuntimeCall } from '@hdauven/dusk-domains-sdk/writes'
-import { createDuskNamesLiveApp } from '@hdauven/dusk-domains-sdk/connect'
-import { installLocalDevDuskWallet } from '@hdauven/dusk-domains-sdk/local-dev'
+import { namehashHex, createDuskDomainsClientFromManifest } from '@duskdomains/sdk'
 ```
 
 ## Read Paths
@@ -51,15 +52,10 @@ Value-bearing flows should verify indexed discovery with canonical reads before 
 
 ## Entrypoints
 
-- `@hdauven/dusk-domains-sdk`: public client, records, namehashing, principals and release manifests.
-- `@hdauven/dusk-domains-sdk/internal`: first-party internal surface.
-- `@hdauven/dusk-domains-sdk/writes`: contract call builders, wire args and transaction helpers.
-- `@hdauven/dusk-domains-sdk/connect`: Dusk Connect adapter for first-party browser apps.
-- `@hdauven/dusk-domains-sdk/local-dev`: local browser wallet shim for development.
-- `@hdauven/dusk-domains-sdk/write-proof`: browser write proof capture helpers.
-- `@hdauven/dusk-domains-sdk/event-catalog`: indexed event catalog.
+- `@duskdomains/sdk`: public client, records, namehashing, principals and release manifests.
+- `@duskdomains/sdk/event-catalog`: event names for independent indexer implementations.
 
-`@dusk/connect` is an optional peer dependency. Install it in browser apps that import `@hdauven/dusk-domains-sdk/connect` or `@hdauven/dusk-domains-sdk/local-dev`.
+The JSR package intentionally excludes first-party browser wallet adapters, local development shims and write-proof tooling. Those remain repository-internal until their public contracts are stable.
 
 ## Source Layout
 

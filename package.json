@@ -48,6 +48,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "jsr:dry-run": "npx jsr publish --dry-run",
     "prepare": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run"

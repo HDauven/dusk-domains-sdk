@@ -11,7 +11,7 @@ export type NamehashResult = {
   hex: string
 }
 
-export function labelhash(label: string) {
+export function labelhash(label: string): Uint8Array {
   return blake2b(utf8ToBytes(label), { dkLen: NAMEHASH_BYTES })
 }
 
@@ -36,6 +36,6 @@ export function namehash(name: string): NamehashResult {
   }
 }
 
-export function namehashHex(name: string) {
+export function namehashHex(name: string): string {
   return namehash(name).hex
 }
