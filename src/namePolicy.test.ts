@@ -74,14 +74,14 @@ describe('Dusk Names official ecosystem policy', () => {
 
   it('prices multi-year registration linearly', () => {
     expect(annualPrice('abc')).toBe(150)
-    expect(annualPrice('aurora')).toBe(50)
+    expect(annualPrice('dawn')).toBe(50)
     expect(annualPrice('alice')).toBe(10)
     expect(durationPrice(10, 1)).toBe(10)
     expect(durationPrice(10, 3)).toBe(30)
     expect(durationPrice(10, 5)).toBe(50)
     expect(durationPrice(50, 3)).toBe(150)
     expect(durationPrice(150, 3)).toBe(450)
-    expect(registrationFeeLux('aurora', 3)).toBe(150_000_000_000)
+    expect(registrationFeeLux('dawn', 3)).toBe(150_000_000_000)
     expect(registrationFeeLux('abc', 1, {
       ...DEFAULT_FEE_CONFIG,
       threeCharYearLux: 175_000_000_000,
