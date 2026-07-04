@@ -2,12 +2,15 @@
 
 Status: pre-production public boundary
 
-The SDK has two package entrypoints:
+The SDK has focused package entrypoints:
 
 ```ts
 import { ... } from '@hdauven/dusk-domains-sdk'
-import { ... } from '@hdauven/dusk-domains-sdk/internal'
 import { ... } from '@hdauven/dusk-domains-sdk/event-catalog'
+import { ... } from '@hdauven/dusk-domains-sdk/writes'
+import { ... } from '@hdauven/dusk-domains-sdk/local-dev'
+import { ... } from '@hdauven/dusk-domains-sdk/write-proof'
+import { ... } from '@hdauven/dusk-domains-sdk/internal'
 ```
 
 ## Public Entry Point
@@ -47,18 +50,26 @@ Use this entrypoint when plain Node must route decoded Dusk Domains events witho
 
 ## Internal Entry Point
 
-The internal entrypoint is for first-party Dusk Domains app, local proof tooling, write bridges, indexer operators and deployment scripts.
+The internal entrypoint is for first-party Dusk Domains app read models, indexer operators and deployment scripts that need lower-level helpers before they are promoted to a stable public API.
 
 Internal exports include:
 
-- runtime call builders and call metadata
-- transaction submission helpers
-- Dusk Connect app/runtime adapters
-- local development wallet helpers
-- preview write-proof helpers
 - low-level indexer/projector state helpers
+- runtime config helpers
+- name policy, reservation, record draft and primary-name status helpers
+- compatibility read clients and on-chain read helpers
 
 Internal exports may change before a public package release. Do not document them as third-party APIs unless they are promoted to the public entrypoint first.
+
+## Explicit First-Party Entry Points
+
+Use these only when the integration deliberately needs write or local tooling:
+
+- `@hdauven/dusk-domains-sdk/writes`: Dusk Connect write adapters, runtime-bound call builders, call metadata and transaction submission helpers.
+- `@hdauven/dusk-domains-sdk/local-dev`: local development wallet mock used by app and harnesses.
+- `@hdauven/dusk-domains-sdk/write-proof`: deployment/write proof capture and replay helpers.
+
+These entrypoints keep the public SDK readable without deleting first-party capabilities from the repository.
 
 ## Promotion Rule
 

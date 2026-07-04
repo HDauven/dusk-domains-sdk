@@ -8,7 +8,7 @@ import {
   submitDuskNameWrite,
   type DuskNamesContractCallParams,
   type DuskNamesWriteContractCallParams,
-} from './internal'
+} from './writes'
 
 describe('Dusk Domains live Dusk Connect app adapter', () => {
   const node = `0x${'18'.repeat(32)}`

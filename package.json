@@ -16,6 +16,18 @@
       "types": "./src/internal.ts",
       "import": "./src/internal.ts"
     },
+    "./writes": {
+      "types": "./src/writes.ts",
+      "import": "./src/writes.ts"
+    },
+    "./local-dev": {
+      "types": "./src/local-dev.ts",
+      "import": "./src/local-dev.ts"
+    },
+    "./write-proof": {
+      "types": "./src/write-proof.ts",
+      "import": "./src/write-proof.ts"
+    },
     "./event-catalog": {
       "types": "./src/indexerEventCatalog.d.mts",
       "import": "./src/indexerEventCatalog.mjs"
@@ -23,8 +35,12 @@
   },
   "files": [
     "src",
+    "!src/**/*.test.ts",
+    "!src/**/*.test.mjs",
+    "!src/**/*test-fixtures*",
     "docs",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",

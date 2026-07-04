@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest'
 import {
   createDuskDomainsRuntimeConfig,
   createDuskNamesRuntimeConfig,
-  DUSK_NAME_PLACEHOLDER_CONTRACT_ID,
   isValidDuskContractId,
   isValidLaunchLinkUrl,
   isValidRuntimeUrl,
 } from './internal'
+import { DUSK_NAME_PLACEHOLDER_CONTRACT_ID } from './writes'
 
 describe('Dusk Domains runtime config', () => {
   it('defaults to preview mode when core, treasury, and indexer are missing', () => {

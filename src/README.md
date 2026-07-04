@@ -84,7 +84,10 @@ Useful files:
 - `indexerClient.ts`: HTTP client for the local/hosted indexer.
 - `indexerKit.ts`: public projector helpers for third-party indexer operators.
 - `sdk.ts`: compatibility read/write client used by wallet-style integrations.
-- `internal.ts`: broad app-internal barrel; do not use as a public SDK entrypoint.
+- `writes.ts`: explicit Dusk Connect write/call-builder entrypoint for first-party apps.
+- `local-dev.ts`: explicit local wallet mock entrypoint for development harnesses.
+- `write-proof.ts`: explicit deployment/write proof capture entrypoint.
+- `internal.ts`: app-internal read/model barrel; do not use as a public SDK entrypoint.
 - `index.ts`: narrow public SDK barrel.
 
 Useful commands:
