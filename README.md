@@ -31,4 +31,8 @@ npm run typecheck
 npm run build
 ```
 
+## License
+
+MIT.
+
 The package is still pre-production. Keep contract internals in the main app/contracts repo for now; expose only stable integration helpers here.
