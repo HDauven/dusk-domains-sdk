@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  DUSK_NAMES_WRITE_PROOF_STORAGE_KEY,
+  DUSK_DOMAINS_WRITE_PROOF_STORAGE_KEY,
   browserWriteProofTransactionsByKind,
   captureBrowserWriteProofLog,
   findBrowserWriteProofRecord,
@@ -29,7 +29,7 @@ describe('browser write proof ledger', () => {
       },
     })).toBe(true)
 
-    const log = parseBrowserWriteProofLog(storage.getItem(DUSK_NAMES_WRITE_PROOF_STORAGE_KEY))
+    const log = parseBrowserWriteProofLog(storage.getItem(DUSK_DOMAINS_WRITE_PROOF_STORAGE_KEY))
     const record = findBrowserWriteProofRecord(log, {
       chainId: 'dusk:3',
       name: 'aurora.dusk',
@@ -85,7 +85,7 @@ describe('browser write proof ledger', () => {
       },
     })).toBe(false)
 
-    expect(storage.getItem(DUSK_NAMES_WRITE_PROOF_STORAGE_KEY)).toBeNull()
+    expect(storage.getItem(DUSK_DOMAINS_WRITE_PROOF_STORAGE_KEY)).toBeNull()
   })
 
   it('keeps the latest transaction for each proof kind', () => {
@@ -106,7 +106,7 @@ describe('browser write proof ledger', () => {
     }
 
     const record = findBrowserWriteProofRecord(parseBrowserWriteProofLog(
-      storage.getItem(DUSK_NAMES_WRITE_PROOF_STORAGE_KEY),
+      storage.getItem(DUSK_DOMAINS_WRITE_PROOF_STORAGE_KEY),
     ), { name: 'aurora.dusk' })
 
     expect(record?.transactions).toHaveLength(1)
@@ -160,7 +160,7 @@ describe('browser write proof ledger', () => {
     })).toBe(true)
 
     const record = findBrowserWriteProofRecord(parseBrowserWriteProofLog(
-      storage.getItem(DUSK_NAMES_WRITE_PROOF_STORAGE_KEY),
+      storage.getItem(DUSK_DOMAINS_WRITE_PROOF_STORAGE_KEY),
     ), { name: 'aurora.dusk' })
 
     expect(record).toMatchObject({

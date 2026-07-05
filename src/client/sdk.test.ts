@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-  createDuskNamesClient,
+  createDuskDomainsReadWriteClient,
   type DuskEndpoint,
-  type DuskNamesReadTransport,
-  type DuskNamesWriteTransport,
+  type DuskDomainsReadTransport,
+  type DuskDomainsWriteTransport,
 } from './sdk'
 import type { ForwardResolutionResponse } from '../indexer/indexer'
 
@@ -12,9 +12,9 @@ const endpoint: DuskEndpoint = {
   value: 'dusk1localresolverproof01',
 }
 
-describe('Dusk Names SDK primary-name verification', () => {
+describe('Dusk Domains SDK primary-name verification', () => {
   it('verifies the reverse name and matching forward record', async () => {
-    const client = createDuskNamesClient({
+    const client = createDuskDomainsReadWriteClient({
       read: readTransport({
         primaryName: 'aurora.dusk',
         forwardRecordValue: endpoint.value,
@@ -32,7 +32,7 @@ describe('Dusk Names SDK primary-name verification', () => {
   })
 
   it('rejects an expected name that is not the endpoint reverse record', async () => {
-    const client = createDuskNamesClient({
+    const client = createDuskDomainsReadWriteClient({
       read: readTransport({
         primaryName: 'alice.dusk',
         forwardRecordValue: endpoint.value,
@@ -48,7 +48,7 @@ describe('Dusk Names SDK primary-name verification', () => {
   })
 
   it('falls back to the raw endpoint display when reverse lookup is missing', async () => {
-    const client = createDuskNamesClient({
+    const client = createDuskDomainsReadWriteClient({
       read: readTransport({
         primaryName: null,
         forwardRecordValue: endpoint.value,
@@ -66,7 +66,7 @@ describe('Dusk Names SDK primary-name verification', () => {
   })
 
   it('rejects forward records that do not match the reverse endpoint', async () => {
-    const client = createDuskNamesClient({
+    const client = createDuskDomainsReadWriteClient({
       read: readTransport({
         primaryName: 'aurora.dusk',
         forwardRecordValue: 'dusk1localresolverproof02',
@@ -82,10 +82,10 @@ describe('Dusk Names SDK primary-name verification', () => {
   })
 })
 
-describe('Dusk Names SDK write intents', () => {
+describe('Dusk Domains SDK write intents', () => {
   it('prepares batch record mutations through the write transport', async () => {
     const calls: Array<{ canonicalName: string; mutations: unknown[] }> = []
-    const client = createDuskNamesClient({
+    const client = createDuskDomainsReadWriteClient({
       read: readTransport({
         primaryName: null,
         forwardRecordValue: endpoint.value,
@@ -126,7 +126,7 @@ describe('Dusk Names SDK write intents', () => {
   })
 
   it('rejects duplicate batch record keys before calling the write transport', async () => {
-    const client = createDuskNamesClient({
+    const client = createDuskDomainsReadWriteClient({
       read: readTransport({
         primaryName: null,
         forwardRecordValue: endpoint.value,
@@ -150,7 +150,7 @@ describe('Dusk Names SDK write intents', () => {
   })
 
   it('reports missing batch-record write transport support', async () => {
-    const client = createDuskNamesClient({
+    const client = createDuskDomainsReadWriteClient({
       read: readTransport({
         primaryName: null,
         forwardRecordValue: endpoint.value,
@@ -170,7 +170,7 @@ describe('Dusk Names SDK write intents', () => {
 
   it('prepares clear-record intents through the write transport', async () => {
     const calls: Array<{ canonicalName: string; key: string }> = []
-    const client = createDuskNamesClient({
+    const client = createDuskDomainsReadWriteClient({
       read: readTransport({
         primaryName: null,
         forwardRecordValue: endpoint.value,
@@ -194,7 +194,7 @@ describe('Dusk Names SDK write intents', () => {
   })
 
   it('rejects unsupported clear-record keys before calling the write transport', async () => {
-    const client = createDuskNamesClient({
+    const client = createDuskDomainsReadWriteClient({
       read: readTransport({
         primaryName: null,
         forwardRecordValue: endpoint.value,
@@ -215,7 +215,7 @@ describe('Dusk Names SDK write intents', () => {
   })
 
   it('reports missing clear-record write transport support', async () => {
-    const client = createDuskNamesClient({
+    const client = createDuskDomainsReadWriteClient({
       read: readTransport({
         primaryName: null,
         forwardRecordValue: endpoint.value,
@@ -235,7 +235,7 @@ describe('Dusk Names SDK write intents', () => {
 function readTransport(args: {
   primaryName: string | null
   forwardRecordValue: string
-}): DuskNamesReadTransport {
+}): DuskDomainsReadTransport {
   return {
     async getPrimaryName() {
       return args.primaryName
@@ -246,7 +246,7 @@ function readTransport(args: {
   }
 }
 
-function writeTransport(overrides: Partial<DuskNamesWriteTransport> = {}): DuskNamesWriteTransport {
+function writeTransport(overrides: Partial<DuskDomainsWriteTransport> = {}): DuskDomainsWriteTransport {
   return {
     async setRecord() {
       return { id: 'set-record', status: 'prepared' }

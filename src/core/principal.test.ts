@@ -7,7 +7,7 @@ import {
   typedPrincipalFromWalletAccount,
 } from './principal'
 
-describe('Dusk Names contract principal helpers', () => {
+describe('Dusk Domains contract principal helpers', () => {
   it('passes through local 32-byte principals', () => {
     expect(contractPrincipalFromWalletAccount(`0x${'AB'.repeat(32)}`)).toEqual({
       ok: true,

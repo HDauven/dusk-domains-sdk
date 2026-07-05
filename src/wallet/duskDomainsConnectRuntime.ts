@@ -1,21 +1,21 @@
 import { createDuskApp } from '@dusk/connect'
 import type { DuskApp, DuskWallet, DuskWalletOptions } from '@dusk/connect'
-import { createDuskNamesConnectApp } from './duskConnectApp'
-import { isPlaceholderContractId, type DuskNamesRuntimeConfig } from '../runtime/config'
+import { createDuskDomainsConnectApp } from './duskConnectApp'
+import { isPlaceholderContractId, type DuskDomainsRuntimeConfig } from '../runtime/config'
 import type { DuskConnectAppLike } from '../contracts/calls'
 
-export type DuskNamesLiveAppOptions = {
-  runtimeConfig: DuskNamesRuntimeConfig
+export type DuskDomainsLiveAppOptions = {
+  runtimeConfig: DuskDomainsRuntimeConfig
   wallet?: DuskWallet | DuskWalletOptions
   autoConnect?: boolean
 }
 
-export type DuskNamesLiveApp = {
+export type DuskDomainsLiveApp = {
   dusk: DuskApp
   names: DuskConnectAppLike
 }
 
-export function canUseLiveDuskNamesWrites(config: DuskNamesRuntimeConfig): boolean {
+export function canUseLiveDuskDomainsWrites(config: DuskDomainsRuntimeConfig): boolean {
   return (
     config.liveWritesEnabled
     && !isPlaceholderContractId(config.contracts.core.contractId)
@@ -23,8 +23,8 @@ export function canUseLiveDuskNamesWrites(config: DuskNamesRuntimeConfig): boole
   )
 }
 
-export function createDuskNamesLiveApp(options: DuskNamesLiveAppOptions): DuskNamesLiveApp {
-  if (!canUseLiveDuskNamesWrites(options.runtimeConfig)) {
+export function createDuskDomainsLiveApp(options: DuskDomainsLiveAppOptions): DuskDomainsLiveApp {
+  if (!canUseLiveDuskDomainsWrites(options.runtimeConfig)) {
     throw new Error('Dusk Domains live writes require configured contract IDs and VITE_DUSK_DOMAINS_ENABLE_LIVE_WRITES=true.')
   }
 
@@ -38,8 +38,6 @@ export function createDuskNamesLiveApp(options: DuskNamesLiveAppOptions): DuskNa
 
   return {
     dusk,
-    names: createDuskNamesConnectApp(dusk),
+    names: createDuskDomainsConnectApp(dusk),
   }
 }
-
-export const createDuskDomainsLiveApp = createDuskNamesLiveApp

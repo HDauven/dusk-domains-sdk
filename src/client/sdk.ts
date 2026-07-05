@@ -13,11 +13,11 @@ import {
 } from './sdkValidation'
 import type {
   DuskEndpoint,
-  DuskNamesClient,
-  DuskNamesClientOptions,
-  DuskNamesRecordMutationInput,
-  DuskNamesResult,
-  DuskNamesTxIntent,
+  DuskDomainsReadWriteClient,
+  DuskDomainsReadWriteClientOptions,
+  DuskDomainsRecordMutationInput,
+  DuskDomainsResult,
+  DuskDomainsTxIntent,
   EndpointDisplayName,
   PrimaryNameVerification,
   ResolvedName,
@@ -25,23 +25,25 @@ import type {
 
 export type {
   DuskEndpoint,
-  DuskNamesClient,
-  DuskNamesClientOptions,
-  DuskNamesError,
-  DuskNamesErrorCode,
-  DuskNamesReadTransport,
-  DuskNamesRecordMutation,
-  DuskNamesRecordMutationInput,
-  DuskNamesResult,
-  DuskNamesTxIntent,
-  DuskNamesWriteTransport,
+  DuskDomainsError,
+  DuskDomainsErrorCode,
+  DuskDomainsReadWriteClient,
+  DuskDomainsReadWriteClientOptions,
+  DuskDomainsReadTransport,
+  DuskDomainsRecordMutation,
+  DuskDomainsRecordMutationInput,
+  DuskDomainsResult,
+  DuskDomainsTxIntent,
+  DuskDomainsWriteTransport,
   EndpointDisplayName,
   PrimaryNameVerification,
   ResolvedName,
 } from './sdkTypes'
 
-export function createDuskNamesClient(options: DuskNamesClientOptions): DuskNamesClient {
-  async function getRecords(name: string): Promise<DuskNamesResult<ResolverRecord[]>> {
+export function createDuskDomainsReadWriteClient(
+  options: DuskDomainsReadWriteClientOptions,
+): DuskDomainsReadWriteClient {
+  async function getRecords(name: string): Promise<DuskDomainsResult<ResolverRecord[]>> {
     const normalized = normalizeSdkName(name)
 
     if (!normalized.ok) {
@@ -60,7 +62,7 @@ export function createDuskNamesClient(options: DuskNamesClientOptions): DuskName
   async function resolveName(
     name: string,
     endpointType: ResolverRecordKey = 'moonlight_address',
-  ): Promise<DuskNamesResult<ResolvedName>> {
+  ): Promise<DuskDomainsResult<ResolvedName>> {
     const normalized = normalizeSdkName(name)
 
     if (!normalized.ok) {
@@ -90,7 +92,7 @@ export function createDuskNamesClient(options: DuskNamesClientOptions): DuskName
     })
   }
 
-  async function resolveEndpoint(endpoint: DuskEndpoint): Promise<DuskNamesResult<string>> {
+  async function resolveEndpoint(endpoint: DuskEndpoint): Promise<DuskDomainsResult<string>> {
     const primaryName = await options.read.getPrimaryName(endpoint)
 
     if (!primaryName) {
@@ -100,14 +102,14 @@ export function createDuskNamesClient(options: DuskNamesClientOptions): DuskName
     return success(primaryName)
   }
 
-  async function getPrimaryName(endpoint: DuskEndpoint): Promise<DuskNamesResult<string>> {
+  async function getPrimaryName(endpoint: DuskEndpoint): Promise<DuskDomainsResult<string>> {
     return resolveEndpoint(endpoint)
   }
 
   async function verifyPrimaryName(
     endpoint: DuskEndpoint,
     expectedName?: string,
-  ): Promise<DuskNamesResult<PrimaryNameVerification>> {
+  ): Promise<DuskDomainsResult<PrimaryNameVerification>> {
     const definition = getRecordDefinition(endpoint.type)
 
     if (!definition?.eligibleForPrimaryName) {
@@ -155,7 +157,7 @@ export function createDuskNamesClient(options: DuskNamesClientOptions): DuskName
     name: string,
     key: ResolverRecordKey,
     value: string,
-  ): Promise<DuskNamesResult<DuskNamesTxIntent>> {
+  ): Promise<DuskDomainsResult<DuskDomainsTxIntent>> {
     if (!options.write) {
       return failure('write_transport_missing', 'No Dusk Domains write transport is configured.')
     }
@@ -175,7 +177,7 @@ export function createDuskNamesClient(options: DuskNamesClientOptions): DuskName
     return success(await options.write.setRecord(normalized.value, createResolverRecord(key, value)))
   }
 
-  async function clearRecord(name: string, key: ResolverRecordKey): Promise<DuskNamesResult<DuskNamesTxIntent>> {
+  async function clearRecord(name: string, key: ResolverRecordKey): Promise<DuskDomainsResult<DuskDomainsTxIntent>> {
     if (!options.write?.clearRecord) {
       return failure('write_transport_missing', 'No Dusk Domains clear-record transport is configured.')
     }
@@ -195,8 +197,8 @@ export function createDuskNamesClient(options: DuskNamesClientOptions): DuskName
 
   async function mutateRecords(
     name: string,
-    mutations: DuskNamesRecordMutationInput[],
-  ): Promise<DuskNamesResult<DuskNamesTxIntent>> {
+    mutations: DuskDomainsRecordMutationInput[],
+  ): Promise<DuskDomainsResult<DuskDomainsTxIntent>> {
     if (!options.write?.mutateRecords) {
       return failure('write_transport_missing', 'No Dusk Domains batch-record transport is configured.')
     }
@@ -219,7 +221,7 @@ export function createDuskNamesClient(options: DuskNamesClientOptions): DuskName
   async function setPrimaryName(
     endpoint: DuskEndpoint,
     name: string,
-  ): Promise<DuskNamesResult<DuskNamesTxIntent>> {
+  ): Promise<DuskDomainsResult<DuskDomainsTxIntent>> {
     if (!options.write) {
       return failure('write_transport_missing', 'No Dusk Domains write transport is configured.')
     }
@@ -261,7 +263,7 @@ export function createDuskNamesClient(options: DuskNamesClientOptions): DuskName
     }
   }
 
-  async function getForwardResolution(canonicalName: string): Promise<DuskNamesResult<ForwardResolutionResponse>> {
+  async function getForwardResolution(canonicalName: string): Promise<DuskDomainsResult<ForwardResolutionResponse>> {
     if (options.read.resolveForward) {
       const response = await options.read.resolveForward(canonicalName)
       const blockingError = response.errors.find((error) => error.code !== 'invalid_record') ?? response.errors[0]
@@ -316,5 +318,3 @@ export function createDuskNamesClient(options: DuskNamesClientOptions): DuskName
     setPrimaryName,
   }
 }
-
-export const createDuskDomainsReadWriteClient = createDuskNamesClient

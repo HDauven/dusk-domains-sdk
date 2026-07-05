@@ -1,21 +1,21 @@
 import {
-  DUSK_NAME_CONTRACTS,
-  DUSK_NAME_PLACEHOLDER_CONTRACT_ID,
-  type DuskNameContractKey,
-  type DuskNameContractMap,
-  type DuskNameContractPreset,
+  DUSK_DOMAINS_CONTRACTS,
+  DUSK_DOMAINS_PLACEHOLDER_CONTRACT_ID,
+  type DuskDomainContractKey,
+  type DuskDomainContractMap,
+  type DuskDomainContractPreset,
 } from '../contracts/calls'
 
-export type DuskNamesRuntimeMode = 'preview' | 'live_ready'
+export type DuskDomainsRuntimeMode = 'preview' | 'live_ready'
 
-export type DuskNamesRuntimeConfig = {
-  mode: DuskNamesRuntimeMode
-  contracts: DuskNameContractMap
+export type DuskDomainsRuntimeConfig = {
+  mode: DuskDomainsRuntimeMode
+  contracts: DuskDomainContractMap
   capabilities: {
     referralAttribution: boolean
     referralRewardClaims: boolean
   }
-  launchLinks: DuskNamesLaunchLinks
+  launchLinks: DuskDomainsLaunchLinks
   indexerUrl: string | null
   nodeUrl: string
   chainId: string
@@ -24,64 +24,60 @@ export type DuskNamesRuntimeConfig = {
   warnings: string[]
 }
 
-export type DuskNamesLaunchLinks = {
+export type DuskDomainsLaunchLinks = {
   support: string | null
   abuse: string | null
   security: string | null
   status: string | null
 }
 
-export type DuskNamesRuntimeEnv = Record<string, string | boolean | undefined>
-export type DuskDomainsRuntimeMode = DuskNamesRuntimeMode
-export type DuskDomainsRuntimeConfig = DuskNamesRuntimeConfig
-export type DuskDomainsLaunchLinks = DuskNamesLaunchLinks
-export type DuskDomainsRuntimeEnv = DuskNamesRuntimeEnv
+export type DuskDomainsRuntimeEnv = Record<string, string | boolean | undefined>
 
 type RuntimeEnvKey = string | {
   preferred: string
   legacy?: string
 }
 
-const contractKeys = ['core', 'treasury'] as const satisfies readonly DuskNameContractKey[]
+const contractKeys = ['core', 'treasury'] as const satisfies readonly DuskDomainContractKey[]
 
 const contractIdEnvKeys = {
-  core: envKey('VITE_DUSK_DOMAINS_CORE_CONTRACT_ID', 'VITE_DUSK_NAMES_CORE_CONTRACT_ID'),
-  treasury: envKey('VITE_DUSK_DOMAINS_TREASURY_CONTRACT_ID', 'VITE_DUSK_NAMES_TREASURY_CONTRACT_ID'),
-} as const satisfies Record<DuskNameContractKey, RuntimeEnvKey>
+  core: envKey('VITE_DUSK_DOMAINS_CORE_CONTRACT_ID', 'VITE_DUSK_DOMAINS_CORE_CONTRACT_ID'),
+  treasury: envKey('VITE_DUSK_DOMAINS_TREASURY_CONTRACT_ID', 'VITE_DUSK_DOMAINS_TREASURY_CONTRACT_ID'),
+} as const satisfies Record<DuskDomainContractKey, RuntimeEnvKey>
 
 const driverUrlEnvKeys = {
-  core: envKey('VITE_DUSK_DOMAINS_CORE_DRIVER_URL', 'VITE_DUSK_NAMES_CORE_DRIVER_URL'),
-  treasury: envKey('VITE_DUSK_DOMAINS_TREASURY_DRIVER_URL', 'VITE_DUSK_NAMES_TREASURY_DRIVER_URL'),
-} as const satisfies Record<DuskNameContractKey, RuntimeEnvKey>
+  core: envKey('VITE_DUSK_DOMAINS_CORE_DRIVER_URL', 'VITE_DUSK_DOMAINS_CORE_DRIVER_URL'),
+  treasury: envKey('VITE_DUSK_DOMAINS_TREASURY_DRIVER_URL', 'VITE_DUSK_DOMAINS_TREASURY_DRIVER_URL'),
+} as const satisfies Record<DuskDomainContractKey, RuntimeEnvKey>
 
-const indexerUrlEnvKey = envKey('VITE_DUSK_DOMAINS_INDEXER_URL', 'VITE_DUSK_NAMES_INDEXER_URL')
-const nodeUrlEnvKey = envKey('VITE_DUSK_DOMAINS_NODE_URL', 'VITE_DUSK_NAMES_NODE_URL')
-const chainIdEnvKey = envKey('VITE_DUSK_DOMAINS_CHAIN_ID', 'VITE_DUSK_NAMES_CHAIN_ID')
-const liveWritesEnabledEnvKey = envKey('VITE_DUSK_DOMAINS_ENABLE_LIVE_WRITES', 'VITE_DUSK_NAMES_ENABLE_LIVE_WRITES')
+const indexerUrlEnvKey = envKey('VITE_DUSK_DOMAINS_INDEXER_URL', 'VITE_DUSK_DOMAINS_INDEXER_URL')
+const nodeUrlEnvKey = envKey('VITE_DUSK_DOMAINS_NODE_URL', 'VITE_DUSK_DOMAINS_NODE_URL')
+const chainIdEnvKey = envKey('VITE_DUSK_DOMAINS_CHAIN_ID', 'VITE_DUSK_DOMAINS_CHAIN_ID')
+const liveWritesEnabledEnvKey = envKey('VITE_DUSK_DOMAINS_ENABLE_LIVE_WRITES', 'VITE_DUSK_DOMAINS_ENABLE_LIVE_WRITES')
 const referralAttributionEnabledEnvKey = envKey(
   'VITE_DUSK_DOMAINS_ENABLE_REFERRAL_ATTRIBUTION',
-  'VITE_DUSK_NAMES_ENABLE_REFERRAL_ATTRIBUTION',
+  'VITE_DUSK_DOMAINS_ENABLE_REFERRAL_ATTRIBUTION',
 )
 const referralClaimsEnabledEnvKey = envKey(
   'VITE_DUSK_DOMAINS_ENABLE_REFERRAL_CLAIMS',
-  'VITE_DUSK_NAMES_ENABLE_REFERRAL_CLAIMS',
+  'VITE_DUSK_DOMAINS_ENABLE_REFERRAL_CLAIMS',
 )
 const launchLinkEnvKeys = {
-  support: envKey('VITE_DUSK_DOMAINS_SUPPORT_URL', 'VITE_DUSK_NAMES_SUPPORT_URL'),
-  abuse: envKey('VITE_DUSK_DOMAINS_ABUSE_URL', 'VITE_DUSK_NAMES_ABUSE_URL'),
-  security: envKey('VITE_DUSK_DOMAINS_SECURITY_URL', 'VITE_DUSK_NAMES_SECURITY_URL'),
-  status: envKey('VITE_DUSK_DOMAINS_STATUS_URL', 'VITE_DUSK_NAMES_STATUS_URL'),
-} as const satisfies Record<keyof DuskNamesLaunchLinks, RuntimeEnvKey>
+  support: envKey('VITE_DUSK_DOMAINS_SUPPORT_URL', 'VITE_DUSK_DOMAINS_SUPPORT_URL'),
+  abuse: envKey('VITE_DUSK_DOMAINS_ABUSE_URL', 'VITE_DUSK_DOMAINS_ABUSE_URL'),
+  security: envKey('VITE_DUSK_DOMAINS_SECURITY_URL', 'VITE_DUSK_DOMAINS_SECURITY_URL'),
+  status: envKey('VITE_DUSK_DOMAINS_STATUS_URL', 'VITE_DUSK_DOMAINS_STATUS_URL'),
+} as const satisfies Record<keyof DuskDomainsLaunchLinks, RuntimeEnvKey>
 const defaultNodeUrl = 'https://testnet.nodes.dusk.network'
 const defaultChainId = 'dusk:2'
 
-export function createDuskNamesRuntimeConfig(
-  env: DuskNamesRuntimeEnv = {},
-  baseContracts: DuskNameContractMap = DUSK_NAME_CONTRACTS,
-): DuskNamesRuntimeConfig {
+export function createDuskDomainsRuntimeConfig(
+  env: DuskDomainsRuntimeEnv = {},
+  baseContracts: DuskDomainContractMap = DUSK_DOMAINS_CONTRACTS,
+): DuskDomainsRuntimeConfig {
   const missingLiveInputs: string[] = []
   const warnings: string[] = []
-  const contracts = {} as DuskNameContractMap
+  const contracts = {} as DuskDomainContractMap
 
   for (const key of contractKeys) {
     const contract = baseContracts[key]
@@ -143,7 +139,7 @@ export function createDuskNamesRuntimeConfig(
 }
 
 export function isPlaceholderContractId(contractId: string): boolean {
-  return contractId === DUSK_NAME_PLACEHOLDER_CONTRACT_ID
+  return contractId === DUSK_DOMAINS_PLACEHOLDER_CONTRACT_ID
 }
 
 export function isValidDuskContractId(contractId: string): boolean {
@@ -172,8 +168,6 @@ export function isValidLaunchLinkUrl(value: string): boolean {
   }
 }
 
-export const createDuskDomainsRuntimeConfig = createDuskNamesRuntimeConfig
-
 function envKey(preferred: string, legacy?: string): RuntimeEnvKey {
   return { preferred, legacy }
 }
@@ -186,14 +180,14 @@ function envCandidates(key: RuntimeEnvKey) {
   return typeof key === 'string' ? [key] : [key.preferred, key.legacy].filter((candidate): candidate is string => Boolean(candidate))
 }
 
-function stringEnv(env: DuskNamesRuntimeEnv, key: RuntimeEnvKey) {
+function stringEnv(env: DuskDomainsRuntimeEnv, key: RuntimeEnvKey) {
   const value = envCandidates(key)
     .map((candidate) => env[candidate])
     .find((candidate) => typeof candidate === 'string' && candidate.trim())
   return typeof value === 'string' && value.trim() ? value.trim() : null
 }
 
-function booleanEnv(env: DuskNamesRuntimeEnv, key: RuntimeEnvKey) {
+function booleanEnv(env: DuskDomainsRuntimeEnv, key: RuntimeEnvKey) {
   const value = envCandidates(key)
     .map((candidate) => env[candidate])
     .find((candidate) => typeof candidate === 'boolean' || typeof candidate === 'string')
@@ -204,7 +198,7 @@ function booleanEnv(env: DuskNamesRuntimeEnv, key: RuntimeEnvKey) {
 
 function validContractIdOrPreview(
   value: string | null,
-  contract: DuskNameContractPreset,
+  contract: DuskDomainContractPreset,
   envKey: RuntimeEnvKey,
   warnings: string[],
 ) {

@@ -3,9 +3,9 @@ import {
   coreCompleteRegistrationRuntimeCall,
   coreSetRecordSenderRuntimeCall,
   type DuskConnectAppLike,
-  type DuskNameCallMetadata,
+  type DuskDomainCallMetadata,
 } from '../contracts/calls'
-import { createPreviewDuskTxHandle, submitDuskNameWrite, trackDuskNameTransaction, type DuskNameTxState } from './transactions'
+import { createPreviewDuskTxHandle, submitDuskDomainWrite, trackDuskDomainTransaction, type DuskDomainTxState } from './transactions'
 
 const call = coreSetRecordSenderRuntimeCall({
   node: `0x${'08'.repeat(32)}`,
@@ -18,9 +18,9 @@ const call = coreSetRecordSenderRuntimeCall({
   },
 })
 
-describe('Dusk Names transaction lifecycle helpers', () => {
+describe('Dusk Domains transaction lifecycle helpers', () => {
   it('prepares, writes, and tracks a Dusk Connect style transaction handle', async () => {
-    const updates: DuskNameTxState[] = []
+    const updates: DuskDomainTxState[] = []
     const app: DuskConnectAppLike = {
       async readContract() {
         throw new Error('unused')
@@ -35,7 +35,7 @@ describe('Dusk Names transaction lifecycle helpers', () => {
       },
     }
 
-    await expect(submitDuskNameWrite(app, call, { onUpdate: (state) => updates.push(state) })).resolves.toMatchObject({
+    await expect(submitDuskDomainWrite(app, call, { onUpdate: (state) => updates.push(state) })).resolves.toMatchObject({
       status: 'executed',
       txId: 'tx-preview-1',
     })
@@ -81,7 +81,7 @@ describe('Dusk Names transaction lifecycle helpers', () => {
       },
     }
 
-    await expect(submitDuskNameWrite(app, paidCall)).resolves.toMatchObject({
+    await expect(submitDuskDomainWrite(app, paidCall)).resolves.toMatchObject({
       status: 'executed',
       txId: 'tx-paid-1',
     })
@@ -89,7 +89,7 @@ describe('Dusk Names transaction lifecycle helpers', () => {
   })
 
   it('blocks legacy actor-bound writes by default before wallet preparation', async () => {
-    const updates: DuskNameTxState[] = []
+    const updates: DuskDomainTxState[] = []
     let prepared = false
     let written = false
     const app: DuskConnectAppLike = {
@@ -105,14 +105,14 @@ describe('Dusk Names transaction lifecycle helpers', () => {
         return createPreviewDuskTxHandle({ txId: 'tx-unsafe', delayMs: 0 })
       },
     }
-    const unsafeCall: DuskNameCallMetadata = {
+    const unsafeCall: DuskDomainCallMetadata = {
       contract: 'core',
       functionName: 'set_record',
       kind: 'write',
       args: { node: `0x${'08'.repeat(32)}` },
     }
 
-    await expect(submitDuskNameWrite(app, unsafeCall, { onUpdate: (state) => updates.push(state) })).resolves.toMatchObject({
+    await expect(submitDuskDomainWrite(app, unsafeCall, { onUpdate: (state) => updates.push(state) })).resolves.toMatchObject({
       status: 'failed',
       message: 'This action cannot be submitted safely from the browser yet.',
     })
@@ -123,7 +123,7 @@ describe('Dusk Names transaction lifecycle helpers', () => {
   })
 
   it('rejects caller-mislabeled runtime-bound calls by default before wallet preparation', async () => {
-    const updates: DuskNameTxState[] = []
+    const updates: DuskDomainTxState[] = []
     let prepared = false
     const app: DuskConnectAppLike = {
       async readContract() {
@@ -137,14 +137,14 @@ describe('Dusk Names transaction lifecycle helpers', () => {
         throw new Error('unused')
       },
     }
-    const mislabeledCall: DuskNameCallMetadata = {
+    const mislabeledCall: DuskDomainCallMetadata = {
       contract: 'core',
       functionName: 'init',
       kind: 'read',
       args: {},
     }
 
-    await expect(submitDuskNameWrite(app, mislabeledCall, { onUpdate: (state) => updates.push(state) })).resolves.toMatchObject({
+    await expect(submitDuskDomainWrite(app, mislabeledCall, { onUpdate: (state) => updates.push(state) })).resolves.toMatchObject({
       status: 'failed',
       message: 'This action cannot be submitted safely from the browser yet.',
     })
@@ -169,14 +169,14 @@ describe('Dusk Names transaction lifecycle helpers', () => {
         return createPreviewDuskTxHandle({ txId: 'tx-debug-unsafe', delayMs: 0 })
       },
     }
-    const unsafeCall: DuskNameCallMetadata = {
+    const unsafeCall: DuskDomainCallMetadata = {
       contract: 'core',
       functionName: 'set_record',
       kind: 'write',
       args: { node: `0x${'08'.repeat(32)}` },
     }
 
-    await expect(submitDuskNameWrite(app, unsafeCall, {
+    await expect(submitDuskDomainWrite(app, unsafeCall, {
       allowUnsafePreviewCall: true,
     })).resolves.toMatchObject({
       status: 'executed',
@@ -188,11 +188,11 @@ describe('Dusk Names transaction lifecycle helpers', () => {
   })
 
   it('maps rejected handles to rejected state', async () => {
-    const updates: DuskNameTxState[] = []
+    const updates: DuskDomainTxState[] = []
     const context = { title: 'Register aurora.dusk', description: 'Preview', fields: [] }
 
     await expect(
-      trackDuskNameTransaction(
+      trackDuskDomainTransaction(
         createPreviewDuskTxHandle({
           txId: 'tx-preview-2',
           delayMs: 0,
@@ -210,7 +210,7 @@ describe('Dusk Names transaction lifecycle helpers', () => {
   })
 
   it('maps direct wallet submission errors to a terminal failed state', async () => {
-    const updates: DuskNameTxState[] = []
+    const updates: DuskDomainTxState[] = []
     const app: DuskConnectAppLike = {
       async readContract() {
         throw new Error('unused')
@@ -223,7 +223,7 @@ describe('Dusk Names transaction lifecycle helpers', () => {
       },
     }
 
-    await expect(submitDuskNameWrite(app, call, { onUpdate: (state) => updates.push(state) })).resolves.toMatchObject({
+    await expect(submitDuskDomainWrite(app, call, { onUpdate: (state) => updates.push(state) })).resolves.toMatchObject({
       status: 'failed',
       message: 'This local wallet is read-only. Use a transaction-capable Dusk wallet or the trusted local write bridge to update deployed state.',
     })
@@ -236,11 +236,11 @@ describe('Dusk Names transaction lifecycle helpers', () => {
   })
 
   it('maps unsettled handles to timeout state when a timeout is configured', async () => {
-    const updates: DuskNameTxState[] = []
+    const updates: DuskDomainTxState[] = []
     const context = { title: 'Register aurora.dusk', description: 'Preview', fields: [] }
 
     await expect(
-      trackDuskNameTransaction(
+      trackDuskDomainTransaction(
         {
           id: 'tx-preview-3',
           status: 'submitted',
@@ -261,12 +261,12 @@ describe('Dusk Names transaction lifecycle helpers', () => {
   })
 
   it('tracks Dusk Connect onStatus handles without duplicate submitted updates', async () => {
-    const updates: DuskNameTxState[] = []
+    const updates: DuskDomainTxState[] = []
     const context = { title: 'Register aurora.dusk', description: 'Preview', fields: [] }
     const statusHandlers = new Set<(status: unknown) => void>()
 
     await expect(
-      trackDuskNameTransaction(
+      trackDuskDomainTransaction(
         {
           hash: 'tx-connect-1',
           status: 'submitted',
@@ -291,12 +291,12 @@ describe('Dusk Names transaction lifecycle helpers', () => {
   })
 
   it('does not poll when the wallet returns an already executed result', async () => {
-    const updates: DuskNameTxState[] = []
+    const updates: DuskDomainTxState[] = []
     const context = { title: 'Reserve name', description: 'Preview', fields: [] }
     let waited = false
 
     await expect(
-      trackDuskNameTransaction(
+      trackDuskDomainTransaction(
         {
           hash: 'tx-already-executed',
           status: 'executed',
@@ -318,11 +318,11 @@ describe('Dusk Names transaction lifecycle helpers', () => {
   })
 
   it('keeps failed Dusk Connect receipts as a terminal failed state', async () => {
-    const updates: DuskNameTxState[] = []
+    const updates: DuskDomainTxState[] = []
     const context = { title: 'Register aurora.dusk', description: 'Preview', fields: [] }
 
     await expect(
-      trackDuskNameTransaction(
+      trackDuskDomainTransaction(
         {
           hash: 'tx-connect-failed',
           status: 'submitted',
@@ -334,7 +334,7 @@ describe('Dusk Names transaction lifecycle helpers', () => {
             hash: 'tx-connect-failed',
             status: 'failed',
             ok: false,
-            error: 'DuskNames: reveal too early',
+            error: 'DuskDomains: reveal too early',
           }),
         },
         context,
@@ -343,18 +343,18 @@ describe('Dusk Names transaction lifecycle helpers', () => {
     ).resolves.toMatchObject({
       status: 'failed',
       txId: 'tx-connect-failed',
-      message: 'DuskNames: reveal too early',
+      message: 'DuskDomains: reveal too early',
     })
 
     expect(updates.map((state) => state.status)).toEqual(['submitted', 'executing', 'failed'])
   })
 
   it('uses status-update hashes when a wallet handle does not expose one up front', async () => {
-    const updates: DuskNameTxState[] = []
+    const updates: DuskDomainTxState[] = []
     const context = { title: 'Register aurora.dusk', description: 'Preview', fields: [] }
 
     await expect(
-      trackDuskNameTransaction(
+      trackDuskDomainTransaction(
         {
           status: 'submitted',
           onStatus(handler) {

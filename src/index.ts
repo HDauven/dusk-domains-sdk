@@ -79,14 +79,13 @@ import {
 } from './core/records'
 import {
   createDuskDomainsReadWriteClient as createDuskDomainsReadWriteClientImpl,
-  createDuskNamesClient as createDuskNamesClientImpl,
 } from './client/sdk'
 import type {
   DuskEndpoint as DuskEndpointType,
-  DuskDomainsClient as DuskDomainsTransportClientType,
-  DuskDomainsClientOptions as DuskDomainsTransportClientOptionsType,
   DuskDomainsError as DuskDomainsErrorType,
   DuskDomainsErrorCode as DuskDomainsErrorCodeType,
+  DuskDomainsReadWriteClient as DuskDomainsReadWriteClientType,
+  DuskDomainsReadWriteClientOptions as DuskDomainsReadWriteClientOptionsType,
   DuskDomainsReadTransport as DuskDomainsReadTransportType,
   DuskDomainsRecordMutation as DuskDomainsRecordMutationType,
   DuskDomainsRecordMutationInput as DuskDomainsRecordMutationInputType,
@@ -97,9 +96,6 @@ import type {
   PrimaryNameVerification as PrimaryNameVerificationType,
   ResolvedName as ResolvedNameType,
 } from './client/sdkTypes'
-import type {
-  DuskNamesOnChainRecordKey as DuskNamesOnChainRecordKeyType,
-} from './onchain/sdkOnChain'
 
 /** Creates a combined Dusk Domains client from explicit on-chain and indexer transports. */
 export const createDuskDomainsClient: typeof createDuskDomainsClientImpl = createDuskDomainsClientImpl
@@ -195,9 +191,6 @@ export const STATIC_RECORD_DEFINITIONS: typeof STATIC_RECORD_DEFINITIONS_VALUE =
 
 /** Validates a resolver record value and returns user-facing validation errors. */
 export const validateRecordValue: typeof validateRecordValueImpl = validateRecordValueImpl
-
-/** Creates the legacy transport-style Dusk Names client used by app integrations. */
-export const createDuskNamesClient: typeof createDuskNamesClientImpl = createDuskNamesClientImpl
 
 /** Creates a read/write client from explicit SDK read and write transports. */
 export const createDuskDomainsReadWriteClient: typeof createDuskDomainsReadWriteClientImpl =
@@ -296,11 +289,11 @@ export type StaticRecordKey = StaticRecordKeyType
 /** Typed endpoint used for forward and reverse resolution. */
 export type DuskEndpoint = DuskEndpointType
 
-/** Legacy transport-style SDK client interface. */
-export type DuskDomainsTransportClient = DuskDomainsTransportClientType
+/** Read/write transport-style SDK client interface. */
+export type DuskDomainsReadWriteClient = DuskDomainsReadWriteClientType
 
-/** Options accepted by the legacy transport-style SDK client. */
-export type DuskDomainsTransportClientOptions = DuskDomainsTransportClientOptionsType
+/** Options accepted by the read/write transport-style SDK client. */
+export type DuskDomainsReadWriteClientOptions = DuskDomainsReadWriteClientOptionsType
 
 /** Structured SDK error result. */
 export type DuskDomainsError = DuskDomainsErrorType
@@ -334,6 +327,3 @@ export type PrimaryNameVerification = PrimaryNameVerificationType
 
 /** Forward resolution response from the transport-style SDK client. */
 export type ResolvedName = ResolvedNameType
-
-/** On-chain record key alias retained for Dusk Names compatibility. */
-export type DuskNamesOnChainRecordKey = DuskNamesOnChainRecordKeyType

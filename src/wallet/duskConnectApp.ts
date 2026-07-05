@@ -1,29 +1,29 @@
 import type {
   DuskConnectAppLike,
-  DuskNameContractPreset,
-  DuskNameDecodedContext,
+  DuskDomainContractPreset,
+  DuskDomainDecodedContext,
 } from '../contracts/calls'
 
-export type DuskNamesContractCallParams = {
-  contract: DuskNameContractPreset
+export type DuskDomainsContractCallParams = {
+  contract: DuskDomainContractPreset
   functionName: string
   args?: unknown
   deposit?: string
-  decodedContext?: DuskNameDecodedContext
+  decodedContext?: DuskDomainDecodedContext
 }
 
-export type DuskNamesWriteContractCallParams = DuskNamesContractCallParams & {
+export type DuskDomainsWriteContractCallParams = DuskDomainsContractCallParams & {
   preparedCall?: unknown
 }
 
-export type DuskNamesConnectAppTransport = {
-  readContract?: (params: DuskNamesContractCallParams) => Promise<unknown>
-  prepareContractCall?: (params: DuskNamesContractCallParams) => Promise<unknown>
-  writeContract?: (params: DuskNamesWriteContractCallParams) => Promise<unknown>
+export type DuskDomainsConnectAppTransport = {
+  readContract?: (params: DuskDomainsContractCallParams) => Promise<unknown>
+  prepareContractCall?: (params: DuskDomainsContractCallParams) => Promise<unknown>
+  writeContract?: (params: DuskDomainsWriteContractCallParams) => Promise<unknown>
   request?: (request: { method: string; params?: unknown }) => Promise<unknown>
 }
 
-export type DuskNamesConnectAppOptions = {
+export type DuskDomainsConnectAppOptions = {
   requestMethods?: {
     readContract?: string
     prepareContractCall?: string
@@ -37,9 +37,9 @@ const defaultRequestMethods = {
   writeContract: 'dusk_sendTransaction',
 } as const
 
-export function createDuskNamesConnectApp(
-  transport: DuskNamesConnectAppTransport,
-  options: DuskNamesConnectAppOptions = {},
+export function createDuskDomainsConnectApp(
+  transport: DuskDomainsConnectAppTransport,
+  options: DuskDomainsConnectAppOptions = {},
 ): DuskConnectAppLike {
   const requestMethods = {
     ...defaultRequestMethods,
@@ -65,15 +65,13 @@ export function createDuskNamesConnectApp(
   }
 }
 
-export const createDuskDomainsConnectApp = createDuskNamesConnectApp
-
-function connectReadContractParams(params: DuskNamesContractCallParams) {
+function connectReadContractParams(params: DuskDomainsContractCallParams) {
   const callParams = { ...params }
   delete callParams.decodedContext
   return callParams
 }
 
-function connectContractParams(params: DuskNamesContractCallParams) {
+function connectContractParams(params: DuskDomainsContractCallParams) {
   const callParams = { ...params }
   delete callParams.decodedContext
 
@@ -84,13 +82,13 @@ function connectContractParams(params: DuskNamesContractCallParams) {
   }
 }
 
-function connectWriteContractParams(params: DuskNamesWriteContractCallParams) {
+function connectWriteContractParams(params: DuskDomainsWriteContractCallParams) {
   const callParams = { ...params }
   delete callParams.preparedCall
   return connectContractParams(callParams)
 }
 
-function connectSendTransactionParams(params: DuskNamesWriteContractCallParams) {
+function connectSendTransactionParams(params: DuskDomainsWriteContractCallParams) {
   if (!isObjectRecord(params.preparedCall)) {
     throw new Error('Prepared contract-call payload is required for dusk_sendTransaction.')
   }
@@ -108,9 +106,9 @@ function isObjectRecord(value: unknown): value is Record<string, unknown> {
 }
 
 async function requestTransport(
-  transport: DuskNamesConnectAppTransport,
+  transport: DuskDomainsConnectAppTransport,
   method: string,
-  params: DuskNamesContractCallParams | DuskNamesWriteContractCallParams | Record<string, unknown>,
+  params: DuskDomainsContractCallParams | DuskDomainsWriteContractCallParams | Record<string, unknown>,
 ) {
   if (!transport.request) {
     throw new Error('Dusk Connect transport does not expose contract-call methods or request fallback.')

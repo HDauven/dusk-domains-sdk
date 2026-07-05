@@ -19,9 +19,9 @@ import {
   principalSummary,
   recordApprovalLabel,
 } from './callContextFormat'
-import type { DuskNameCallMetadata, DuskNameDecodedContext } from './callTypes'
+import type { DuskDomainCallMetadata, DuskDomainDecodedContext } from './callTypes'
 
-export function decodedCoreDuskNameContext(call: DuskNameCallMetadata): DuskNameDecodedContext | null {
+export function decodedCoreDuskDomainContext(call: DuskDomainCallMetadata): DuskDomainDecodedContext | null {
   if (call.contract !== 'core') return null
 
   if (call.functionName === 'init' && isCoreInitArgs(call.args)) {

@@ -1,79 +1,79 @@
-import { DUSK_NAME_CONTRACTS } from './callContracts'
-import { decodedDuskNameContext } from './callContext'
+import { DUSK_DOMAINS_CONTRACTS } from './callContracts'
+import { decodedDuskDomainContext } from './callContext'
 import type {
   DuskConnectAppLike,
   DuskDataDriverLike,
-  DuskNameCallMetadata,
-  DuskNameContractMap,
+  DuskDomainCallMetadata,
+  DuskDomainContractMap,
 } from './callTypes'
-import { toDuskNameWireArgs } from './callWireArgs'
+import { toDuskDomainWireArgs } from './callWireArgs'
 
 export * from './callBuilders'
-export { decodedDuskNameContext } from './callContext'
-export { DUSK_NAME_CONTRACTS, DUSK_NAME_PLACEHOLDER_CONTRACT_ID } from './callContracts'
+export { decodedDuskDomainContext } from './callContext'
+export { DUSK_DOMAINS_CONTRACTS, DUSK_DOMAINS_PLACEHOLDER_CONTRACT_ID } from './callContracts'
 export * from './callTypes'
-export { toDuskNameWireArgs } from './callWireArgs'
+export { toDuskDomainWireArgs } from './callWireArgs'
 
-export function encodeDuskNameCall(driver: DuskDataDriverLike, call: DuskNameCallMetadata): Uint8Array {
-  const wireArgs = toDuskNameWireArgs(call)
+export function encodeDuskDomainCall(driver: DuskDataDriverLike, call: DuskDomainCallMetadata): Uint8Array {
+  const wireArgs = toDuskDomainWireArgs(call)
   return driver.encodeInputFn(call.functionName, JSON.stringify(wireArgs === undefined ? null : wireArgs))
 }
 
-export function decodeDuskNameOutput<T>(driver: DuskDataDriverLike, call: DuskNameCallMetadata, bytes: Uint8Array): T {
+export function decodeDuskDomainOutput<T>(driver: DuskDataDriverLike, call: DuskDomainCallMetadata, bytes: Uint8Array): T {
   return driver.decodeOutputFn(call.functionName, bytes) as T
 }
 
-export async function readDuskNameContract(
+export async function readDuskDomainContract(
   app: DuskConnectAppLike,
-  call: DuskNameCallMetadata,
-  contracts: DuskNameContractMap = DUSK_NAME_CONTRACTS,
+  call: DuskDomainCallMetadata,
+  contracts: DuskDomainContractMap = DUSK_DOMAINS_CONTRACTS,
 ) : Promise<unknown> {
   return await app.readContract({
     contract: contracts[call.contract],
     functionName: call.functionName,
-    args: toDuskNameWireArgs(call),
-    decodedContext: decodedDuskNameContext(call, contracts),
+    args: toDuskDomainWireArgs(call),
+    decodedContext: decodedDuskDomainContext(call, contracts),
   })
 }
 
-export async function prepareDuskNameContractCall(
+export async function prepareDuskDomainContractCall(
   app: DuskConnectAppLike,
-  call: DuskNameCallMetadata,
-  contracts: DuskNameContractMap = DUSK_NAME_CONTRACTS,
+  call: DuskDomainCallMetadata,
+  contracts: DuskDomainContractMap = DUSK_DOMAINS_CONTRACTS,
 ) : Promise<unknown> {
-  const deposit = duskNameCallDepositLux(call)
+  const deposit = duskDomainCallDepositLux(call)
   return await app.prepareContractCall({
     contract: contracts[call.contract],
     functionName: call.functionName,
-    args: toDuskNameWireArgs(call),
+    args: toDuskDomainWireArgs(call),
     ...(deposit ? { deposit } : {}),
-    decodedContext: decodedDuskNameContext(call, contracts),
+    decodedContext: decodedDuskDomainContext(call, contracts),
   })
 }
 
-export async function writeDuskNameContract(
+export async function writeDuskDomainContract(
   app: DuskConnectAppLike,
-  call: DuskNameCallMetadata,
+  call: DuskDomainCallMetadata,
   preparedCall?: unknown,
-  contracts: DuskNameContractMap = DUSK_NAME_CONTRACTS,
+  contracts: DuskDomainContractMap = DUSK_DOMAINS_CONTRACTS,
 ) : Promise<unknown> {
-  const deposit = duskNameCallDepositLux(call)
+  const deposit = duskDomainCallDepositLux(call)
   return await app.writeContract({
     contract: contracts[call.contract],
     functionName: call.functionName,
-    args: toDuskNameWireArgs(call),
+    args: toDuskDomainWireArgs(call),
     ...(deposit ? { deposit } : {}),
-    decodedContext: decodedDuskNameContext(call, contracts),
+    decodedContext: decodedDuskDomainContext(call, contracts),
     preparedCall,
   })
 }
 
-export function isRuntimeBoundDuskNameWrite(call: DuskNameCallMetadata): boolean {
+export function isRuntimeBoundDuskDomainWrite(call: DuskDomainCallMetadata): boolean {
   return call.kind === 'write' && runtimeBoundBrowserWriteCalls.has(`${call.contract}.${call.functionName}`)
 }
 
-export function duskNameCallDepositLux(call: DuskNameCallMetadata): string | undefined {
-  if (!isPaidDuskNameCall(call)) return undefined
+export function duskDomainCallDepositLux(call: DuskDomainCallMetadata): string | undefined {
+  if (!isPaidDuskDomainCall(call)) return undefined
   const feeLux = (call.args as { feeLux?: unknown }).feeLux
   if (typeof feeLux !== 'number' || feeLux <= 0) return undefined
   if (!Number.isSafeInteger(feeLux)) {
@@ -82,7 +82,7 @@ export function duskNameCallDepositLux(call: DuskNameCallMetadata): string | und
   return String(feeLux)
 }
 
-function isPaidDuskNameCall(call: DuskNameCallMetadata): boolean {
+function isPaidDuskDomainCall(call: DuskDomainCallMetadata): boolean {
   return call.contract === 'core'
     && (
       call.functionName === 'complete_registration_runtime'

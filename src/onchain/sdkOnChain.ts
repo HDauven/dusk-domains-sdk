@@ -4,12 +4,12 @@ import {
   corePendingCommitmentCall,
   coreReadPrimaryNameCall,
   coreReadRecordCall,
-  readDuskNameContract,
+  readDuskDomainContract,
   type DuskConnectAppLike,
-  type DuskNameCallMetadata,
-  type DuskNameContractMap,
+  type DuskDomainCallMetadata,
+  type DuskDomainContractMap,
 } from '../contracts/calls'
-import { DUSK_NAME_CONTRACTS } from '../contracts/callContracts'
+import { DUSK_DOMAINS_CONTRACTS } from '../contracts/callContracts'
 import { namehash } from '../core/namehash'
 import { STATIC_RECORD_DEFINITIONS, type ResolverRecordKey } from '../core/records'
 import { failure, success } from '../client/sdkResults'
@@ -25,63 +25,63 @@ import {
   validateEndpoint,
 } from './sdkOnChainDecoders'
 import type {
-  DuskNamesOnChainClient,
-  DuskNamesOnChainClientOptions,
-  DuskNamesOnChainNameResponse,
-  DuskNamesOnChainPendingCommitment,
-  DuskNamesOnChainPrimaryRecord,
-  DuskNamesOnChainPrimaryNameVerification,
-  DuskNamesOnChainReadTransport,
-  DuskNamesOnChainRecord,
-  DuskNamesOnChainRecordKey,
-  DuskNamesOnChainResolvedName,
+  DuskDomainsOnChainClient,
+  DuskDomainsOnChainClientOptions,
+  DuskDomainsOnChainNameResponse,
+  DuskDomainsOnChainPendingCommitment,
+  DuskDomainsOnChainPrimaryRecord,
+  DuskDomainsOnChainPrimaryNameVerification,
+  DuskDomainsOnChainReadTransport,
+  DuskDomainsOnChainRecord,
+  DuskDomainsOnChainRecordKey,
+  DuskDomainsOnChainResolvedName,
 } from './sdkOnChainTypes'
 import { normalizeSdkName } from '../client/sdkValidation'
 import type { CoreFeeConfig } from '../core/namePolicy'
-import type { DuskEndpoint, DuskNamesResult } from '../client/sdkTypes'
+import type { DuskEndpoint, DuskDomainsResult } from '../client/sdkTypes'
 
 export type {
-  DuskNamesOnChainClient,
-  DuskNamesOnChainClientOptions,
-  DuskNamesOnChainLifecycle,
-  DuskNamesOnChainNameRecord,
-  DuskNamesOnChainNameResponse,
-  DuskNamesOnChainPendingCommitment,
-  DuskNamesOnChainPrimaryRecord,
-  DuskNamesOnChainPrimaryNameVerification,
-  DuskNamesOnChainReadTransport,
-  DuskNamesOnChainRecord,
-  DuskNamesOnChainRecordKey,
-  DuskNamesOnChainResolvedName,
-  DuskNamesRecordKeyAlias,
+  DuskDomainsOnChainClient,
+  DuskDomainsOnChainClientOptions,
+  DuskDomainsOnChainLifecycle,
+  DuskDomainsOnChainNameRecord,
+  DuskDomainsOnChainNameResponse,
+  DuskDomainsOnChainPendingCommitment,
+  DuskDomainsOnChainPrimaryRecord,
+  DuskDomainsOnChainPrimaryNameVerification,
+  DuskDomainsOnChainReadTransport,
+  DuskDomainsOnChainRecord,
+  DuskDomainsOnChainRecordKey,
+  DuskDomainsOnChainResolvedName,
+  DuskDomainsRecordKeyAlias,
 } from './sdkOnChainTypes'
 
 const defaultOnChainRecordKeys = STATIC_RECORD_DEFINITIONS.map((definition) => definition.key)
 
-function safeBlockHeight(value: number): DuskNamesResult<number> {
+function safeBlockHeight(value: number): DuskDomainsResult<number> {
   if (!Number.isSafeInteger(value) || value < 0) {
     return failure('lifecycle_unavailable', 'Current block height is malformed.')
   }
   return success(value)
 }
 
-export function createDuskNamesOnChainReadTransport(
+export function createDuskDomainsOnChainReadTransport(
   app: DuskConnectAppLike,
-  contracts: DuskNameContractMap = DUSK_NAME_CONTRACTS,
-): DuskNamesOnChainReadTransport {
+  contracts: DuskDomainContractMap = DUSK_DOMAINS_CONTRACTS,
+): DuskDomainsOnChainReadTransport {
   return {
     async read(call) {
-      return await readDuskNameContract(app, call, contracts)
+      return await readDuskDomainContract(app, call, contracts)
     },
   }
 }
 
-export function createDuskNamesOnChainClient(
-  options: DuskNamesOnChainClientOptions,
-): DuskNamesOnChainClient {
+export function createDuskDomainsOnChainClient(
+  options: DuskDomainsOnChainClientOptions,
+): DuskDomainsOnChainClient {
   const defaultRecordKeys = options.defaultRecordKeys ?? defaultOnChainRecordKeys
 
-  async function readCall<T>(call: DuskNameCallMetadata): Promise<DuskNamesResult<T>> {
+  async function readCall<T>(call: DuskDomainCallMetadata): Promise<DuskDomainsResult<T>> {
     try {
       return success(unwrapReadOutput(await options.read.read(call)) as T)
     } catch (error) {
@@ -89,7 +89,7 @@ export function createDuskNamesOnChainClient(
     }
   }
 
-  async function currentBlockHeight(): Promise<DuskNamesResult<number>> {
+  async function currentBlockHeight(): Promise<DuskDomainsResult<number>> {
     const source = options.currentBlockHeight
     if (typeof source === 'number') {
       return safeBlockHeight(source)
@@ -119,9 +119,9 @@ export function createDuskNamesOnChainClient(
   }
 
   async function assertActiveRoutingName(
-    response: DuskNamesOnChainNameResponse,
+    response: DuskDomainsOnChainNameResponse,
     displayName: string,
-  ): Promise<DuskNamesResult<null>> {
+  ): Promise<DuskDomainsResult<null>> {
     if (!response.record) {
       return failure('missing_name', `${displayName} is not registered.`)
     }
@@ -159,7 +159,7 @@ export function createDuskNamesOnChainClient(
     return decodeNameResponse(response.value, null)
   }
 
-  async function getNameOwner(name: string): Promise<DuskNamesResult<string>> {
+  async function getNameOwner(name: string): Promise<DuskDomainsResult<string>> {
     const response = await getName(name)
     if (!response.ok) return response
     if (!response.value.record) {
@@ -170,8 +170,8 @@ export function createDuskNamesOnChainClient(
 
   async function getRecords(
     name: string,
-    keys: DuskNamesOnChainRecordKey[] = defaultRecordKeys,
-  ): Promise<DuskNamesResult<DuskNamesOnChainRecord[]>> {
+    keys: DuskDomainsOnChainRecordKey[] = defaultRecordKeys,
+  ): Promise<DuskDomainsResult<DuskDomainsOnChainRecord[]>> {
     const normalized = normalizeSdkName(name)
     if (!normalized.ok) return normalized
 
@@ -181,7 +181,7 @@ export function createDuskNamesOnChainClient(
     const active = await assertActiveRoutingName(nameResponse.value, hashed.canonicalName)
     if (!active.ok) return active
 
-    const records: DuskNamesOnChainRecord[] = []
+    const records: DuskDomainsOnChainRecord[] = []
     for (const requestedKey of keys) {
       const key = canonicalOnChainRecordKey(requestedKey)
       if (!key.ok) return key
@@ -198,8 +198,8 @@ export function createDuskNamesOnChainClient(
 
   async function getRecord(
     name: string,
-    requestedKey: DuskNamesOnChainRecordKey,
-  ): Promise<DuskNamesResult<DuskNamesOnChainRecord>> {
+    requestedKey: DuskDomainsOnChainRecordKey,
+  ): Promise<DuskDomainsResult<DuskDomainsOnChainRecord>> {
     const normalized = normalizeSdkName(name)
     if (!normalized.ok) return normalized
 
@@ -217,8 +217,8 @@ export function createDuskNamesOnChainClient(
 
   async function resolveName(
     name: string,
-    requestedKey: DuskNamesOnChainRecordKey = 'moonlight_address',
-  ): Promise<DuskNamesResult<DuskNamesOnChainResolvedName>> {
+    requestedKey: DuskDomainsOnChainRecordKey = 'moonlight_address',
+  ): Promise<DuskDomainsResult<DuskDomainsOnChainResolvedName>> {
     const normalized = normalizeSdkName(name)
     if (!normalized.ok) return normalized
 
@@ -239,7 +239,7 @@ export function createDuskNamesOnChainClient(
     })
   }
 
-  async function getPrimaryName(endpoint: DuskEndpoint): Promise<DuskNamesResult<string>> {
+  async function getPrimaryName(endpoint: DuskEndpoint): Promise<DuskDomainsResult<string>> {
     const primary = await readPrimaryName(endpoint)
     if (!primary.ok) return primary
     if (!primary.value) {
@@ -255,7 +255,7 @@ export function createDuskNamesOnChainClient(
   async function verifyPrimaryName(
     endpoint: DuskEndpoint,
     expectedName?: string,
-  ): Promise<DuskNamesResult<DuskNamesOnChainPrimaryNameVerification>> {
+  ): Promise<DuskDomainsResult<DuskDomainsOnChainPrimaryNameVerification>> {
     const endpointValidation = validateEndpoint(endpoint, true)
     if (!endpointValidation.ok) return endpointValidation
 
@@ -309,7 +309,7 @@ export function createDuskNamesOnChainClient(
 
   async function getPendingCommitment(
     commitment: string,
-  ): Promise<DuskNamesResult<DuskNamesOnChainPendingCommitment>> {
+  ): Promise<DuskDomainsResult<DuskDomainsOnChainPendingCommitment>> {
     const normalizedCommitment = normalizeBytes32Hex(commitment, 'commitment')
     if (!normalizedCommitment.ok) return normalizedCommitment
 
@@ -319,7 +319,7 @@ export function createDuskNamesOnChainClient(
     return decodePendingCommitmentResponse(response.value)
   }
 
-  async function getFeeConfig(): Promise<DuskNamesResult<CoreFeeConfig>> {
+  async function getFeeConfig(): Promise<DuskDomainsResult<CoreFeeConfig>> {
     const response = await readCall<unknown>(coreFeeConfigCall())
     if (!response.ok) return response
     return decodeFeeConfig(response.value)
@@ -328,7 +328,7 @@ export function createDuskNamesOnChainClient(
   async function readRecordByNode(
     node: string,
     key: ResolverRecordKey,
-  ): Promise<DuskNamesResult<DuskNamesOnChainRecord>> {
+  ): Promise<DuskDomainsResult<DuskDomainsOnChainRecord>> {
     const response = await readCall<unknown>(coreReadRecordCall({ node, key }))
     if (!response.ok) return response
     return decodeRecordResponse(response.value, key)
@@ -336,7 +336,7 @@ export function createDuskNamesOnChainClient(
 
   async function readPrimaryName(
     endpoint: DuskEndpoint,
-  ): Promise<DuskNamesResult<DuskNamesOnChainPrimaryRecord | null>> {
+  ): Promise<DuskDomainsResult<DuskDomainsOnChainPrimaryRecord | null>> {
     const endpointValidation = validateEndpoint(endpoint, true)
     if (!endpointValidation.ok) return endpointValidation
 

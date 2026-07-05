@@ -1,12 +1,12 @@
 import type { ForwardResolutionResponse, IndexedNameSummary } from '../indexer/indexer'
-import type { DuskNamesIndexerClient } from '../indexer/indexerClient'
+import type { DuskDomainsIndexerClient } from '../indexer/indexerClient'
 import { namehashHex } from '../core/namehash'
-import type { DuskNamesOnChainClient } from '../onchain/sdkOnChain'
+import type { DuskDomainsOnChainClient } from '../onchain/sdkOnChain'
 
 export const node = namehashHex('aurora.dusk')
 export const endpointValue = 'dusk1localresolverproof01'
 
-export function fakeIndexer(overrides: Partial<DuskNamesIndexerClient>): DuskNamesIndexerClient {
+export function fakeIndexer(overrides: Partial<DuskDomainsIndexerClient>): DuskDomainsIndexerClient {
   return {
     async getHealth() {
       throw new Error('not implemented')
@@ -63,7 +63,7 @@ export function fakeIndexer(overrides: Partial<DuskNamesIndexerClient>): DuskNam
   }
 }
 
-export function fakeOnChain(overrides: Partial<DuskNamesOnChainClient>): DuskNamesOnChainClient {
+export function fakeOnChain(overrides: Partial<DuskDomainsOnChainClient>): DuskDomainsOnChainClient {
   return {
     async getName() {
       throw new Error('not implemented')
@@ -145,11 +145,11 @@ export function releaseManifest() {
       core: {
         key: 'core',
         name: 'Dusk Domains Core',
-        crate: 'dusk-names-core',
+        crate: 'dusk-domains-core',
         contractId: coreId,
         contractWasm: null,
         dataDriver: {
-          path: 'contracts/dusk-names-core.data-driver.wasm',
+          path: 'contracts/dusk-domains-core.data-driver.wasm',
           bytes: 1,
           sha256: hash,
           blake2b256: hash,
@@ -180,11 +180,11 @@ export function releaseManifest() {
       treasury: {
         key: 'treasury',
         name: 'Dusk Domain Treasury',
-        crate: 'dusk-name-treasury',
+        crate: 'dusk-domains-treasury',
         contractId: treasuryId,
         contractWasm: null,
         dataDriver: {
-          path: 'contracts/dusk-name-treasury.data-driver.wasm',
+          path: 'contracts/dusk-domains-treasury.data-driver.wasm',
           bytes: 1,
           sha256: hash,
           blake2b256: hash,

@@ -2,13 +2,13 @@
 
 Status: MVP example
 
-The Rust helper crate lives at `contracts/crates/dusk-name-sdk`. It is a read-side helper crate for wallets, explorers, services, and contract-adjacent tooling. It does not own canonical state; the deployed Dusk Domains core contract remains authoritative for ownership, records, primary names, and expiry.
+The Rust helper crate lives at `contracts/crates/dusk-domains-sdk`. It is a read-side helper crate for wallets, explorers, services, and contract-adjacent tooling. It does not own canonical state; the deployed Dusk Domains core contract remains authoritative for ownership, records, primary names, and expiry.
 
 ## Primary-Name Verification
 
 ```rust
-use dusk_name_sdk::{verify_primary_name, PrimaryNameVerificationError};
-use dusk_name_types::{EndpointKind, RecordValue, TypedEndpoint};
+use dusk_domains_sdk::{verify_primary_name, PrimaryNameVerificationError};
+use dusk_domains_types::{EndpointKind, RecordValue, TypedEndpoint};
 
 let endpoint = TypedEndpoint {
     kind: EndpointKind::MoonlightAddress,

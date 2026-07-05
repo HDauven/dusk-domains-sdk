@@ -4,7 +4,7 @@ import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 const PUBLIC_SENDER_KEY_BYTES = 96
 const BLS_PUBLIC_KEY_BYTES = 193
-const RUNTIME_AUTHORITY_DOMAIN = utf8ToBytes('dusk-names:runtime-authority:v1')
+const RUNTIME_AUTHORITY_DOMAIN = utf8ToBytes('dusk-domains:runtime-authority:v1')
 
 export type DuskPrincipalKind = 'Moonlight' | 'Phoenix' | 'Contract'
 

@@ -16,7 +16,7 @@ import type {
   CoreSetRecordSenderRuntimeArgs,
   CoreSetReferralConfigRuntimeArgs,
   CoreUpdateAuthoritiesRuntimeArgs,
-  DuskNameCallMetadata,
+  DuskDomainCallMetadata,
   TreasuryClaimAllReferralRewardsRuntimeArgs,
   TreasuryClaimReferralRewardRuntimeArgs,
   TreasuryClaimRuntimeArgs,
@@ -24,7 +24,7 @@ import type {
   TreasuryUpdateOperatorRuntimeArgs,
 } from './callTypes'
 
-export function coreInitCall(args: CoreInitArgs): DuskNameCallMetadata<CoreInitArgs> {
+export function coreInitCall(args: CoreInitArgs): DuskDomainCallMetadata<CoreInitArgs> {
   return {
     contract: 'core',
     functionName: 'init',
@@ -35,7 +35,7 @@ export function coreInitCall(args: CoreInitArgs): DuskNameCallMetadata<CoreInitA
 
 export function coreSetReferralConfigRuntimeCall(
   args: CoreSetReferralConfigRuntimeArgs,
-): DuskNameCallMetadata<CoreSetReferralConfigRuntimeArgs> {
+): DuskDomainCallMetadata<CoreSetReferralConfigRuntimeArgs> {
   return {
     contract: 'core',
     functionName: 'set_referral_config_runtime',
@@ -46,7 +46,7 @@ export function coreSetReferralConfigRuntimeCall(
 
 export function coreSetFeeConfigRuntimeCall(
   args: CoreSetFeeConfigRuntimeArgs,
-): DuskNameCallMetadata<CoreSetFeeConfigRuntimeArgs> {
+): DuskDomainCallMetadata<CoreSetFeeConfigRuntimeArgs> {
   return {
     contract: 'core',
     functionName: 'set_fee_config_runtime',
@@ -57,7 +57,7 @@ export function coreSetFeeConfigRuntimeCall(
 
 export function coreCommitRuntimeCall(
   args: CoreCommitRuntimeArgs,
-): DuskNameCallMetadata<CoreCommitRuntimeArgs> {
+): DuskDomainCallMetadata<CoreCommitRuntimeArgs> {
   return {
     contract: 'core',
     functionName: 'commit_runtime',
@@ -68,7 +68,7 @@ export function coreCommitRuntimeCall(
 
 export function coreCompleteRegistrationRuntimeCall(
   args: CoreCompleteRegistrationRuntimeArgs,
-): DuskNameCallMetadata<CoreCompleteRegistrationRuntimeArgs> {
+): DuskDomainCallMetadata<CoreCompleteRegistrationRuntimeArgs> {
   return {
     contract: 'core',
     functionName: 'complete_registration_runtime',
@@ -79,7 +79,7 @@ export function coreCompleteRegistrationRuntimeCall(
 
 export function coreRenewRuntimeCall(
   args: CoreRenewRuntimeArgs,
-): DuskNameCallMetadata<CoreRenewRuntimeArgs> {
+): DuskDomainCallMetadata<CoreRenewRuntimeArgs> {
   return {
     contract: 'core',
     functionName: 'renew_runtime',
@@ -90,7 +90,7 @@ export function coreRenewRuntimeCall(
 
 export function coreUpdateAuthoritiesRuntimeCall(
   args: CoreUpdateAuthoritiesRuntimeArgs,
-): DuskNameCallMetadata<CoreUpdateAuthoritiesRuntimeArgs> {
+): DuskDomainCallMetadata<CoreUpdateAuthoritiesRuntimeArgs> {
   return {
     contract: 'core',
     functionName: 'update_authorities_runtime',
@@ -101,7 +101,7 @@ export function coreUpdateAuthoritiesRuntimeCall(
 
 export function coreSetRecordSenderRuntimeCall(
   args: CoreSetRecordSenderRuntimeArgs,
-): DuskNameCallMetadata<CoreSetRecordSenderRuntimeArgs> {
+): DuskDomainCallMetadata<CoreSetRecordSenderRuntimeArgs> {
   return {
     contract: 'core',
     functionName: 'set_record_sender_runtime',
@@ -112,7 +112,7 @@ export function coreSetRecordSenderRuntimeCall(
 
 export function coreClearRecordSenderRuntimeCall(
   args: CoreClearRecordSenderRuntimeArgs,
-): DuskNameCallMetadata<CoreClearRecordSenderRuntimeArgs> {
+): DuskDomainCallMetadata<CoreClearRecordSenderRuntimeArgs> {
   return {
     contract: 'core',
     functionName: 'clear_record_sender_runtime',
@@ -123,7 +123,7 @@ export function coreClearRecordSenderRuntimeCall(
 
 export function coreMutateRecordsSenderRuntimeCall(
   args: CoreMutateRecordsSenderRuntimeArgs,
-): DuskNameCallMetadata<CoreMutateRecordsSenderRuntimeArgs> {
+): DuskDomainCallMetadata<CoreMutateRecordsSenderRuntimeArgs> {
   return {
     contract: 'core',
     functionName: 'mutate_records_sender_runtime',
@@ -134,7 +134,7 @@ export function coreMutateRecordsSenderRuntimeCall(
 
 export function coreSetPrimaryNameRuntimeCall(
   args: CoreSetPrimaryNameRuntimeArgs,
-): DuskNameCallMetadata<CoreSetPrimaryNameRuntimeArgs> {
+): DuskDomainCallMetadata<CoreSetPrimaryNameRuntimeArgs> {
   return {
     contract: 'core',
     functionName: 'set_primary_name_runtime',
@@ -145,7 +145,7 @@ export function coreSetPrimaryNameRuntimeCall(
 
 export function coreClearPrimaryNameRuntimeCall(
   args: CoreClearPrimaryNameRuntimeArgs,
-): DuskNameCallMetadata<CoreClearPrimaryNameRuntimeArgs> {
+): DuskDomainCallMetadata<CoreClearPrimaryNameRuntimeArgs> {
   return {
     contract: 'core',
     functionName: 'clear_primary_name_runtime',
@@ -156,7 +156,7 @@ export function coreClearPrimaryNameRuntimeCall(
 
 export function coreCreateSubnameRuntimeCall(
   args: CoreCreateSubnameRuntimeArgs,
-): DuskNameCallMetadata<CoreCreateSubnameRuntimeArgs> {
+): DuskDomainCallMetadata<CoreCreateSubnameRuntimeArgs> {
   return {
     contract: 'core',
     functionName: 'create_subname_runtime',
@@ -165,7 +165,7 @@ export function coreCreateSubnameRuntimeCall(
   }
 }
 
-export function coreGetNameCall(args: CoreGetNameArgs): DuskNameCallMetadata<CoreGetNameArgs> {
+export function coreGetNameCall(args: CoreGetNameArgs): DuskDomainCallMetadata<CoreGetNameArgs> {
   return {
     contract: 'core',
     functionName: 'get_name',
@@ -174,7 +174,7 @@ export function coreGetNameCall(args: CoreGetNameArgs): DuskNameCallMetadata<Cor
   }
 }
 
-export function coreReadRecordCall(args: CoreReadRecordArgs): DuskNameCallMetadata<CoreReadRecordArgs> {
+export function coreReadRecordCall(args: CoreReadRecordArgs): DuskDomainCallMetadata<CoreReadRecordArgs> {
   return {
     contract: 'core',
     functionName: 'read_record',
@@ -183,7 +183,7 @@ export function coreReadRecordCall(args: CoreReadRecordArgs): DuskNameCallMetada
   }
 }
 
-export function coreReadPrimaryNameCall(args: CoreReadPrimaryNameArgs): DuskNameCallMetadata<CoreReadPrimaryNameArgs> {
+export function coreReadPrimaryNameCall(args: CoreReadPrimaryNameArgs): DuskDomainCallMetadata<CoreReadPrimaryNameArgs> {
   return {
     contract: 'core',
     functionName: 'read_primary_name',
@@ -194,7 +194,7 @@ export function coreReadPrimaryNameCall(args: CoreReadPrimaryNameArgs): DuskName
 
 export function corePendingCommitmentCall(
   args: CorePendingCommitmentArgs,
-): DuskNameCallMetadata<CorePendingCommitmentArgs> {
+): DuskDomainCallMetadata<CorePendingCommitmentArgs> {
   return {
     contract: 'core',
     functionName: 'pending_commitment',
@@ -203,7 +203,7 @@ export function corePendingCommitmentCall(
   }
 }
 
-export function coreFeeConfigCall(): DuskNameCallMetadata<undefined> {
+export function coreFeeConfigCall(): DuskDomainCallMetadata<undefined> {
   return {
     contract: 'core',
     functionName: 'fee_config',
@@ -212,7 +212,7 @@ export function coreFeeConfigCall(): DuskNameCallMetadata<undefined> {
   }
 }
 
-export function treasuryInitCall(args: TreasuryInitArgs): DuskNameCallMetadata<TreasuryInitArgs> {
+export function treasuryInitCall(args: TreasuryInitArgs): DuskDomainCallMetadata<TreasuryInitArgs> {
   return {
     contract: 'treasury',
     functionName: 'init',
@@ -223,7 +223,7 @@ export function treasuryInitCall(args: TreasuryInitArgs): DuskNameCallMetadata<T
 
 export function treasuryUpdateOperatorRuntimeCall(
   args: TreasuryUpdateOperatorRuntimeArgs,
-): DuskNameCallMetadata<TreasuryUpdateOperatorRuntimeArgs> {
+): DuskDomainCallMetadata<TreasuryUpdateOperatorRuntimeArgs> {
   return {
     contract: 'treasury',
     functionName: 'update_operator_runtime',
@@ -234,7 +234,7 @@ export function treasuryUpdateOperatorRuntimeCall(
 
 export function treasuryClaimRuntimeCall(
   args: TreasuryClaimRuntimeArgs,
-): DuskNameCallMetadata<TreasuryClaimRuntimeArgs> {
+): DuskDomainCallMetadata<TreasuryClaimRuntimeArgs> {
   return {
     contract: 'treasury',
     functionName: 'claim_runtime',
@@ -243,7 +243,7 @@ export function treasuryClaimRuntimeCall(
   }
 }
 
-export function treasuryClaimAllRuntimeCall(): DuskNameCallMetadata<undefined> {
+export function treasuryClaimAllRuntimeCall(): DuskDomainCallMetadata<undefined> {
   return {
     contract: 'treasury',
     functionName: 'claim_all_runtime',
@@ -254,7 +254,7 @@ export function treasuryClaimAllRuntimeCall(): DuskNameCallMetadata<undefined> {
 
 export function treasuryClaimReferralRewardRuntimeCall(
   args: TreasuryClaimReferralRewardRuntimeArgs,
-): DuskNameCallMetadata<TreasuryClaimReferralRewardRuntimeArgs> {
+): DuskDomainCallMetadata<TreasuryClaimReferralRewardRuntimeArgs> {
   return {
     contract: 'treasury',
     functionName: 'claim_referral_reward_runtime',
@@ -265,7 +265,7 @@ export function treasuryClaimReferralRewardRuntimeCall(
 
 export function treasuryClaimAllReferralRewardsRuntimeCall(
   args: TreasuryClaimAllReferralRewardsRuntimeArgs,
-): DuskNameCallMetadata<TreasuryClaimAllReferralRewardsRuntimeArgs> {
+): DuskDomainCallMetadata<TreasuryClaimAllReferralRewardsRuntimeArgs> {
   return {
     contract: 'treasury',
     functionName: 'claim_all_referral_rewards_runtime',
@@ -274,7 +274,7 @@ export function treasuryClaimAllReferralRewardsRuntimeCall(
   }
 }
 
-export function treasuryReadStateCall(): DuskNameCallMetadata<undefined> {
+export function treasuryReadStateCall(): DuskDomainCallMetadata<undefined> {
   return {
     contract: 'treasury',
     functionName: 'read_state',

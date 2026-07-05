@@ -1,7 +1,7 @@
 # Public Integration Release
 
 Status: beta packaging plan
-Owner issues: [#128](https://github.com/HDauven/dusk-names/issues/128), [#129](https://github.com/HDauven/dusk-names/issues/129), [#130](https://github.com/HDauven/dusk-names/issues/130), [#131](https://github.com/HDauven/dusk-names/issues/131), [#132](https://github.com/HDauven/dusk-names/issues/132), [#133](https://github.com/HDauven/dusk-names/issues/133), [#134](https://github.com/HDauven/dusk-names/issues/134)
+Owner issues: [#128](https://github.com/HDauven/dusk-domains/issues/128), [#129](https://github.com/HDauven/dusk-domains/issues/129), [#130](https://github.com/HDauven/dusk-domains/issues/130), [#131](https://github.com/HDauven/dusk-domains/issues/131), [#132](https://github.com/HDauven/dusk-domains/issues/132), [#133](https://github.com/HDauven/dusk-domains/issues/133), [#134](https://github.com/HDauven/dusk-domains/issues/134)
 
 This document defines what third-party wallets, explorers, dApps, and operators can consume without needing the private contract source tree. Contract state remains canonical; the indexer and SDKs are convenience layers. The source-specific read rules are defined in [Integration Trust Model](integration-trust-model.md).
 
@@ -11,7 +11,7 @@ Public at beta:
 
 - TypeScript SDK read helpers.
 - Dusk Connect read/write adapter types and call builders needed by integrations.
-- Data-driver WASM files for `dusk-names-core` and `dusk-name-treasury`.
+- Data-driver WASM files for `dusk-domains-core` and `dusk-domains-treasury`.
 - Contract IDs, data-driver hashes, method manifests, event schema version, and call examples.
 - Indexer API docs, HTTP client, guards, and the local/hosted indexer implementation when the public-surface check passes.
 - Integration examples for direct reads, indexer-backed reads, primary-name verification, and My Domains style discovery.
@@ -116,10 +116,10 @@ target/public-release/dusk-domains/<network>/
   call-examples.json
   package-manifest.json
   contracts/
-    dusk_names_core.datadriver.wasm
-    dusk_name_treasury.datadriver.wasm
-    dusk_names_core.wasm
-    dusk_name_treasury.wasm
+    dusk_domains_core.datadriver.wasm
+    dusk_domains_treasury.datadriver.wasm
+    dusk_domains_core.wasm
+    dusk_domains_treasury.wasm
 ```
 
 Each artifact descriptor includes SHA-256 and BLAKE2b-256 hashes. The script fails if required contract IDs or data-driver WASM files are missing.

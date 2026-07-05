@@ -25,15 +25,15 @@ import {
 } from './callArgGuards'
 import type {
   CoreRecordMutationInput,
-  DuskNameCallMetadata,
+  DuskDomainCallMetadata,
 } from './callTypes'
 
-export function toDuskNameWireArgs(call: DuskNameCallMetadata): unknown {
+export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
   const callKey = `${call.contract}.${call.functionName}`
   const args = call.args
 
   if (args === undefined) {
-    if (noArgDuskNameCalls.has(callKey) || !knownDuskNameCalls.has(callKey)) return undefined
+    if (noArgDuskDomainCalls.has(callKey) || !knownDuskDomainCalls.has(callKey)) return undefined
     throw invalidKnownCallArgs(call)
   }
   if (call.contract === 'core' && call.functionName === 'init' && isCoreInitArgs(args)) {
@@ -228,20 +228,20 @@ export function toDuskNameWireArgs(call: DuskNameCallMetadata): unknown {
     }
   }
 
-  if (knownDuskNameCalls.has(callKey)) {
+  if (knownDuskDomainCalls.has(callKey)) {
     throw invalidKnownCallArgs(call)
   }
 
   return args
 }
 
-const noArgDuskNameCalls = new Set([
+const noArgDuskDomainCalls = new Set([
   'core.fee_config',
   'treasury.claim_all_runtime',
   'treasury.read_state',
 ])
 
-const knownDuskNameCalls = new Set([
+const knownDuskDomainCalls = new Set([
   'core.init',
   'core.set_referral_config_runtime',
   'core.set_fee_config_runtime',
@@ -269,7 +269,7 @@ const knownDuskNameCalls = new Set([
   'treasury.read_state',
 ])
 
-function invalidKnownCallArgs(call: DuskNameCallMetadata) {
+function invalidKnownCallArgs(call: DuskDomainCallMetadata) {
   return new Error(`Invalid Dusk Domains ${call.contract}.${call.functionName} arguments for contract calls.`)
 }
 

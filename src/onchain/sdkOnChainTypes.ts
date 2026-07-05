@@ -1,42 +1,42 @@
 import type { CoreFeeConfig } from '../core/namePolicy'
 import type { DuskPrincipal } from '../core/principal'
 import type { RecordVisibility, ResolverRecordKey } from '../core/records'
-import type { DuskEndpoint, DuskNamesResult } from '../client/sdkTypes'
-import type { DuskNameCallMetadata } from '../contracts/calls'
+import type { DuskEndpoint, DuskDomainsResult } from '../client/sdkTypes'
+import type { DuskDomainCallMetadata } from '../contracts/calls'
 
-export type DuskNamesRecordKeyAlias = 'dusk_public_address' | 'dusk_shielded_address'
-export type DuskNamesOnChainRecordKey = ResolverRecordKey | DuskNamesRecordKeyAlias
+export type DuskDomainsRecordKeyAlias = 'dusk_public_address' | 'dusk_shielded_address'
+export type DuskDomainsOnChainRecordKey = ResolverRecordKey | DuskDomainsRecordKeyAlias
 
-export type DuskNamesOnChainReadTransport = {
-  read: (call: DuskNameCallMetadata) => Promise<unknown>
+export type DuskDomainsOnChainReadTransport = {
+  read: (call: DuskDomainCallMetadata) => Promise<unknown>
 }
 
-export type DuskNamesOnChainClientOptions = {
-  read: DuskNamesOnChainReadTransport
-  defaultRecordKeys?: DuskNamesOnChainRecordKey[]
+export type DuskDomainsOnChainClientOptions = {
+  read: DuskDomainsOnChainReadTransport
+  defaultRecordKeys?: DuskDomainsOnChainRecordKey[]
   currentBlockHeight?: number | (() => number | null | Promise<number | null>)
 }
 
-export type DuskNamesOnChainLifecycle = {
+export type DuskDomainsOnChainLifecycle = {
   expiresAtBlock: number
   graceEndsAtBlock: number
 }
 
-export type DuskNamesOnChainNameRecord = {
+export type DuskDomainsOnChainNameRecord = {
   label: string
   owner: string
   manager: string
-  lifecycle: DuskNamesOnChainLifecycle
+  lifecycle: DuskDomainsOnChainLifecycle
   referrer: DuskPrincipal | null
 }
 
-export type DuskNamesOnChainNameResponse = {
+export type DuskDomainsOnChainNameResponse = {
   canonicalName: string | null
   node: string
-  record: DuskNamesOnChainNameRecord | null
+  record: DuskDomainsOnChainNameRecord | null
 }
 
-export type DuskNamesOnChainRecord = {
+export type DuskDomainsOnChainRecord = {
   key: ResolverRecordKey
   value: string
   visibility: RecordVisibility
@@ -44,29 +44,29 @@ export type DuskNamesOnChainRecord = {
   updatedAtBlock: number
 }
 
-export type DuskNamesOnChainResolvedName = {
+export type DuskDomainsOnChainResolvedName = {
   canonicalName: string
   node: string
   endpoint: DuskEndpoint
-  record: DuskNamesOnChainRecord
+  record: DuskDomainsOnChainRecord
 }
 
-export type DuskNamesOnChainPrimaryNameVerification = {
+export type DuskDomainsOnChainPrimaryNameVerification = {
   endpoint: DuskEndpoint
   primaryName: string
   node: string
-  forwardRecord: DuskNamesOnChainRecord
+  forwardRecord: DuskDomainsOnChainRecord
   verified: true
 }
 
-export type DuskNamesOnChainPrimaryRecord = {
+export type DuskDomainsOnChainPrimaryRecord = {
   endpoint: DuskEndpoint
   node: string
   name: string
   updatedAtBlock: number
 }
 
-export type DuskNamesOnChainPendingCommitment = {
+export type DuskDomainsOnChainPendingCommitment = {
   commitment: string
   pending: {
     controller: string
@@ -74,24 +74,24 @@ export type DuskNamesOnChainPendingCommitment = {
   } | null
 }
 
-export type DuskNamesOnChainClient = {
-  getName: (name: string) => Promise<DuskNamesResult<DuskNamesOnChainNameResponse>>
-  getNameByNode: (node: string) => Promise<DuskNamesResult<DuskNamesOnChainNameResponse>>
-  getNameOwner: (name: string) => Promise<DuskNamesResult<string>>
+export type DuskDomainsOnChainClient = {
+  getName: (name: string) => Promise<DuskDomainsResult<DuskDomainsOnChainNameResponse>>
+  getNameByNode: (node: string) => Promise<DuskDomainsResult<DuskDomainsOnChainNameResponse>>
+  getNameOwner: (name: string) => Promise<DuskDomainsResult<string>>
   getRecords: (
     name: string,
-    keys?: DuskNamesOnChainRecordKey[],
-  ) => Promise<DuskNamesResult<DuskNamesOnChainRecord[]>>
-  getRecord: (name: string, key: DuskNamesOnChainRecordKey) => Promise<DuskNamesResult<DuskNamesOnChainRecord>>
+    keys?: DuskDomainsOnChainRecordKey[],
+  ) => Promise<DuskDomainsResult<DuskDomainsOnChainRecord[]>>
+  getRecord: (name: string, key: DuskDomainsOnChainRecordKey) => Promise<DuskDomainsResult<DuskDomainsOnChainRecord>>
   resolveName: (
     name: string,
-    key?: DuskNamesOnChainRecordKey,
-  ) => Promise<DuskNamesResult<DuskNamesOnChainResolvedName>>
-  getPrimaryName: (endpoint: DuskEndpoint) => Promise<DuskNamesResult<string>>
+    key?: DuskDomainsOnChainRecordKey,
+  ) => Promise<DuskDomainsResult<DuskDomainsOnChainResolvedName>>
+  getPrimaryName: (endpoint: DuskEndpoint) => Promise<DuskDomainsResult<string>>
   verifyPrimaryName: (
     endpoint: DuskEndpoint,
     expectedName?: string,
-  ) => Promise<DuskNamesResult<DuskNamesOnChainPrimaryNameVerification>>
-  getPendingCommitment: (commitment: string) => Promise<DuskNamesResult<DuskNamesOnChainPendingCommitment>>
-  getFeeConfig: () => Promise<DuskNamesResult<CoreFeeConfig>>
+  ) => Promise<DuskDomainsResult<DuskDomainsOnChainPrimaryNameVerification>>
+  getPendingCommitment: (commitment: string) => Promise<DuskDomainsResult<DuskDomainsOnChainPendingCommitment>>
+  getFeeConfig: () => Promise<DuskDomainsResult<CoreFeeConfig>>
 }

@@ -92,7 +92,7 @@ const defaultNodeUrl = 'http://127.0.0.1:18180/'
 const unsupportedWriteMessage = 'This local wallet is read-only. Use a transaction-capable Dusk wallet or the trusted local write bridge to update deployed state.'
 const localPreparedCallPrefix = 'local-dev-prepared'
 
-export const LOCAL_DEV_WALLET_PREPARED_CALL_EVENT = 'dusk-names:local-dev-wallet:prepared-call'
+export const LOCAL_DEV_WALLET_PREPARED_CALL_EVENT = 'dusk-domains:local-dev-wallet:prepared-call'
 
 export function installLocalDevDuskWallet(
   options: LocalDevWalletOptions = {},
@@ -113,7 +113,7 @@ export function installLocalDevDuskWallet(
   let autoLockTimer: ReturnType<typeof globalThis.setTimeout> | null = null
   const listeners = new Map<string, Set<(...args: unknown[]) => void>>()
   const info: DuskProviderInfo = {
-    uuid: 'dusk-names-local-dev-wallet',
+    uuid: 'dusk-domains-local-dev-wallet',
     name: providerName,
     icon: '',
     rdns: 'network.dusk.local-dev-wallet',
@@ -424,10 +424,10 @@ function prepareContractCall(params: unknown, target?: EventTarget) {
 function rememberPreparedCall(target: EventTarget | undefined, prepared: unknown) {
   if (!target || !('window' in target)) return
   const browserTarget = target as BrowserTarget & {
-    __duskNamesPreparedCalls?: unknown[]
+    __duskDomainsPreparedCalls?: unknown[]
   }
-  browserTarget.__duskNamesPreparedCalls ??= []
-  browserTarget.__duskNamesPreparedCalls.push(prepared)
+  browserTarget.__duskDomainsPreparedCalls ??= []
+  browserTarget.__duskDomainsPreparedCalls.push(prepared)
 }
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {

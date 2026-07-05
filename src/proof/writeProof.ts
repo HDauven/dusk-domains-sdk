@@ -1,4 +1,4 @@
-import type { DuskNameTxState } from '../writes/transactions'
+import type { DuskDomainTxState } from '../writes/transactions'
 import { captureBrowserWriteProofLog } from './writeProofCapture'
 import {
   browserWriteProofRecordKey,
@@ -15,7 +15,7 @@ import type {
   RecordBrowserWriteProofOptions,
   RecordBrowserWriteProofUiConfirmationOptions,
 } from './writeProofTypes'
-import { DUSK_NAMES_WRITE_PROOF_STORAGE_KEY } from './writeProofTypes'
+import { DUSK_DOMAINS_WRITE_PROOF_STORAGE_KEY } from './writeProofTypes'
 
 export { captureBrowserWriteProofLog } from './writeProofCapture'
 export {
@@ -34,7 +34,7 @@ export type {
   RecordBrowserWriteProofOptions,
   RecordBrowserWriteProofUiConfirmationOptions,
 } from './writeProofTypes'
-export { DUSK_NAMES_WRITE_PROOF_STORAGE_KEY } from './writeProofTypes'
+export { DUSK_DOMAINS_WRITE_PROOF_STORAGE_KEY } from './writeProofTypes'
 
 const kindByFunctionName: Record<string, BrowserWriteProofKind> = {
   commit_runtime: 'commit',
@@ -55,7 +55,7 @@ export function recordBrowserWriteProof(options: RecordBrowserWriteProofOptions)
   const account = options.account.trim()
   if (!chainId || !name || !account) return false
 
-  const log = parseBrowserWriteProofLog(storage.getItem(DUSK_NAMES_WRITE_PROOF_STORAGE_KEY))
+  const log = parseBrowserWriteProofLog(storage.getItem(DUSK_DOMAINS_WRITE_PROOF_STORAGE_KEY))
   const recordKey = browserWriteProofRecordKey({ chainId, name, account })
   const existingIndex = log.records.findIndex((record) => browserWriteProofRecordKey(record) === recordKey)
   const now = transaction.recordedAt
@@ -85,7 +85,7 @@ export function recordBrowserWriteProof(options: RecordBrowserWriteProofOptions)
     records,
   } satisfies BrowserWriteProofLog
 
-  storage.setItem(DUSK_NAMES_WRITE_PROOF_STORAGE_KEY, JSON.stringify(nextLog))
+  storage.setItem(DUSK_DOMAINS_WRITE_PROOF_STORAGE_KEY, JSON.stringify(nextLog))
   void captureBrowserWriteProofLog(options.captureUrl, nextLog, options.fetcher)
   return true
 }
@@ -100,7 +100,7 @@ export function recordBrowserWriteProofUiConfirmation(options: RecordBrowserWrit
   const confirmation = browserWriteProofUiConfirmation(options.kind, options.confirmation, options.now)
   if (!confirmation) return false
 
-  const log = parseBrowserWriteProofLog(storage.getItem(DUSK_NAMES_WRITE_PROOF_STORAGE_KEY))
+  const log = parseBrowserWriteProofLog(storage.getItem(DUSK_DOMAINS_WRITE_PROOF_STORAGE_KEY))
   const recordKey = browserWriteProofRecordKey({ chainId, name, account })
   const existingIndex = log.records.findIndex((record) => browserWriteProofRecordKey(record) === recordKey)
   const provider = options.provider?.trim() || 'Dusk Wallet'
@@ -127,13 +127,13 @@ export function recordBrowserWriteProofUiConfirmation(options: RecordBrowserWrit
     records,
   } satisfies BrowserWriteProofLog
 
-  storage.setItem(DUSK_NAMES_WRITE_PROOF_STORAGE_KEY, JSON.stringify(nextLog))
+  storage.setItem(DUSK_DOMAINS_WRITE_PROOF_STORAGE_KEY, JSON.stringify(nextLog))
   void captureBrowserWriteProofLog(options.captureUrl, nextLog, options.fetcher)
   return true
 }
 
 export function browserWriteProofTransactionFromState(
-  state: DuskNameTxState,
+  state: DuskDomainTxState,
   now: () => Date = () => new Date(),
 ): BrowserWriteProofTransaction | null {
   if (state.status !== 'executed') return null

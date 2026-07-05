@@ -8,7 +8,7 @@ import {
   subnameRevocationDescription,
 } from './subnames'
 
-describe('Dusk Names subname policy', () => {
+describe('Dusk Domains subname policy', () => {
   const parentExpiresAt = 1_830_000_000
 
   it('creates normalized subname state with parent-inherited expiry by default', () => {

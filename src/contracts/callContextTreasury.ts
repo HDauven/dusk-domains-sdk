@@ -6,9 +6,9 @@ import {
   isTreasuryUpdateOperatorRuntimeArgs,
 } from './callArgGuards'
 import { formatLux, principalSummary } from './callContextFormat'
-import type { DuskNameCallMetadata, DuskNameDecodedContext } from './callTypes'
+import type { DuskDomainCallMetadata, DuskDomainDecodedContext } from './callTypes'
 
-export function decodedTreasuryDuskNameContext(call: DuskNameCallMetadata): DuskNameDecodedContext | null {
+export function decodedTreasuryDuskDomainContext(call: DuskDomainCallMetadata): DuskDomainDecodedContext | null {
   if (call.contract !== 'treasury') return null
 
   if (call.functionName === 'init' && isTreasuryInitArgs(call.args)) {

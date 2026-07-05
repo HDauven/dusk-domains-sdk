@@ -19,7 +19,7 @@ Architecture decision: [ADR 0001: DuskDS-Native Core Architecture](adr/0001-dusk
 The MVP core is implemented as two DuskDS-native contracts:
 
 ```text
-DuskNamesCore
+DuskDomainsCore
   Canonical name/node lifecycle
   Registration, renewal, commit/reveal, reserved labels
   Owner and manager authorities
@@ -28,7 +28,7 @@ DuskNamesCore
   Subnames
   Fee configuration and referral policy
 
-DuskNameTreasury
+DuskDomainTreasury
   Registration and renewal fee custody
   Operator claims
   Referral reward accrual and claims

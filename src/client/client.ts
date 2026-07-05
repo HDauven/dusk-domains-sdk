@@ -1,5 +1,5 @@
 import type { ActivityEntry } from '../indexer/activity'
-import type { DuskConnectAppLike, DuskNameContractMap } from '../contracts/calls'
+import type { DuskConnectAppLike, DuskDomainContractMap } from '../contracts/calls'
 import type {
   ForwardResolutionResponse,
   IndexedNameSummary,
@@ -8,10 +8,10 @@ import type {
   IndexedTreasuryState,
 } from '../indexer/indexer'
 import {
-  createDuskNamesIndexerClient,
-  type DuskNamesIndexerClient,
-  type DuskNamesIndexerClientOptions,
-  type DuskNamesIndexerHealth,
+  createDuskDomainsIndexerClient as createDuskDomainsIndexerClientImpl,
+  type DuskDomainsIndexerClient,
+  type DuskDomainsIndexerClientOptions,
+  type DuskDomainsIndexerHealth,
 } from '../indexer/indexerClient'
 import { namehashHex } from '../core/namehash'
 import type { NameResult } from '../core/namePolicy'
@@ -22,35 +22,39 @@ import {
   type DuskDomainsReleaseManifest,
 } from '../runtime/releaseManifest'
 import { failure, success } from './sdkResults'
-import type { DuskNamesResult } from './sdkTypes'
+import type { DuskDomainsResult } from './sdkTypes'
 import {
-  createDuskNamesOnChainReadTransport,
-  createDuskNamesOnChainClient,
-  type DuskNamesOnChainClient,
-  type DuskNamesOnChainClientOptions,
-  type DuskNamesOnChainNameResponse,
-  type DuskNamesOnChainReadTransport,
-  type DuskNamesOnChainRecordKey,
-  type DuskNamesOnChainResolvedName,
+  createDuskDomainsOnChainReadTransport as createDuskDomainsOnChainReadTransportImpl,
+  createDuskDomainsOnChainClient as createDuskDomainsOnChainClientImpl,
+  type DuskDomainsOnChainClient,
+  type DuskDomainsOnChainClientOptions,
+  type DuskDomainsOnChainNameResponse,
+  type DuskDomainsOnChainReadTransport,
+  type DuskDomainsOnChainRecordKey,
+  type DuskDomainsOnChainResolvedName,
 } from '../onchain/sdkOnChain'
 
-export const createDuskDomainsOnChainClient = createDuskNamesOnChainClient
-export const createDuskDomainsOnChainReadTransport = createDuskNamesOnChainReadTransport
-export const createDuskDomainsIndexerClient = createDuskNamesIndexerClient
+export {
+  createDuskDomainsIndexerClientImpl as createDuskDomainsIndexerClient,
+  createDuskDomainsOnChainClientImpl as createDuskDomainsOnChainClient,
+  createDuskDomainsOnChainReadTransportImpl as createDuskDomainsOnChainReadTransport,
+}
 
-export type DuskDomainsOnChainClient = DuskNamesOnChainClient
-export type DuskDomainsOnChainClientOptions = DuskNamesOnChainClientOptions
-export type DuskDomainsOnChainReadTransport = DuskNamesOnChainReadTransport
-export type DuskDomainsOnChainRecordKey = DuskNamesOnChainRecordKey
-export type DuskDomainsIndexerClient = DuskNamesIndexerClient
-export type DuskDomainsIndexerClientOptions = DuskNamesIndexerClientOptions
-export type DuskDomainsIndexerHealth = DuskNamesIndexerHealth
+export type {
+  DuskDomainsIndexerClient,
+  DuskDomainsIndexerClientOptions,
+  DuskDomainsIndexerHealth,
+  DuskDomainsOnChainClient,
+  DuskDomainsOnChainClientOptions,
+  DuskDomainsOnChainReadTransport,
+  DuskDomainsOnChainRecordKey,
+}
 
 export type DuskDomainsClientOptions = {
-  onChain?: DuskNamesOnChainClient
-  indexer?: DuskNamesIndexerClient
+  onChain?: DuskDomainsOnChainClient
+  indexer?: DuskDomainsIndexerClient
   manifest?: DuskDomainsReleaseManifest
-  contracts?: DuskNameContractMap
+  contracts?: DuskDomainContractMap
   maxIndexerLagBlocks?: number
 }
 
@@ -59,11 +63,11 @@ export type DuskDomainsManifestClientOptions = {
   manifestUrl?: string
   artifactBaseUrl?: string
   app?: DuskConnectAppLike
-  read?: DuskNamesOnChainReadTransport
+  read?: DuskDomainsOnChainReadTransport
   indexerUrl?: string
   fetch?: typeof fetch
-  defaultRecordKeys?: DuskNamesOnChainRecordKey[]
-  currentBlockHeight?: DuskNamesOnChainClientOptions['currentBlockHeight']
+  defaultRecordKeys?: DuskDomainsOnChainRecordKey[]
+  currentBlockHeight?: DuskDomainsOnChainClientOptions['currentBlockHeight']
   maxIndexerLagBlocks?: number
 }
 
@@ -83,7 +87,7 @@ export type DuskDomainsReadSource = {
   indexedAt?: string | null
 }
 
-export type DuskDomainsResolvedName = DuskNamesOnChainResolvedName & {
+export type DuskDomainsResolvedName = DuskDomainsOnChainResolvedName & {
   source: DuskDomainsReadSource
 }
 
@@ -112,16 +116,16 @@ export type DuskDomainsIndexerCompatibility = {
     lagBlocks: number | null
     eventCount: number | null
     names: number
-    package: DuskNamesIndexerHealth['package'] | null
-    deployment: DuskNamesIndexerHealth['deployment'] | null
-    sqlite: DuskNamesIndexerHealth['sqlite'] | null
+    package: DuskDomainsIndexerHealth['package'] | null
+    deployment: DuskDomainsIndexerHealth['deployment'] | null
+    sqlite: DuskDomainsIndexerHealth['sqlite'] | null
   }
   checks: DuskDomainsCompatibilityCheck[]
 }
 
 export type DuskDomainsIndexedNameVerification = {
   indexed: IndexedNameSummary
-  onChain: DuskNamesOnChainNameResponse
+  onChain: DuskDomainsOnChainNameResponse
   verified: boolean
   mismatches: Array<{
     field: 'owner' | 'manager' | 'status'
@@ -132,25 +136,25 @@ export type DuskDomainsIndexedNameVerification = {
 }
 
 export type DuskDomainsClient = {
-  onChain: DuskNamesOnChainClient | null
-  indexer: DuskNamesIndexerClient | null
+  onChain: DuskDomainsOnChainClient | null
+  indexer: DuskDomainsIndexerClient | null
   manifest: DuskDomainsReleaseManifest | null
-  contracts: DuskNameContractMap | null
+  contracts: DuskDomainContractMap | null
   resolveName: (
     name: string,
-    key?: DuskNamesOnChainRecordKey,
-  ) => Promise<DuskNamesResult<DuskDomainsResolvedName>>
-  getName: DuskNamesOnChainClient['getName']
-  getNameOwner: DuskNamesOnChainClient['getNameOwner']
-  getRecord: DuskNamesOnChainClient['getRecord']
-  getPrimaryNameOnChain: DuskNamesOnChainClient['getPrimaryName']
-  verifyPrimaryNameOnChain: DuskNamesOnChainClient['verifyPrimaryName']
-  checkIndexer: () => Promise<DuskNamesResult<DuskDomainsIndexerCompatibility>>
-  verifyIndexedName: (indexed: IndexedNameSummary) => Promise<DuskNamesResult<DuskDomainsIndexedNameVerification>>
+    key?: DuskDomainsOnChainRecordKey,
+  ) => Promise<DuskDomainsResult<DuskDomainsResolvedName>>
+  getName: DuskDomainsOnChainClient['getName']
+  getNameOwner: DuskDomainsOnChainClient['getNameOwner']
+  getRecord: DuskDomainsOnChainClient['getRecord']
+  getPrimaryNameOnChain: DuskDomainsOnChainClient['getPrimaryName']
+  verifyPrimaryNameOnChain: DuskDomainsOnChainClient['verifyPrimaryName']
+  checkIndexer: () => Promise<DuskDomainsResult<DuskDomainsIndexerCompatibility>>
+  verifyIndexedName: (indexed: IndexedNameSummary) => Promise<DuskDomainsResult<DuskDomainsIndexedNameVerification>>
   verifyIndexedResolution: (
     response: ForwardResolutionResponse,
-    key?: DuskNamesOnChainRecordKey,
-  ) => Promise<DuskNamesResult<{
+    key?: DuskDomainsOnChainRecordKey,
+  ) => Promise<DuskDomainsResult<{
     indexed: ForwardResolutionResponse
     canonical: DuskDomainsResolvedName
     verified: boolean
@@ -217,16 +221,16 @@ export async function createDuskDomainsClientFromManifest(
   const manifest = manifestResult.value
   const artifactBaseUrl = options.artifactBaseUrl ?? artifactBaseUrlFromManifestUrl(options.manifestUrl)
   const contracts = contractsFromDuskDomainsReleaseManifest(manifest, artifactBaseUrl)
-  const read = options.read ?? (options.app ? createDuskNamesOnChainReadTransport(options.app, contracts) : null)
+  const read = options.read ?? (options.app ? createDuskDomainsOnChainReadTransportImpl(options.app, contracts) : null)
   const onChain = read
-    ? createDuskNamesOnChainClient({
+    ? createDuskDomainsOnChainClientImpl({
         read,
         defaultRecordKeys: options.defaultRecordKeys,
         currentBlockHeight: options.currentBlockHeight,
       })
     : null
   const indexer = options.indexerUrl
-    ? createDuskNamesIndexerClient({
+    ? createDuskDomainsIndexerClientImpl({
         baseUrl: options.indexerUrl,
         fetch: fetcher,
       })
@@ -243,10 +247,10 @@ export async function createDuskDomainsClientFromManifest(
 
 async function resolveNameWithFallback(options: {
   name: string
-  key: DuskNamesOnChainRecordKey
-  onChain: DuskNamesOnChainClient | null
-  indexer: DuskNamesIndexerClient | null
-}): Promise<DuskNamesResult<DuskDomainsResolvedName>> {
+  key: DuskDomainsOnChainRecordKey
+  onChain: DuskDomainsOnChainClient | null
+  indexer: DuskDomainsIndexerClient | null
+}): Promise<DuskDomainsResult<DuskDomainsResolvedName>> {
   if (options.onChain) {
     const canonical = await options.onChain.resolveName(options.name, options.key)
     if (canonical.ok) {
@@ -268,10 +272,10 @@ async function resolveNameWithFallback(options: {
 }
 
 async function tryIndexedResolution(
-  indexer: DuskNamesIndexerClient | null,
+  indexer: DuskDomainsIndexerClient | null,
   name: string,
-  key: DuskNamesOnChainRecordKey,
-): Promise<DuskNamesResult<DuskDomainsResolvedName>> {
+  key: DuskDomainsOnChainRecordKey,
+): Promise<DuskDomainsResult<DuskDomainsResolvedName>> {
   if (!indexer) return failure('read_transport_missing', 'No Dusk Domains read transport is configured.')
 
   try {
@@ -309,15 +313,15 @@ async function tryIndexedResolution(
 }
 
 async function checkIndexerCompatibility(options: {
-  indexer: DuskNamesIndexerClient | null
+  indexer: DuskDomainsIndexerClient | null
   manifest: DuskDomainsReleaseManifest | null
   maxIndexerLagBlocks: number
-}): Promise<DuskNamesResult<DuskDomainsIndexerCompatibility>> {
+}): Promise<DuskDomainsResult<DuskDomainsIndexerCompatibility>> {
   if (!options.indexer) {
     return failure('read_transport_missing', 'No Dusk Domains indexer client is configured.')
   }
 
-  let health: Awaited<ReturnType<DuskNamesIndexerClient['getHealth']>>
+  let health: Awaited<ReturnType<DuskDomainsIndexerClient['getHealth']>>
   try {
     health = await options.indexer.getHealth()
   } catch (error) {
@@ -332,7 +336,7 @@ async function checkIndexerCompatibility(options: {
 }
 
 export function checkDuskDomainsIndexerCompatibilityFromHealth(options: {
-  health: DuskNamesIndexerHealth
+  health: DuskDomainsIndexerHealth
   manifest?: DuskDomainsReleaseManifest | null
   maxIndexerLagBlocks?: number
 }): DuskDomainsIndexerCompatibility {
@@ -454,10 +458,10 @@ export function checkDuskDomainsIndexerCompatibilityFromHealth(options: {
 
 async function verifyIndexedName(options: {
   indexed: IndexedNameSummary
-  onChain: DuskNamesOnChainClient | null
+  onChain: DuskDomainsOnChainClient | null
   manifest: DuskDomainsReleaseManifest | null
-  contracts: DuskNameContractMap | null
-}): Promise<DuskNamesResult<DuskDomainsIndexedNameVerification>> {
+  contracts: DuskDomainContractMap | null
+}): Promise<DuskDomainsResult<DuskDomainsIndexedNameVerification>> {
   if (!options.onChain) return failure('read_transport_missing', 'No Dusk Domains on-chain client is configured.')
 
   const onChain = await options.onChain.getName(options.indexed.canonicalName)
@@ -498,11 +502,11 @@ async function verifyIndexedName(options: {
 
 async function verifyIndexedResolution(options: {
   response: ForwardResolutionResponse
-  key: DuskNamesOnChainRecordKey
-  onChain: DuskNamesOnChainClient | null
+  key: DuskDomainsOnChainRecordKey
+  onChain: DuskDomainsOnChainClient | null
   manifest: DuskDomainsReleaseManifest | null
-  contracts: DuskNameContractMap | null
-}): Promise<DuskNamesResult<{
+  contracts: DuskDomainContractMap | null
+}): Promise<DuskDomainsResult<{
   indexed: ForwardResolutionResponse
   canonical: DuskDomainsResolvedName
   verified: boolean
@@ -537,7 +541,7 @@ async function verifyIndexedResolution(options: {
   })
 }
 
-function onChainRecordKey(key: DuskNamesOnChainRecordKey): ResolverRecordKey {
+function onChainRecordKey(key: DuskDomainsOnChainRecordKey): ResolverRecordKey {
   if (key === 'dusk_public_address') return 'moonlight_address'
   if (key === 'dusk_shielded_address') return 'phoenix_payment_endpoint'
   return key
@@ -553,7 +557,7 @@ function blockHeightFromForward(response: ForwardResolutionResponse) {
 async function fetchDuskDomainsReleaseManifest(
   manifestUrl: string | undefined,
   fetcher: typeof fetch | undefined,
-): Promise<DuskNamesResult<DuskDomainsReleaseManifest>> {
+): Promise<DuskDomainsResult<DuskDomainsReleaseManifest>> {
   if (!manifestUrl) return failure('invalid_manifest', 'Dusk Domains manifest URL is required.')
   if (!fetcher) return failure('read_transport_missing', 'Dusk Domains manifest loading requires a fetch implementation.')
 
@@ -598,22 +602,22 @@ function versionString(value: unknown) {
   return String(value)
 }
 
-function requireOnChain<Key extends keyof DuskNamesOnChainClient>(
-  client: DuskNamesOnChainClient | null,
+function requireOnChain<Key extends keyof DuskDomainsOnChainClient>(
+  client: DuskDomainsOnChainClient | null,
   key: Key,
-): DuskNamesOnChainClient[Key] {
+): DuskDomainsOnChainClient[Key] {
   if (client) return client[key]
   return (async () => {
     throw new Error('Dusk Domains on-chain client is not configured.')
-  }) as DuskNamesOnChainClient[Key]
+  }) as DuskDomainsOnChainClient[Key]
 }
 
-function requireIndexer<Key extends keyof DuskNamesIndexerClient>(
-  client: DuskNamesIndexerClient | null,
+function requireIndexer<Key extends keyof DuskDomainsIndexerClient>(
+  client: DuskDomainsIndexerClient | null,
   key: Key,
-): DuskNamesIndexerClient[Key] {
+): DuskDomainsIndexerClient[Key] {
   if (client) return client[key]
   return (async () => {
     throw new Error('Dusk Domains indexer client is not configured.')
-  }) as DuskNamesIndexerClient[Key]
+  }) as DuskDomainsIndexerClient[Key]
 }

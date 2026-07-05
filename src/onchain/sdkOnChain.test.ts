@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
-  createDuskNamesOnChainClient,
-  type DuskNamesOnChainReadTransport,
+  createDuskDomainsOnChainClient,
+  type DuskDomainsOnChainReadTransport,
 } from './sdkOnChain'
 import { namehashHex } from '../core/namehash'
 import {
-  toDuskNameWireArgs,
-  type DuskNameCallMetadata,
+  toDuskDomainWireArgs,
+  type DuskDomainCallMetadata,
 } from '../contracts/calls'
 import { decodeBase58 } from '../core/principal'
 
@@ -43,7 +43,7 @@ describe('Dusk Domains on-chain SDK reads', () => {
 
     expect(calls).toHaveLength(1)
     expect(calls[0]).toMatchObject({ contract: 'core', functionName: 'get_name', kind: 'read' })
-    expect(toDuskNameWireArgs(calls[0])).toEqual({ node: hexBytes(node) })
+    expect(toDuskDomainWireArgs(calls[0])).toEqual({ node: hexBytes(node) })
   })
 
   it('returns the third-party-friendly owner authority for a registered name', async () => {
@@ -112,7 +112,7 @@ describe('Dusk Domains on-chain SDK reads', () => {
     })
 
     expect(calls.map((call) => call.functionName)).toEqual(['get_name', 'read_record'])
-    expect(toDuskNameWireArgs(calls[1])).toEqual({
+    expect(toDuskDomainWireArgs(calls[1])).toEqual({
       node: hexBytes(node),
       key: 'moonlight_address',
     })
@@ -317,11 +317,11 @@ describe('Dusk Domains on-chain SDK reads', () => {
 })
 
 function onChainClient(
-  handler: (call: DuskNameCallMetadata) => unknown,
+  handler: (call: DuskDomainCallMetadata) => unknown,
   currentBlockHeight: number | (() => number | null | Promise<number | null>) = 12_000,
 ) {
-  const calls: DuskNameCallMetadata[] = []
-  const read: DuskNamesOnChainReadTransport = {
+  const calls: DuskDomainCallMetadata[] = []
+  const read: DuskDomainsOnChainReadTransport = {
     async read(call) {
       calls.push(call)
       return handler(call)
@@ -329,7 +329,7 @@ function onChainClient(
   }
 
   return {
-    client: createDuskNamesOnChainClient({ read, currentBlockHeight }),
+    client: createDuskDomainsOnChainClient({ read, currentBlockHeight }),
     calls,
   }
 }

@@ -6,7 +6,7 @@ export type DuskEndpoint = {
   value: string
 }
 
-export type DuskNamesErrorCode =
+export type DuskDomainsErrorCode =
   | 'invalid_name'
   | 'invalid_record'
   | 'not_primary_eligible'
@@ -24,19 +24,19 @@ export type DuskNamesErrorCode =
   | 'contract_read_failed'
   | 'invalid_manifest'
 
-export type DuskNamesError = {
-  code: DuskNamesErrorCode
+export type DuskDomainsError = {
+  code: DuskDomainsErrorCode
   message: string
 }
 
-export type DuskNamesResult<T> =
+export type DuskDomainsResult<T> =
   | {
       ok: true
       value: T
     }
   | {
       ok: false
-      error: DuskNamesError
+      error: DuskDomainsError
     }
 
 export type ResolvedName = {
@@ -58,15 +58,15 @@ export type EndpointDisplayName = {
   display: string
   raw: string
   verified: boolean
-  reason: DuskNamesError | null
+  reason: DuskDomainsError | null
 }
 
-export type DuskNamesTxIntent = {
+export type DuskDomainsTxIntent = {
   id: string
   status: 'prepared' | 'submitted' | 'confirmed' | 'failed'
 }
 
-export type DuskNamesRecordMutationInput =
+export type DuskDomainsRecordMutationInput =
   | {
       action: 'set'
       key: ResolverRecordKey
@@ -77,7 +77,7 @@ export type DuskNamesRecordMutationInput =
       key: ResolverRecordKey
     }
 
-export type DuskNamesRecordMutation =
+export type DuskDomainsRecordMutation =
   | {
       action: 'set'
       record: ResolverRecord
@@ -87,48 +87,37 @@ export type DuskNamesRecordMutation =
       key: ResolverRecordKey
     }
 
-export type DuskNamesReadTransport = {
+export type DuskDomainsReadTransport = {
   getRecords?: (canonicalName: string) => Promise<ResolverRecord[]>
   resolveForward?: (canonicalName: string) => Promise<ForwardResolutionResponse>
   getPrimaryName: (endpoint: DuskEndpoint) => Promise<string | null>
 }
 
-export type DuskNamesWriteTransport = {
-  setRecord: (canonicalName: string, record: ResolverRecord) => Promise<DuskNamesTxIntent>
-  clearRecord?: (canonicalName: string, key: ResolverRecordKey) => Promise<DuskNamesTxIntent>
-  mutateRecords?: (canonicalName: string, mutations: DuskNamesRecordMutation[]) => Promise<DuskNamesTxIntent>
-  setPrimaryName: (endpoint: DuskEndpoint, canonicalName: string) => Promise<DuskNamesTxIntent>
+export type DuskDomainsWriteTransport = {
+  setRecord: (canonicalName: string, record: ResolverRecord) => Promise<DuskDomainsTxIntent>
+  clearRecord?: (canonicalName: string, key: ResolverRecordKey) => Promise<DuskDomainsTxIntent>
+  mutateRecords?: (canonicalName: string, mutations: DuskDomainsRecordMutation[]) => Promise<DuskDomainsTxIntent>
+  setPrimaryName: (endpoint: DuskEndpoint, canonicalName: string) => Promise<DuskDomainsTxIntent>
 }
 
-export type DuskNamesClientOptions = {
-  read: DuskNamesReadTransport
-  write?: DuskNamesWriteTransport
+export type DuskDomainsReadWriteClientOptions = {
+  read: DuskDomainsReadTransport
+  write?: DuskDomainsWriteTransport
 }
 
-export type DuskNamesClient = {
-  resolveName: (name: string, endpointType?: ResolverRecordKey) => Promise<DuskNamesResult<ResolvedName>>
-  resolveEndpoint: (endpoint: DuskEndpoint) => Promise<DuskNamesResult<string>>
-  resolveAddress: (endpoint: DuskEndpoint) => Promise<DuskNamesResult<string>>
-  getRecords: (name: string) => Promise<DuskNamesResult<ResolverRecord[]>>
-  getPrimaryName: (endpoint: DuskEndpoint) => Promise<DuskNamesResult<string>>
+export type DuskDomainsReadWriteClient = {
+  resolveName: (name: string, endpointType?: ResolverRecordKey) => Promise<DuskDomainsResult<ResolvedName>>
+  resolveEndpoint: (endpoint: DuskEndpoint) => Promise<DuskDomainsResult<string>>
+  resolveAddress: (endpoint: DuskEndpoint) => Promise<DuskDomainsResult<string>>
+  getRecords: (name: string) => Promise<DuskDomainsResult<ResolverRecord[]>>
+  getPrimaryName: (endpoint: DuskEndpoint) => Promise<DuskDomainsResult<string>>
   verifyPrimaryName: (
     endpoint: DuskEndpoint,
     expectedName?: string,
-  ) => Promise<DuskNamesResult<PrimaryNameVerification>>
+  ) => Promise<DuskDomainsResult<PrimaryNameVerification>>
   getDisplayName: (endpoint: DuskEndpoint) => Promise<EndpointDisplayName>
-  setRecord: (name: string, key: ResolverRecordKey, value: string) => Promise<DuskNamesResult<DuskNamesTxIntent>>
-  clearRecord: (name: string, key: ResolverRecordKey) => Promise<DuskNamesResult<DuskNamesTxIntent>>
-  mutateRecords: (name: string, mutations: DuskNamesRecordMutationInput[]) => Promise<DuskNamesResult<DuskNamesTxIntent>>
-  setPrimaryName: (endpoint: DuskEndpoint, name: string) => Promise<DuskNamesResult<DuskNamesTxIntent>>
+  setRecord: (name: string, key: ResolverRecordKey, value: string) => Promise<DuskDomainsResult<DuskDomainsTxIntent>>
+  clearRecord: (name: string, key: ResolverRecordKey) => Promise<DuskDomainsResult<DuskDomainsTxIntent>>
+  mutateRecords: (name: string, mutations: DuskDomainsRecordMutationInput[]) => Promise<DuskDomainsResult<DuskDomainsTxIntent>>
+  setPrimaryName: (endpoint: DuskEndpoint, name: string) => Promise<DuskDomainsResult<DuskDomainsTxIntent>>
 }
-
-export type DuskDomainsErrorCode = DuskNamesErrorCode
-export type DuskDomainsError = DuskNamesError
-export type DuskDomainsResult<T> = DuskNamesResult<T>
-export type DuskDomainsTxIntent = DuskNamesTxIntent
-export type DuskDomainsRecordMutationInput = DuskNamesRecordMutationInput
-export type DuskDomainsRecordMutation = DuskNamesRecordMutation
-export type DuskDomainsReadTransport = DuskNamesReadTransport
-export type DuskDomainsWriteTransport = DuskNamesWriteTransport
-export type DuskDomainsClientOptions = DuskNamesClientOptions
-export type DuskDomainsClient = DuskNamesClient

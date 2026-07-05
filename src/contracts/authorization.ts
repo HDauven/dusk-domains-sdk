@@ -1,7 +1,7 @@
 import { blake2b } from '@noble/hashes/blake2.js'
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
 
-export type DuskNameActionEnvelope = {
+export type DuskDomainActionEnvelope = {
   chainId: string
   targetContract: string
   nonceDomain: string
@@ -9,15 +9,15 @@ export type DuskNameActionEnvelope = {
   payloadHash: string
 }
 
-export type DuskNameSignedActionAuthorization = {
-  envelope: DuskNameActionEnvelope
+export type DuskDomainSignedActionAuthorization = {
+  envelope: DuskDomainActionEnvelope
   signer: string
   nonce: number
   expiresAt: number
   signature: string
 }
 
-export const DUSK_NAME_ACTION_IDS: Readonly<{ setRecord: string }> = {
+export const DUSK_DOMAINS_ACTION_IDS: Readonly<{ setRecord: string }> = {
   setRecord: `0x${'14'.repeat(32)}`,
 } as const
 
@@ -34,7 +34,7 @@ export function createPreviewSignedActionAuthorization(args: {
   signer: string
   nonce?: number
   expiresAt: number
-}): DuskNameSignedActionAuthorization {
+}): DuskDomainSignedActionAuthorization {
   const payloadHash = createPayloadHash(args.payload)
 
   return {
