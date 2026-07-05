@@ -136,7 +136,7 @@ export function releaseManifest() {
       indexedReads: 'derived convenience read model; not canonical',
     },
     packages: {
-      sdk: '@dusk-domains/sdk',
+      sdk: '@duskdomains/sdk',
       artifacts: '@dusk-domains/artifacts',
       indexerClient: '@dusk-domains/indexer-client',
       indexer: '@dusk-domains/indexer',

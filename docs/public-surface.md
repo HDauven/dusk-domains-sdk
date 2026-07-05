@@ -5,13 +5,13 @@ Status: pre-production public boundary
 The SDK has focused package entrypoints:
 
 ```ts
-import { ... } from '@hdauven/dusk-domains-sdk'
-import { ... } from '@hdauven/dusk-domains-sdk/event-catalog'
-import { ... } from '@hdauven/dusk-domains-sdk/writes'
-import { ... } from '@hdauven/dusk-domains-sdk/connect'
-import { ... } from '@hdauven/dusk-domains-sdk/local-dev'
-import { ... } from '@hdauven/dusk-domains-sdk/write-proof'
-import { ... } from '@hdauven/dusk-domains-sdk/internal'
+import { ... } from '@duskdomains/sdk'
+import { ... } from '@duskdomains/sdk/event-catalog'
+import { ... } from '@duskdomains/sdk/writes'
+import { ... } from '@duskdomains/sdk/connect'
+import { ... } from '@duskdomains/sdk/local-dev'
+import { ... } from '@duskdomains/sdk/write-proof'
+import { ... } from '@duskdomains/sdk/internal'
 ```
 
 ## Public Entry Point
@@ -44,7 +44,7 @@ The event catalog entrypoint is a Node-safe JavaScript export for standalone ind
 import {
   duskDomainsIndexedEventTypes,
   isDuskDomainsIndexedEventType,
-} from '@hdauven/dusk-domains-sdk/event-catalog'
+} from '@duskdomains/sdk/event-catalog'
 ```
 
 Use this entrypoint when plain Node must route decoded Dusk Domains events without compiling TypeScript source. Keep the catalog additive unless a contract redeploy intentionally changes the event schema.
@@ -66,9 +66,9 @@ Internal exports may change before a public package release. Do not document the
 
 Use these only when the integration deliberately needs write or local tooling:
 
-- `@hdauven/dusk-domains-sdk/writes`: Dusk Connect write adapters, runtime-bound call builders, call metadata and transaction submission helpers.
-- `@hdauven/dusk-domains-sdk/local-dev`: local development wallet mock used by app and harnesses.
-- `@hdauven/dusk-domains-sdk/write-proof`: deployment/write proof capture and replay helpers.
+- `@duskdomains/sdk/writes`: Dusk Connect write adapters, runtime-bound call builders, call metadata and transaction submission helpers.
+- `@duskdomains/sdk/local-dev`: local development wallet mock used by app and harnesses.
+- `@duskdomains/sdk/write-proof`: deployment/write proof capture and replay helpers.
 
 These entrypoints keep the public SDK readable without deleting first-party capabilities from the repository.
 
@@ -84,4 +84,4 @@ Promote an internal helper only when all of these are true:
 
 ## Current Package Name
 
-The package is pre-production and scoped as `@hdauven/dusk-domains-sdk`. A later package-manager release can rename or republish it, but downstream code should currently depend on a specific Git commit or tag.
+The package is pre-production and scoped as `@duskdomains/sdk`. A later package-manager release can rename or republish it, but downstream code should currently depend on a specific Git commit or tag.

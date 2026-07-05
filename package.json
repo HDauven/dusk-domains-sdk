@@ -1,7 +1,6 @@
 {
-  "name": "@hdauven/dusk-domains-sdk",
-  "private": true,
-  "version": "0.0.0",
+  "name": "@duskdomains/sdk",
+  "version": "0.1.1",
   "license": "MIT",
   "type": "module",
   "description": "TypeScript SDK and integration helpers for Dusk Domains.",

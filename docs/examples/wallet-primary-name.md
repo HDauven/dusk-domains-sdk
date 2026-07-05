@@ -3,7 +3,7 @@
 Wallets and explorers must display `.dusk` names only after typed reverse-plus-forward verification.
 
 ```ts
-import { createDuskDomainsReadWriteClient } from '@hdauven/dusk-domains-sdk'
+import { createDuskDomainsReadWriteClient } from '@duskdomains/sdk'
 
 const domains = createDuskDomainsReadWriteClient({
   read: {

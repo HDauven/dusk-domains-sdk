@@ -11,7 +11,7 @@ For a direct-read-only example, see `docs/examples/direct-onchain-reads.md`. For
 Use the manifest-first Dusk Domains client when integrating from public packages:
 
 ```ts
-import { createDuskDomainsClientFromManifest } from '@hdauven/dusk-domains-sdk'
+import { createDuskDomainsClientFromManifest } from '@duskdomains/sdk'
 ```
 
 ```ts
@@ -107,7 +107,7 @@ If a flow sends DUSK or Dusk-native assets, prefer a verified `moonlight_address
 Apps with a Dusk transaction transport can expose record updates through the lower-level write-intent client without bypassing name and record validation.
 
 ```ts
-import { createDuskDomainsReadWriteClient } from '@hdauven/dusk-domains-sdk'
+import { createDuskDomainsReadWriteClient } from '@duskdomains/sdk'
 
 const writes = createDuskDomainsReadWriteClient({ read, write })
 

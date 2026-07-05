@@ -10,7 +10,7 @@ Track these independently:
 
 | Axis | Source | Compatibility meaning |
 | --- | --- | --- |
-| SDK package commit/tag | `@hdauven/dusk-domains-sdk` | TypeScript API and client behavior. |
+| SDK package commit/tag | `@duskdomains/sdk` | TypeScript API and client behavior. |
 | Release manifest | deployment artifact bundle | Contract IDs, data-driver URLs, method signatures, event schema and artifact hashes. |
 | Contract source commit | `HDauven/dusk-names` | Canonical Rust contract behavior for a deployment. |
 | Indexer package commit/tag | `@hdauven/dusk-domains-indexer` | Server projection, SQLite and API behavior. |
@@ -22,7 +22,7 @@ For pre-production beta, consumers should use an exact Git ref:
 ```json
 {
   "dependencies": {
-    "@hdauven/dusk-domains-sdk": "github:HDauven/dusk-domains-sdk#<commit>"
+    "@duskdomains/sdk": "github:HDauven/dusk-domains-sdk#<commit>"
   }
 }
 ```
@@ -59,6 +59,6 @@ Before updating a downstream app or indexer to a new SDK ref:
 - `npm run typecheck`
 - `npm run build`
 - check `docs/public-surface.md` for accidental internal promotion
-- if the indexer changed, verify `@hdauven/dusk-domains-sdk/event-catalog` still loads under plain Node
+- if the indexer changed, verify `@duskdomains/sdk/event-catalog` still loads under plain Node
 - update downstream package lockfiles
 - run downstream build and relevant smoke tests
