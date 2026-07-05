@@ -22,7 +22,7 @@ For pre-production beta, consumers should use a published JSR package version:
 ```json
 {
   "dependencies": {
-    "@duskdomains/sdk": "npm:@jsr/duskdomains__sdk@^0.1.4"
+    "@duskdomains/sdk": "npm:@jsr/duskdomains__sdk@^0.1.5"
   }
 }
 ```
