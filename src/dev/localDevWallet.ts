@@ -1,15 +1,66 @@
-import type {
-  ChainId,
-  DuskProfile,
-  DuskProvider,
-  DuskProviderCapabilities,
-  DuskProviderInfo,
-  SwitchChainParams,
-} from '@dusk/connect'
 import {
   DUSK_ANNOUNCE_PROVIDER_EVENT,
   DUSK_REQUEST_PROVIDER_EVENT,
 } from '../wallet/duskConnect'
+
+type ChainId = string
+
+type DuskProfile = {
+  profileId: string
+  account: string
+  shieldedAddress?: string
+}
+
+type DuskProviderInfo = {
+  uuid: string
+  name: string
+  icon: string
+  rdns: string
+}
+
+type DuskProviderCapabilities = {
+  provider: string
+  walletVersion: string
+  chainId: ChainId
+  nodeUrl: string
+  networkName: string
+  methods: string[]
+  txKinds: string[]
+  limits: {
+    maxFnArgsBytes: number
+    maxFnNameChars: number
+    maxMemoBytes: number
+  }
+  features: {
+    shieldedRead: boolean
+    shieldedRecipients: boolean
+    shieldedReceiveAddress: boolean
+    signMessage: boolean
+    signAuth: boolean
+    contractCallPrivacy: boolean
+  }
+}
+
+type SwitchChainParams = {
+  chainId?: string
+  nodeUrl?: string
+}
+
+type DuskProviderEventHandler = (...args: unknown[]) => void
+
+type DuskProvider = {
+  isDusk: true
+  readonly chainId: ChainId
+  readonly profiles: DuskProfile[]
+  readonly isAuthorized: boolean
+  request: <T>(request: { method: string; params?: unknown }) => Promise<T>
+  on: (eventName: string, handler: DuskProviderEventHandler) => void
+  once: (eventName: string, handler: DuskProviderEventHandler) => void
+  removeListener: (eventName: string, handler: DuskProviderEventHandler) => void
+  off: (eventName: string, handler: DuskProviderEventHandler) => void
+  removeAllListeners: (eventName?: string) => void
+  isConnected: () => boolean
+}
 
 export type LocalDevWalletOptions = {
   account?: string
