@@ -35,7 +35,7 @@ const busyDuskNameTxStatuses = new Set<DuskNameTxStatus>([
   'executing',
 ])
 
-export function isDuskNameTxBusy(txState: DuskNameTxState | null | undefined) {
+export function isDuskNameTxBusy(txState: DuskNameTxState | null | undefined): boolean {
   return txState ? busyDuskNameTxStatuses.has(txState.status) : false
 }
 
@@ -69,7 +69,7 @@ export async function submitDuskNameWrite(
   app: DuskConnectAppLike,
   call: DuskNameCallMetadata,
   options: SubmitDuskNameWriteOptions = {},
-) {
+): Promise<DuskNameTxState> {
   const context = decodedDuskNameContext(call, options.contracts)
   const txCall = txCallFrom(call)
   try {
@@ -106,7 +106,7 @@ export async function trackDuskNameTransaction(
   handle: DuskTxHandleLike,
   context: DuskNameDecodedContext,
   options: SubmitDuskNameWriteOptions = {},
-) {
+): Promise<DuskNameTxState> {
   let unsubscribe: (() => void) | undefined
   let latestTxId = txIdFrom(handle)
   const submitted: DuskNameTxState = {

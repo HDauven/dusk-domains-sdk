@@ -142,15 +142,15 @@ export function createDuskNamesRuntimeConfig(
   }
 }
 
-export function isPlaceholderContractId(contractId: string) {
+export function isPlaceholderContractId(contractId: string): boolean {
   return contractId === DUSK_NAME_PLACEHOLDER_CONTRACT_ID
 }
 
-export function isValidDuskContractId(contractId: string) {
+export function isValidDuskContractId(contractId: string): boolean {
   return /^0x[0-9a-fA-F]{64}$/.test(contractId)
 }
 
-export function isValidRuntimeUrl(value: string) {
+export function isValidRuntimeUrl(value: string): boolean {
   if (value.startsWith('/')) return !value.startsWith('//')
 
   try {
@@ -161,7 +161,7 @@ export function isValidRuntimeUrl(value: string) {
   }
 }
 
-export function isValidLaunchLinkUrl(value: string) {
+export function isValidLaunchLinkUrl(value: string): boolean {
   if (isValidRuntimeUrl(value)) return true
 
   try {

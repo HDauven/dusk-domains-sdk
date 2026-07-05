@@ -33,7 +33,7 @@ export type RegistrationCommitWindow =
       staleInBlocks: 0
     }
 
-export function createRegistrationSecret() {
+export function createRegistrationSecret(): string {
   const bytes = new Uint8Array(32)
 
   if (!globalThis.crypto?.getRandomValues) {
@@ -44,7 +44,7 @@ export function createRegistrationSecret() {
   return `0x${bytesToHex(bytes)}`
 }
 
-export function registrationCommitmentHex(input: RegistrationCommitmentInput) {
+export function registrationCommitmentHex(input: RegistrationCommitmentInput): string {
   const material = concatBytes(
     utf8ToBytes('dusk-domains:registration:v1'),
     bytes32(input.controller, 'controller'),
@@ -56,7 +56,7 @@ export function registrationCommitmentHex(input: RegistrationCommitmentInput) {
   return `0x${bytesToHex(blake2b(material, { dkLen: 32 }))}`
 }
 
-function bytes32(value: string, label: string) {
+function bytes32(value: string, label: string): Uint8Array {
   const hex = value.trim().toLowerCase().replace(/^0x/u, '')
   if (!/^[a-f0-9]{64}$/u.test(hex)) {
     throw new Error(`${label} must be a 32-byte hex string.`)

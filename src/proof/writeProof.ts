@@ -45,7 +45,7 @@ const kindByFunctionName: Record<string, BrowserWriteProofKind> = {
   create_subname_runtime: 'create_subname',
 }
 
-export function recordBrowserWriteProof(options: RecordBrowserWriteProofOptions) {
+export function recordBrowserWriteProof(options: RecordBrowserWriteProofOptions): boolean {
   const storage = options.storage ?? globalThis.localStorage
   const transaction = browserWriteProofTransactionFromState(options.state, options.now)
   if (!transaction) return false
@@ -90,7 +90,7 @@ export function recordBrowserWriteProof(options: RecordBrowserWriteProofOptions)
   return true
 }
 
-export function recordBrowserWriteProofUiConfirmation(options: RecordBrowserWriteProofUiConfirmationOptions) {
+export function recordBrowserWriteProofUiConfirmation(options: RecordBrowserWriteProofUiConfirmationOptions): boolean {
   const storage = options.storage ?? globalThis.localStorage
   const chainId = options.chainId.trim()
   const name = options.name.trim().toLowerCase()

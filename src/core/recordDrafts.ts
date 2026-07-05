@@ -12,7 +12,7 @@ export type RecordMutationPlan = {
   errors: string[]
 }
 
-export function recordValueFor(records: ResolverRecord[], key: ResolverRecordKey) {
+export function recordValueFor(records: ResolverRecord[], key: ResolverRecordKey): string {
   return records.find((record) => record.key === key)?.value ?? ''
 }
 
@@ -20,7 +20,7 @@ export function recordDraftValuesFor(
   keys: readonly ResolverRecordKey[],
   records: ResolverRecord[],
   drafts: Record<string, string>,
-) {
+) : Partial<Record<ResolverRecordKey, string>> {
   return Object.fromEntries(keys.map((key) => [
     key,
     Object.hasOwn(drafts, key) ? drafts[key] : recordValueFor(records, key),
@@ -64,7 +64,7 @@ export function recordMutationPlan(
   return { mutations, errors }
 }
 
-export function applyRecordMutations(records: ResolverRecord[], mutations: CoreRecordMutationInput[]) {
+export function applyRecordMutations(records: ResolverRecord[], mutations: CoreRecordMutationInput[]): ResolverRecord[] {
   return mutations.reduce((nextRecords, mutation) => {
     if (mutation.action === 'clear') {
       return nextRecords.filter((record) => record.key !== mutation.key)

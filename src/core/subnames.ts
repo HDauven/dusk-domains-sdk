@@ -74,14 +74,14 @@ export function createSubnameState(options: CreateSubnameOptions): SubnameState 
   }
 }
 
-export function normalizeSubnameLabel(value: string) {
+export function normalizeSubnameLabel(value: string): string {
   return value.trim().toLowerCase()
 }
 
 export function resolveSubnameExpiresAt(options: {
   parentExpiresAt: number
   requestedExpiresAt?: number | null
-}) {
+}): number {
   const requested = options.requestedExpiresAt ?? options.parentExpiresAt
   if (!Number.isFinite(requested) || requested <= 0) throw new Error('Subname expiry must be a valid Unix timestamp.')
   if (!Number.isFinite(options.parentExpiresAt) || options.parentExpiresAt <= 0) {
@@ -90,7 +90,7 @@ export function resolveSubnameExpiresAt(options: {
   return Math.min(requested, options.parentExpiresAt)
 }
 
-export function canParentRevokeSubname(subname: Pick<SubnameState, 'revocationPolicy' | 'status'>) {
+export function canParentRevokeSubname(subname: Pick<SubnameState, 'revocationPolicy' | 'status'>): boolean {
   return subname.revocationPolicy === 'parent_revocable' && subname.status === 'active'
 }
 
@@ -106,12 +106,12 @@ export function revokeSubname(subname: SubnameState, revokedAt: number): Subname
   }
 }
 
-export function subnameExpiryDescription(policy: SubnameExpiryPolicy) {
+export function subnameExpiryDescription(policy: SubnameExpiryPolicy): string {
   if (policy === 'inherits_parent') return 'Inherits parent expiry'
   return 'Fixed and capped by parent expiry'
 }
 
-export function subnameRevocationDescription(policy: SubnameRevocationPolicy) {
+export function subnameRevocationDescription(policy: SubnameRevocationPolicy): string {
   if (policy === 'parent_revocable') return 'Parent can revoke'
   return 'Locked after creation'
 }

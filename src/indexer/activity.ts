@@ -57,7 +57,7 @@ export function createActivityEntry(args: CreateActivityEntryArgs): ActivityEntr
   }
 }
 
-export function activityLabel(eventType: ActivityEventType) {
+export function activityLabel(eventType: ActivityEventType): string {
   if (eventType === 'registration') return 'Registered'
   if (eventType === 'renewal') return 'Renewed'
   if (eventType === 'expiry') return 'Expired'
@@ -71,7 +71,7 @@ export function activityLabel(eventType: ActivityEventType) {
   return 'Subdomain revoked'
 }
 
-export function activityDescription(entry: ActivityEntry) {
+export function activityDescription(entry: ActivityEntry): string {
   const target = entry.target ? ` -> ${entry.target}` : ''
   return `${entry.name}${target}`
 }

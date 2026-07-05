@@ -3,7 +3,7 @@ import { bytesToHex, concatBytes, utf8ToBytes } from '@noble/hashes/utils.js'
 import { validateName } from './namePolicy'
 
 export const NAMEHASH_BYTES = 32
-export const EMPTY_NAMEHASH = new Uint8Array(NAMEHASH_BYTES)
+export const EMPTY_NAMEHASH: Uint8Array = new Uint8Array(NAMEHASH_BYTES)
 
 export type NamehashResult = {
   canonicalName: string

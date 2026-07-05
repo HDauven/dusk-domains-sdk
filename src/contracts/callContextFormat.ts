@@ -1,6 +1,6 @@
 import type { DuskPrincipal } from '../core/principal'
 
-export function recordApprovalLabel(key: string) {
+export function recordApprovalLabel(key: string): string {
   if (key === 'moonlight_address') return 'Dusk Public Address'
   if (key === 'phoenix_payment_endpoint') return 'Dusk Shielded Address'
   if (key === 'dusk_contract') return 'contract address'
@@ -16,19 +16,19 @@ export function recordApprovalLabel(key: string) {
   return key.replaceAll('_', ' ')
 }
 
-export function formatLux(value: number) {
+export function formatLux(value: number): string {
   if (!Number.isFinite(value)) return '0'
   return (value / 1_000_000_000).toLocaleString('en-US', {
     maximumFractionDigits: 9,
   })
 }
 
-export function formatYears(value: number) {
+export function formatYears(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return 'Unknown'
   return `${value} ${value === 1 ? 'year' : 'years'}`
 }
 
-export function principalSummary(value: DuskPrincipal) {
+export function principalSummary(value: DuskPrincipal): string {
   const bytes = value.bytes.map((byte) => byte.toString(16).padStart(2, '0')).join('')
   const prefix = value.kind === 'Moonlight' ? 'Moonlight' : value.kind
   return `${prefix} 0x${bytes.slice(0, 8)}...${bytes.slice(-6)}`

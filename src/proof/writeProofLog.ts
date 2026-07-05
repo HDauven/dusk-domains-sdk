@@ -28,7 +28,7 @@ export function parseBrowserWriteProofLog(value: unknown): BrowserWriteProofLog 
 export function findBrowserWriteProofRecord(
   log: BrowserWriteProofLog,
   options: { name?: string | null; account?: string | null; chainId?: string | null } = {},
-) {
+): BrowserWriteProofRecord | null {
   const name = options.name?.trim().toLowerCase()
   const account = options.account?.trim()
   const chainId = options.chainId?.trim()
@@ -39,7 +39,7 @@ export function findBrowserWriteProofRecord(
   )) ?? null
 }
 
-export function browserWriteProofTransactionsByKind(record: BrowserWriteProofRecord | null) {
+export function browserWriteProofTransactionsByKind(record: BrowserWriteProofRecord | null): Partial<Record<BrowserWriteProofKind, string>> {
   const transactions = Object.create(null) as Partial<Record<BrowserWriteProofKind, string>>
   for (const transaction of record?.transactions ?? []) {
     if (!transactions[transaction.kind]) transactions[transaction.kind] = transaction.txId

@@ -4,7 +4,7 @@ export async function captureBrowserWriteProofLog(
   captureUrl: string | undefined,
   log: BrowserWriteProofLog,
   fetcher: typeof fetch = globalThis.fetch,
-) {
+): Promise<boolean> {
   const url = captureUrl?.trim()
   if (!url || typeof fetcher !== 'function') return false
 

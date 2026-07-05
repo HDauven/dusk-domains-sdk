@@ -1,6 +1,6 @@
 export const SECONDS_PER_DAY = 86_400
 export const DUSK_APPROX_BLOCK_TIME_SECONDS = 10
-export const BLOCKS_PER_DAY = Math.floor(SECONDS_PER_DAY / DUSK_APPROX_BLOCK_TIME_SECONDS)
+export const BLOCKS_PER_DAY: number = Math.floor(SECONDS_PER_DAY / DUSK_APPROX_BLOCK_TIME_SECONDS)
 export const REGISTRATION_YEAR_BLOCKS = 365 * BLOCKS_PER_DAY
 export const DEFAULT_GRACE_PERIOD_BLOCKS = 30 * BLOCKS_PER_DAY
 
@@ -11,7 +11,7 @@ export type RegistrationLifecycle = {
   graceEndsAt: number
 }
 
-export function currentUnixSeconds() {
+export function currentUnixSeconds(): number {
   return Math.floor(Date.now() / 1000)
 }
 

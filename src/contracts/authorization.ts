@@ -17,11 +17,11 @@ export type DuskNameSignedActionAuthorization = {
   signature: string
 }
 
-export const DUSK_NAME_ACTION_IDS = {
+export const DUSK_NAME_ACTION_IDS: Readonly<{ setRecord: string }> = {
   setRecord: `0x${'14'.repeat(32)}`,
 } as const
 
-export function createPayloadHash(payload: unknown) {
+export function createPayloadHash(payload: unknown): string {
   return `0x${bytesToHex(blake2b(utf8ToBytes(stableStringify(payload)), { dkLen: 32 }))}`
 }
 

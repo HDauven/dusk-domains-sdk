@@ -11,8 +11,8 @@ type StoredReferralAttribution = {
 export function readReferralAttribution(
   storage: ReferralAttributionStorage | null | undefined,
   key: string,
-  now = Date.now(),
-) {
+  now: number = Date.now(),
+): string {
   if (!storage) return ''
   try {
     const raw = storage.getItem(key)
@@ -39,8 +39,8 @@ export function writeReferralAttribution(
   storage: ReferralAttributionStorage | null | undefined,
   key: string,
   input: string,
-  now = Date.now(),
-) {
+  now: number = Date.now(),
+): void {
   if (!storage) return
   const trimmed = input.trim()
   try {

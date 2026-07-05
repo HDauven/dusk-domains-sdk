@@ -10,7 +10,7 @@ export function parseLuxString(value: string): bigint | null {
   return BigInt(value)
 }
 
-export function formatLuxAsDusk(value: bigint) {
+export function formatLuxAsDusk(value: bigint): string {
   const sign = value < 0n ? '-' : ''
   const absolute = value < 0n ? -value : value
   const whole = absolute / LUX_PER_DUSK

@@ -15,7 +15,7 @@ export type DuskNamesLiveApp = {
   names: DuskConnectAppLike
 }
 
-export function canUseLiveDuskNamesWrites(config: DuskNamesRuntimeConfig) {
+export function canUseLiveDuskNamesWrites(config: DuskNamesRuntimeConfig): boolean {
   return (
     config.liveWritesEnabled
     && !isPlaceholderContractId(config.contracts.core.contractId)

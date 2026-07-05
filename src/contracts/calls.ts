@@ -14,12 +14,12 @@ export { DUSK_NAME_CONTRACTS, DUSK_NAME_PLACEHOLDER_CONTRACT_ID } from './callCo
 export * from './callTypes'
 export { toDuskNameWireArgs } from './callWireArgs'
 
-export function encodeDuskNameCall(driver: DuskDataDriverLike, call: DuskNameCallMetadata) {
+export function encodeDuskNameCall(driver: DuskDataDriverLike, call: DuskNameCallMetadata): Uint8Array {
   const wireArgs = toDuskNameWireArgs(call)
   return driver.encodeInputFn(call.functionName, JSON.stringify(wireArgs === undefined ? null : wireArgs))
 }
 
-export function decodeDuskNameOutput<T>(driver: DuskDataDriverLike, call: DuskNameCallMetadata, bytes: Uint8Array) {
+export function decodeDuskNameOutput<T>(driver: DuskDataDriverLike, call: DuskNameCallMetadata, bytes: Uint8Array): T {
   return driver.decodeOutputFn(call.functionName, bytes) as T
 }
 
@@ -27,7 +27,7 @@ export async function readDuskNameContract(
   app: DuskConnectAppLike,
   call: DuskNameCallMetadata,
   contracts: DuskNameContractMap = DUSK_NAME_CONTRACTS,
-) {
+) : Promise<unknown> {
   return await app.readContract({
     contract: contracts[call.contract],
     functionName: call.functionName,
@@ -40,7 +40,7 @@ export async function prepareDuskNameContractCall(
   app: DuskConnectAppLike,
   call: DuskNameCallMetadata,
   contracts: DuskNameContractMap = DUSK_NAME_CONTRACTS,
-) {
+) : Promise<unknown> {
   const deposit = duskNameCallDepositLux(call)
   return await app.prepareContractCall({
     contract: contracts[call.contract],
@@ -56,7 +56,7 @@ export async function writeDuskNameContract(
   call: DuskNameCallMetadata,
   preparedCall?: unknown,
   contracts: DuskNameContractMap = DUSK_NAME_CONTRACTS,
-) {
+) : Promise<unknown> {
   const deposit = duskNameCallDepositLux(call)
   return await app.writeContract({
     contract: contracts[call.contract],
@@ -68,7 +68,7 @@ export async function writeDuskNameContract(
   })
 }
 
-export function isRuntimeBoundDuskNameWrite(call: DuskNameCallMetadata) {
+export function isRuntimeBoundDuskNameWrite(call: DuskNameCallMetadata): boolean {
   return call.kind === 'write' && runtimeBoundBrowserWriteCalls.has(`${call.contract}.${call.functionName}`)
 }
 

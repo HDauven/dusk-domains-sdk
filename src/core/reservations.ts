@@ -32,7 +32,7 @@ type StorageLike = Pick<Storage, 'getItem' | 'setItem'>
 export function listPendingNameReservations(
   filter: PendingNameReservationFilter = {},
   storage?: StorageLike | null,
-) {
+): PendingNameReservation[] {
   const reservations = readPendingNameReservations(storage)
   return reservations
     .filter((reservation) => {
@@ -46,7 +46,7 @@ export function listPendingNameReservations(
 export function upsertPendingNameReservation(
   reservation: PendingNameReservation,
   storage?: StorageLike | null,
-) {
+): PendingNameReservation[] {
   const normalized = normalizePendingNameReservation(reservation)
   if (!normalized) return []
 
@@ -68,7 +68,7 @@ export function updatePendingNameReservationBlock(
     updatedAt?: string
   },
   storage?: StorageLike | null,
-) {
+): PendingNameReservation[] {
   const reservations = readPendingNameReservations(storage)
   let updated = false
   const next = reservations.map((reservation) => {
@@ -89,7 +89,7 @@ export function updatePendingNameReservationBlock(
 export function removePendingNameReservation(
   key: PendingNameReservationKey,
   storage?: StorageLike | null,
-) {
+): PendingNameReservation[] {
   const reservations = readPendingNameReservations(storage)
   const next = reservations.filter((reservation) => !matchesReservationKey(reservation, key))
 

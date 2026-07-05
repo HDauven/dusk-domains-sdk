@@ -89,7 +89,7 @@ export type NameValidationResult =
       issues: SearchIssue[]
     }
 
-export const RESERVED_NAME_POLICIES = [
+export const RESERVED_NAME_POLICIES: readonly ReservedNamePolicy[] = [
   reserved('dusk', 'protocol', 'Protocol root name reserved for Dusk-controlled infrastructure.'),
   reserved('rusk', 'protocol', 'Protocol implementation name reserved to prevent impersonation.'),
   reserved('wallet', 'ecosystem', 'Official wallet namespace reserved before public registration.'),
@@ -109,9 +109,9 @@ export const RESERVED_NAME_POLICIES = [
   reserved('security', 'security', 'Security namespace reserved to reduce phishing and incident-response impersonation.'),
 ] as const satisfies readonly ReservedNamePolicy[]
 
-export const RESERVED_LABELS = new Set(RESERVED_NAME_POLICIES.map((policy) => policy.label))
+export const RESERVED_LABELS: ReadonlySet<string> = new Set(RESERVED_NAME_POLICIES.map((policy) => policy.label))
 
-export const OFFICIAL_NAME_PROFILES = [
+export const OFFICIAL_NAME_PROFILES: readonly OfficialNameProfile[] = [
   official('bridge', 'ecosystem', [
     withheld('dusk_contract', 'Bridge contract ID must be assigned by the official Dusk operator before launch.'),
     withheld('website', 'Official bridge URL must be confirmed before launch.'),
@@ -142,18 +142,18 @@ export const OFFICIAL_NAME_PROFILES = [
   ]),
 ] as const satisfies readonly OfficialNameProfile[]
 
-export const OFFICIAL_NAMES = OFFICIAL_NAME_PROFILES.map((profile) => profile.name)
+export const OFFICIAL_NAMES: readonly `${string}.dusk`[] = OFFICIAL_NAME_PROFILES.map((profile) => profile.name)
 
 const registeredNames = new Set(['acme.dusk', 'npex.dusk', 'duskwallet.dusk'])
 const asciiNamePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.[a-z0-9]+(?:-[a-z0-9]+)*)*\.dusk$/
 
-export function normalizeNameInput(value: string) {
+export function normalizeNameInput(value: string): string {
   const trimmed = value.trim().toLowerCase()
   if (!trimmed) return ''
   return trimmed.endsWith('.dusk') ? trimmed : `${trimmed}.dusk`
 }
 
-export function apexLabel(canonical: string) {
+export function apexLabel(canonical: string): string {
   return canonical.replace(/\.dusk$/, '').split('.').at(-1) ?? ''
 }
 
@@ -216,34 +216,34 @@ export function validateName(value: string): NameValidationResult {
   }
 }
 
-export function getReservedNamePolicy(label: string) {
+export function getReservedNamePolicy(label: string): ReservedNamePolicy | undefined {
   return RESERVED_NAME_POLICIES.find((policy) => policy.label === label)
 }
 
-export function annualFeeLux(label: string, feeConfig: CoreFeeConfig = DEFAULT_FEE_CONFIG) {
+export function annualFeeLux(label: string, feeConfig: CoreFeeConfig = DEFAULT_FEE_CONFIG): number {
   if (label.length <= 2) return 0
   if (label.length === 3) return feeConfig.threeCharYearLux
   if (label.length === 4) return feeConfig.fourCharYearLux
   return feeConfig.fivePlusYearLux
 }
 
-export function annualPrice(label: string, feeConfig: CoreFeeConfig = DEFAULT_FEE_CONFIG) {
+export function annualPrice(label: string, feeConfig: CoreFeeConfig = DEFAULT_FEE_CONFIG): number {
   return annualFeeLux(label, feeConfig) / LUX_PER_DUSK
 }
 
-export function durationPrice(basePrice: number, years: number) {
+export function durationPrice(basePrice: number, years: number): number {
   return basePrice * years
 }
 
-export function registrationFeeLux(label: string, years: number, feeConfig: CoreFeeConfig = DEFAULT_FEE_CONFIG) {
+export function registrationFeeLux(label: string, years: number, feeConfig: CoreFeeConfig = DEFAULT_FEE_CONFIG): number {
   return annualFeeLux(label, feeConfig) * years
 }
 
-export function registrationPrice(label: string, years: number, feeConfig: CoreFeeConfig = DEFAULT_FEE_CONFIG) {
+export function registrationPrice(label: string, years: number, feeConfig: CoreFeeConfig = DEFAULT_FEE_CONFIG): number {
   return registrationFeeLux(label, years, feeConfig) / LUX_PER_DUSK
 }
 
-export function referralRewardLux(feeLux: number, feeConfig: CoreFeeConfig = DEFAULT_FEE_CONFIG) {
+export function referralRewardLux(feeLux: number, feeConfig: CoreFeeConfig = DEFAULT_FEE_CONFIG): number {
   return Math.floor((feeLux * feeConfig.referralRewardBps) / 10_000)
 }
 

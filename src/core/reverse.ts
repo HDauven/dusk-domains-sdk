@@ -21,16 +21,20 @@ export type ReverseRecordEvent = {
   updatedAt: string
 }
 
-export function isPrimaryNameEndpointType(endpointType: ResolverRecordKey) {
+export function isPrimaryNameEndpointType(endpointType: ResolverRecordKey): boolean {
   return getRecordDefinition(endpointType)?.eligibleForPrimaryName === true
 }
 
-export function reverseRecordKey(endpoint: DuskEndpoint) {
+export function reverseRecordKey(endpoint: DuskEndpoint): string {
   assertPrimaryNameEndpoint(endpoint)
   return `${endpoint.type}:${endpoint.value}`
 }
 
-export function createReverseRecord(endpoint: DuskEndpoint, primaryName: string, updatedAt = new Date().toISOString()) {
+export function createReverseRecord(
+  endpoint: DuskEndpoint,
+  primaryName: string,
+  updatedAt: string = new Date().toISOString(),
+): ReverseRecord {
   assertPrimaryNameEndpoint(endpoint)
 
   const validation = validateName(primaryName)
@@ -63,7 +67,7 @@ export function createReverseRecordSetEvent(record: ReverseRecord, previousName:
 export function createReverseRecordClearEvent(
   endpoint: DuskEndpoint,
   previousName: string | null,
-  updatedAt = new Date().toISOString(),
+  updatedAt: string = new Date().toISOString(),
 ): ReverseRecordEvent {
   assertPrimaryNameEndpoint(endpoint)
 
