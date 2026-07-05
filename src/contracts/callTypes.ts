@@ -3,27 +3,27 @@ import type { DuskPrincipal } from '../core/principal'
 import type { ResolverRecord } from '../core/records'
 import type { SubnameRevocationPolicy } from '../core/subnames'
 
-export type DuskNameContractKey = 'core' | 'treasury'
+export type DuskDomainContractKey = 'core' | 'treasury'
 
-export type DuskNameContractPreset = {
+export type DuskDomainContractPreset = {
   contractId: string
   driverUrl: string
   name: string
   methodSigs: Record<string, string>
 }
 
-export type DuskNameContractMap = Record<DuskNameContractKey, DuskNameContractPreset>
+export type DuskDomainContractMap = Record<DuskDomainContractKey, DuskDomainContractPreset>
 
-export type DuskNameCallKind = 'read' | 'write'
+export type DuskDomainCallKind = 'read' | 'write'
 
-export type DuskNameCallMetadata<TArgs = unknown> = {
-  contract: DuskNameContractKey
+export type DuskDomainCallMetadata<TArgs = unknown> = {
+  contract: DuskDomainContractKey
   functionName: string
-  kind: DuskNameCallKind
+  kind: DuskDomainCallKind
   args: TArgs
 }
 
-export type DuskNameDecodedContext = {
+export type DuskDomainDecodedContext = {
   title: string
   description: string
   fields: Array<{
@@ -39,24 +39,24 @@ export type DuskDataDriverLike = {
 
 export type DuskConnectAppLike = {
   readContract: (params: {
-    contract: DuskNameContractPreset
+    contract: DuskDomainContractPreset
     functionName: string
     args?: unknown
-    decodedContext?: DuskNameDecodedContext
+    decodedContext?: DuskDomainDecodedContext
   }) => Promise<unknown>
   prepareContractCall: (params: {
-    contract: DuskNameContractPreset
+    contract: DuskDomainContractPreset
     functionName: string
     args?: unknown
     deposit?: string
-    decodedContext?: DuskNameDecodedContext
+    decodedContext?: DuskDomainDecodedContext
   }) => Promise<unknown>
   writeContract: (params: {
-    contract: DuskNameContractPreset
+    contract: DuskDomainContractPreset
     functionName: string
     args?: unknown
     deposit?: string
-    decodedContext?: DuskNameDecodedContext
+    decodedContext?: DuskDomainDecodedContext
     preparedCall?: unknown
   }) => Promise<unknown>
 }

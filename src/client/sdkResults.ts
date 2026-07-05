@@ -1,10 +1,10 @@
-import type { DuskNamesErrorCode, DuskNamesResult } from './sdkTypes'
+import type { DuskDomainsErrorCode, DuskDomainsResult } from './sdkTypes'
 
-export function success<T>(value: T): DuskNamesResult<T> {
+export function success<T>(value: T): DuskDomainsResult<T> {
   return { ok: true, value }
 }
 
-export function failure<T>(code: DuskNamesErrorCode, message: string): DuskNamesResult<T> {
+export function failure<T>(code: DuskDomainsErrorCode, message: string): DuskDomainsResult<T> {
   return {
     ok: false,
     error: {

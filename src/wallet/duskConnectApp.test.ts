@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
-  createDuskNamesConnectApp,
-  type DuskNamesContractCallParams,
-  type DuskNamesWriteContractCallParams,
+  createDuskDomainsConnectApp,
+  type DuskDomainsContractCallParams,
+  type DuskDomainsWriteContractCallParams,
 } from '../connect'
 import {
-  DUSK_NAME_CONTRACTS,
+  DUSK_DOMAINS_CONTRACTS,
   coreCompleteRegistrationRuntimeCall,
   coreGetNameCall,
   coreSetRecordSenderRuntimeCall,
-  submitDuskNameWrite,
+  submitDuskDomainWrite,
 } from '../writes'
 
 describe('Dusk Domains live Dusk Connect app adapter', () => {
@@ -43,8 +43,8 @@ describe('Dusk Domains live Dusk Connect app adapter', () => {
 
   it('forwards direct read, prepare, and write contract calls with wallet display context', async () => {
     const prepared = { prepared: true }
-    const directCalls: Array<DuskNamesContractCallParams | DuskNamesWriteContractCallParams> = []
-    const app = createDuskNamesConnectApp({
+    const directCalls: Array<DuskDomainsContractCallParams | DuskDomainsWriteContractCallParams> = []
+    const app = createDuskDomainsConnectApp({
       async readContract(params) {
         directCalls.push(params)
         return { name: params.args }
@@ -62,7 +62,7 @@ describe('Dusk Domains live Dusk Connect app adapter', () => {
     const writeCall = recordWriteCall()
 
     await expect(app.readContract({
-      contract: DUSK_NAME_CONTRACTS.core,
+      contract: DUSK_DOMAINS_CONTRACTS.core,
       functionName: readCall.functionName,
       args: { node: readCall.args.node },
       decodedContext: {
@@ -73,18 +73,18 @@ describe('Dusk Domains live Dusk Connect app adapter', () => {
     })).resolves.toEqual({ name: { node: readCall.args.node } })
 
     expect(directCalls[0]).toMatchObject({
-      contract: DUSK_NAME_CONTRACTS.core,
+      contract: DUSK_DOMAINS_CONTRACTS.core,
       functionName: 'get_name',
     })
     expect(directCalls[0]).not.toHaveProperty('decodedContext')
     expect(directCalls[0]).not.toHaveProperty('display')
 
-    await expect(submitDuskNameWrite(app, writeCall)).resolves.toMatchObject({
+    await expect(submitDuskDomainWrite(app, writeCall)).resolves.toMatchObject({
       status: 'executed',
       txId: 'tx-live',
     })
     expect(directCalls[1]).toMatchObject({
-      contract: DUSK_NAME_CONTRACTS.core,
+      contract: DUSK_DOMAINS_CONTRACTS.core,
       functionName: 'set_record_sender_runtime',
       privacy: 'public',
       display: {
@@ -102,7 +102,7 @@ describe('Dusk Domains live Dusk Connect app adapter', () => {
 
   it('strips internal context from read request fallbacks', async () => {
     const requests: Array<{ method: string; params?: unknown }> = []
-    const app = createDuskNamesConnectApp({
+    const app = createDuskDomainsConnectApp({
       async request(request) {
         requests.push(request)
         return { name: null }
@@ -110,7 +110,7 @@ describe('Dusk Domains live Dusk Connect app adapter', () => {
     })
 
     await expect(app.readContract({
-      contract: DUSK_NAME_CONTRACTS.core,
+      contract: DUSK_DOMAINS_CONTRACTS.core,
       functionName: 'get_name',
       args: { node },
       decodedContext: {
@@ -134,12 +134,12 @@ describe('Dusk Domains live Dusk Connect app adapter', () => {
   it('uses Dusk request fallback method names by default', async () => {
     const requests: Array<{ method: string; params?: unknown }> = []
     const preparedCall = {
-      contractId: DUSK_NAME_CONTRACTS.core.contractId,
+      contractId: DUSK_DOMAINS_CONTRACTS.core.contractId,
       fnName: 'set_record_sender_runtime',
       fnArgs: '0x1234',
       privacy: 'public',
     }
-    const app = createDuskNamesConnectApp({
+    const app = createDuskDomainsConnectApp({
       async request(request) {
         requests.push(request)
         if (request.method === 'dusk_prepareContractCall') return preparedCall
@@ -147,7 +147,7 @@ describe('Dusk Domains live Dusk Connect app adapter', () => {
       },
     })
 
-    await expect(submitDuskNameWrite(app, recordWriteCall())).resolves.toMatchObject({
+    await expect(submitDuskDomainWrite(app, recordWriteCall())).resolves.toMatchObject({
       status: 'executed',
       txId: 'tx-send',
     })
@@ -157,7 +157,7 @@ describe('Dusk Domains live Dusk Connect app adapter', () => {
     ])
     expect(requests[1].params).toMatchObject({
       kind: 'contract_call',
-      contractId: DUSK_NAME_CONTRACTS.core.contractId,
+      contractId: DUSK_DOMAINS_CONTRACTS.core.contractId,
       fnName: 'set_record_sender_runtime',
       fnArgs: '0x1234',
       privacy: 'public',
@@ -173,12 +173,12 @@ describe('Dusk Domains live Dusk Connect app adapter', () => {
   it('preserves contract-call deposits through Dusk request fallback submission', async () => {
     const requests: Array<{ method: string; params?: unknown }> = []
     const preparedCall = {
-      contractId: DUSK_NAME_CONTRACTS.core.contractId,
+      contractId: DUSK_DOMAINS_CONTRACTS.core.contractId,
       fnName: 'complete_registration_runtime',
       fnArgs: '0x1234',
       privacy: 'public',
     }
-    const app = createDuskNamesConnectApp({
+    const app = createDuskDomainsConnectApp({
       async request(request) {
         requests.push(request)
         if (request.method === 'dusk_prepareContractCall') return preparedCall
@@ -186,7 +186,7 @@ describe('Dusk Domains live Dusk Connect app adapter', () => {
       },
     })
 
-    await expect(submitDuskNameWrite(app, registrationWriteCall())).resolves.toMatchObject({
+    await expect(submitDuskDomainWrite(app, registrationWriteCall())).resolves.toMatchObject({
       status: 'executed',
       txId: 'tx-send',
     })
@@ -203,7 +203,7 @@ describe('Dusk Domains live Dusk Connect app adapter', () => {
 
   it('uses configurable request method names when direct methods are absent', async () => {
     const requests: Array<{ method: string; params?: unknown }> = []
-    const app = createDuskNamesConnectApp({
+    const app = createDuskDomainsConnectApp({
       async request(request) {
         requests.push(request)
         if (request.method === 'names_prepare') return { id: 'prepared-call' }
@@ -216,7 +216,7 @@ describe('Dusk Domains live Dusk Connect app adapter', () => {
       },
     })
 
-    await expect(submitDuskNameWrite(app, recordWriteCall())).resolves.toMatchObject({
+    await expect(submitDuskDomainWrite(app, recordWriteCall())).resolves.toMatchObject({
       status: 'executed',
       txId: 'tx-request',
     })
@@ -233,14 +233,14 @@ describe('Dusk Domains live Dusk Connect app adapter', () => {
   })
 
   it('requires a prepared call for default dusk_sendTransaction writes', async () => {
-    const app = createDuskNamesConnectApp({
+    const app = createDuskDomainsConnectApp({
       async request() {
         return { hash: 'tx-send' }
       },
     })
 
     await expect(app.writeContract({
-      contract: DUSK_NAME_CONTRACTS.core,
+      contract: DUSK_DOMAINS_CONTRACTS.core,
       functionName: 'set_record_sender_runtime',
       decodedContext: {
         title: 'Update website',
@@ -251,10 +251,10 @@ describe('Dusk Domains live Dusk Connect app adapter', () => {
   })
 
   it('throws when no contract-call transport is available', async () => {
-    const app = createDuskNamesConnectApp({})
+    const app = createDuskDomainsConnectApp({})
 
     await expect(app.prepareContractCall({
-      contract: DUSK_NAME_CONTRACTS.core,
+      contract: DUSK_DOMAINS_CONTRACTS.core,
       functionName: 'set_record_sender_runtime',
     })).rejects.toThrow('does not expose contract-call methods')
   })

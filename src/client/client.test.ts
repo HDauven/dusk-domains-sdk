@@ -7,9 +7,6 @@ import {
   checkDuskDomainsIndexerCompatibilityFromHealth,
 } from './client'
 import {
-  createDuskNamesOnChainClient,
-} from '../onchain/sdkOnChain'
-import {
   endpointValue,
   fakeIndexer,
   fakeOnChain,
@@ -20,8 +17,8 @@ import {
 } from './client.test-fixtures'
 
 describe('Dusk Domains SDK mode packaging', () => {
-  it('exposes Dusk Domains aliases for on-chain and indexer clients', () => {
-    expect(createDuskDomainsOnChainClient).toBe(createDuskNamesOnChainClient)
+  it('exposes Dusk Domains on-chain and indexer clients', () => {
+    expect(typeof createDuskDomainsOnChainClient).toBe('function')
     expect(typeof createDuskDomainsIndexerClient).toBe('function')
   })
 
@@ -224,7 +221,7 @@ describe('Dusk Domains SDK mode packaging', () => {
     })
 
     expect(client.manifest?.network).toBe('devnet')
-    expect(client.contracts?.core.driverUrl).toBe('https://static.example/dusk-domains/devnet/contracts/dusk-names-core.data-driver.wasm')
+    expect(client.contracts?.core.driverUrl).toBe('https://static.example/dusk-domains/devnet/contracts/dusk-domains-core.data-driver.wasm')
 
     await expect(client.checkIndexer()).resolves.toMatchObject({
       ok: true,

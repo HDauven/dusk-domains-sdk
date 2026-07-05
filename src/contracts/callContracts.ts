@@ -1,11 +1,11 @@
-import type { DuskNameContractMap } from './callTypes'
+import type { DuskDomainContractMap } from './callTypes'
 
-export const DUSK_NAME_PLACEHOLDER_CONTRACT_ID = '0x0000000000000000000000000000000000000000000000000000000000000000'
+export const DUSK_DOMAINS_PLACEHOLDER_CONTRACT_ID = '0x0000000000000000000000000000000000000000000000000000000000000000'
 
-export const DUSK_NAME_CONTRACTS: DuskNameContractMap = {
+export const DUSK_DOMAINS_CONTRACTS: DuskDomainContractMap = {
   core: {
-    contractId: DUSK_NAME_PLACEHOLDER_CONTRACT_ID,
-    driverUrl: '/contracts/dusk-names-core.data-driver.wasm',
+    contractId: DUSK_DOMAINS_PLACEHOLDER_CONTRACT_ID,
+    driverUrl: '/contracts/dusk-domains-core.data-driver.wasm',
     name: 'Dusk Domains Core',
     methodSigs: {
       init: 'init(InitCoreRuntime)',
@@ -29,8 +29,8 @@ export const DUSK_NAME_CONTRACTS: DuskNameContractMap = {
     },
   },
   treasury: {
-    contractId: DUSK_NAME_PLACEHOLDER_CONTRACT_ID,
-    driverUrl: '/contracts/dusk-name-treasury.data-driver.wasm',
+    contractId: DUSK_DOMAINS_PLACEHOLDER_CONTRACT_ID,
+    driverUrl: '/contracts/dusk-domains-treasury.data-driver.wasm',
     name: 'Dusk Domain Treasury',
     methodSigs: {
       init: 'init(InitTreasury)',

@@ -17,7 +17,7 @@ describe('Dusk Domains release manifest helpers', () => {
     expect(contractsFromDuskDomainsReleaseManifest(manifest, 'https://static.example/releases/devnet')).toMatchObject({
       core: {
         contractId: coreId,
-        driverUrl: 'https://static.example/releases/devnet/contracts/dusk-names-core.data-driver.wasm',
+        driverUrl: 'https://static.example/releases/devnet/contracts/dusk-domains-core.data-driver.wasm',
         methodSigs: {
           get_name: 'get_name(GetName)',
           read_record: 'read_record(ReadRecord)',
@@ -93,11 +93,11 @@ function releaseManifest(): DuskDomainsReleaseManifest {
       core: {
         key: 'core',
         name: 'Dusk Domains Core',
-        crate: 'dusk-names-core',
+        crate: 'dusk-domains-core',
         contractId: coreId,
         contractWasm: null,
         dataDriver: {
-          path: 'contracts/dusk-names-core.data-driver.wasm',
+          path: 'contracts/dusk-domains-core.data-driver.wasm',
           bytes: 1,
           sha256: hash,
           blake2b256: hash,
@@ -128,11 +128,11 @@ function releaseManifest(): DuskDomainsReleaseManifest {
       treasury: {
         key: 'treasury',
         name: 'Dusk Domain Treasury',
-        crate: 'dusk-name-treasury',
+        crate: 'dusk-domains-treasury',
         contractId: treasuryId,
         contractWasm: null,
         dataDriver: {
-          path: 'contracts/dusk-name-treasury.data-driver.wasm',
+          path: 'contracts/dusk-domains-treasury.data-driver.wasm',
           bytes: 1,
           sha256: hash,
           blake2b256: hash,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  createDuskNamesIndexerClient,
+  createDuskDomainsIndexerClient,
   createResolverRecord,
   namehashHex,
   type ActivityEntry,
@@ -16,7 +16,7 @@ import {
   type NameResult,
 } from '../internal'
 
-describe('Dusk Names indexer client', () => {
+describe('Dusk Domains indexer client', () => {
   it('fetches forward resolution and records from a configured base URL', async () => {
     const moonlight = createResolverRecord(
       'moonlight_address',
@@ -46,8 +46,8 @@ describe('Dusk Names indexer client', () => {
     }
     const seenUrls: string[] = []
     const seenInit: RequestInit[] = []
-    const client = createDuskNamesIndexerClient({
-      baseUrl: '/api/dusk-names/',
+    const client = createDuskDomainsIndexerClient({
+      baseUrl: '/api/dusk-domains/',
       fetch: async (url, init) => {
         seenUrls.push(String(url))
         seenInit.push(init ?? {})
@@ -58,8 +58,8 @@ describe('Dusk Names indexer client', () => {
     await expect(client.resolveForward('aurora.dusk')).resolves.toEqual(response)
     await expect(client.getRecords('aurora.dusk')).resolves.toEqual([moonlight])
     expect(seenUrls).toEqual([
-      '/api/dusk-names/resolve?name=aurora.dusk',
-      '/api/dusk-names/resolve?name=aurora.dusk',
+      '/api/dusk-domains/resolve?name=aurora.dusk',
+      '/api/dusk-domains/resolve?name=aurora.dusk',
     ])
     expect(seenInit).toEqual([
       expect.objectContaining({ cache: 'no-store' }),
@@ -94,7 +94,7 @@ describe('Dusk Names indexer client', () => {
       [`https://api.example/names/record-history?node=${node}`, history],
       [`https://api.example/names/record-history?node=${node}&key=website`, history],
     ])
-    const client = createDuskNamesIndexerClient({
+    const client = createDuskDomainsIndexerClient({
       baseUrl: 'https://api.example/names',
       fetch: async (url) => Response.json(responses.get(String(url)) ?? null),
     })
@@ -108,7 +108,7 @@ describe('Dusk Names indexer client', () => {
 
   it('reads primary names from reverse lookup responses', async () => {
     const node = namehashHex('aurora.dusk')
-    const client = createDuskNamesIndexerClient({
+    const client = createDuskDomainsIndexerClient({
       baseUrl: 'https://api.example/names',
       fetch: async (url) => {
         expect(String(url)).toBe('https://api.example/names/reverse?type=moonlight_address&value=dusk1abc')
@@ -123,7 +123,7 @@ describe('Dusk Names indexer client', () => {
   })
 
   it('keeps legacy reverse lookup responses without node metadata compatible', async () => {
-    const client = createDuskNamesIndexerClient({
+    const client = createDuskDomainsIndexerClient({
       baseUrl: 'https://api.example/names',
       fetch: async () => Response.json({ primaryName: 'aurora.dusk' }),
     })
@@ -161,7 +161,7 @@ describe('Dusk Names indexer client', () => {
       }],
       [`https://api.example/names/commitment?commitment=${commitment}`, indexedCommitment],
     ])
-    const client = createDuskNamesIndexerClient({
+    const client = createDuskDomainsIndexerClient({
       baseUrl: 'https://api.example/names',
       fetch: async (url) => Response.json(responses.get(String(url)) ?? null),
     })
@@ -202,7 +202,7 @@ describe('Dusk Names indexer client', () => {
         blockHeight: 83,
       }],
     }
-    const client = createDuskNamesIndexerClient({
+    const client = createDuskDomainsIndexerClient({
       baseUrl: 'https://api.example/names',
       fetch: async (url) => {
         expect(String(url)).toBe('https://api.example/names/treasury')
@@ -222,7 +222,7 @@ describe('Dusk Names indexer client', () => {
       referralCount: 0,
       recentActivity: [],
     }
-    const client = createDuskNamesIndexerClient({
+    const client = createDuskDomainsIndexerClient({
       baseUrl: 'https://api.example/names',
       fetch: async (url) => {
         expect(String(url)).toBe(`https://api.example/names/referrals?referrer=${referralState.referrer}`)
@@ -247,7 +247,7 @@ describe('Dusk Names indexer client', () => {
       txId: null,
       blockHeight: null,
     }
-    const client = createDuskNamesIndexerClient({
+    const client = createDuskDomainsIndexerClient({
       baseUrl: 'https://api.example/names',
       fetch: async (url) => {
         expect(String(url)).toBe('https://api.example/names/fee-config')
@@ -259,7 +259,7 @@ describe('Dusk Names indexer client', () => {
   })
 
   it('treats reverse lookup responses with mismatched node metadata as missing', async () => {
-    const client = createDuskNamesIndexerClient({
+    const client = createDuskDomainsIndexerClient({
       baseUrl: 'https://api.example/names',
       fetch: async () => Response.json({
         primaryName: 'aurora.dusk',
@@ -275,7 +275,7 @@ describe('Dusk Names indexer client', () => {
 
   it('treats recognized non-primary reverse endpoint responses as missing', async () => {
     const seenUrls: string[] = []
-    const client = createDuskNamesIndexerClient({
+    const client = createDuskDomainsIndexerClient({
       baseUrl: 'https://api.example/names',
       fetch: async (url) => {
         seenUrls.push(String(url))
@@ -293,7 +293,7 @@ describe('Dusk Names indexer client', () => {
   })
 
   it('surfaces unsupported reverse endpoint type errors from the indexer', async () => {
-    const client = createDuskNamesIndexerClient({
+    const client = createDuskDomainsIndexerClient({
       baseUrl: 'https://api.example/names',
       fetch: async () => Response.json({
         error: 'unsupported_endpoint_type',
@@ -372,15 +372,15 @@ describe('Dusk Names indexer client', () => {
       blockHeight: 43,
     }
     const responses = new Map<string, unknown>([
-      ['/api/dusk-names/search?query=Aurora', search],
-      [`/api/dusk-names/name?node=${node}`, nameState],
-      ['/api/dusk-names/names?owner=dusk1owner', [nameSummary]],
-      [`/api/dusk-names/activity?node=${node}`, activity],
-      [`/api/dusk-names/subnames?parentNode=${node}`, [subname]],
-      [`/api/dusk-names/subname?node=${subnameNode}`, subname],
+      ['/api/dusk-domains/search?query=Aurora', search],
+      [`/api/dusk-domains/name?node=${node}`, nameState],
+      ['/api/dusk-domains/names?owner=dusk1owner', [nameSummary]],
+      [`/api/dusk-domains/activity?node=${node}`, activity],
+      [`/api/dusk-domains/subnames?parentNode=${node}`, [subname]],
+      [`/api/dusk-domains/subname?node=${subnameNode}`, subname],
     ])
-    const client = createDuskNamesIndexerClient({
-      baseUrl: '/api/dusk-names',
+    const client = createDuskDomainsIndexerClient({
+      baseUrl: '/api/dusk-domains',
       fetch: async (url) => {
         const payload = responses.get(String(url))
         if (!payload) return Response.json({ error: 'not found' }, { status: 404 })

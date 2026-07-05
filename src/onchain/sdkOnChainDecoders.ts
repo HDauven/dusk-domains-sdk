@@ -8,13 +8,13 @@ import {
 } from '../core/records'
 import { failure, success } from '../client/sdkResults'
 import { normalizeSdkName } from '../client/sdkValidation'
-import type { DuskEndpoint, DuskNamesResult } from '../client/sdkTypes'
+import type { DuskEndpoint, DuskDomainsResult } from '../client/sdkTypes'
 import type {
-  DuskNamesOnChainNameResponse,
-  DuskNamesOnChainPendingCommitment,
-  DuskNamesOnChainPrimaryRecord,
-  DuskNamesOnChainRecord,
-  DuskNamesOnChainRecordKey,
+  DuskDomainsOnChainNameResponse,
+  DuskDomainsOnChainPendingCommitment,
+  DuskDomainsOnChainPrimaryRecord,
+  DuskDomainsOnChainRecord,
+  DuskDomainsOnChainRecordKey,
 } from './sdkOnChainTypes'
 
 const textDecoder = new TextDecoder()
@@ -22,7 +22,7 @@ const textDecoder = new TextDecoder()
 export function decodeNameResponse(
   payload: unknown,
   canonicalName: string | null,
-): DuskNamesResult<DuskNamesOnChainNameResponse> {
+): DuskDomainsResult<DuskDomainsOnChainNameResponse> {
   const response = objectRecord(payload)
   if (!response) return failure('contract_read_failed', 'Core get_name returned a malformed response.')
 
@@ -74,7 +74,7 @@ export function decodeNameResponse(
 export function decodeRecordResponse(
   payload: unknown,
   expectedKey: ResolverRecordKey,
-): DuskNamesResult<DuskNamesOnChainRecord> {
+): DuskDomainsResult<DuskDomainsOnChainRecord> {
   const response = objectRecord(payload)
   if (!response) return failure('contract_read_failed', 'Core read_record returned a malformed response.')
 
@@ -114,7 +114,7 @@ export function decodeRecordResponse(
   })
 }
 
-export function decodePrimaryNameResponse(payload: unknown): DuskNamesResult<DuskNamesOnChainPrimaryRecord | null> {
+export function decodePrimaryNameResponse(payload: unknown): DuskDomainsResult<DuskDomainsOnChainPrimaryRecord | null> {
   const response = objectRecord(payload)
   if (!response) return failure('contract_read_failed', 'Core read_primary_name returned a malformed response.')
 
@@ -144,7 +144,7 @@ export function decodePrimaryNameResponse(payload: unknown): DuskNamesResult<Dus
   })
 }
 
-export function decodePendingCommitmentResponse(payload: unknown): DuskNamesResult<DuskNamesOnChainPendingCommitment> {
+export function decodePendingCommitmentResponse(payload: unknown): DuskDomainsResult<DuskDomainsOnChainPendingCommitment> {
   const response = objectRecord(payload)
   if (!response) return failure('contract_read_failed', 'Core pending_commitment returned a malformed response.')
 
@@ -170,7 +170,7 @@ export function decodePendingCommitmentResponse(payload: unknown): DuskNamesResu
   })
 }
 
-export function decodeFeeConfig(payload: unknown): DuskNamesResult<CoreFeeConfig> {
+export function decodeFeeConfig(payload: unknown): DuskDomainsResult<CoreFeeConfig> {
   const config = objectRecord(payload)
   if (!config) return failure('contract_read_failed', 'Core fee_config returned a malformed response.')
 
@@ -192,7 +192,7 @@ export function decodeFeeConfig(payload: unknown): DuskNamesResult<CoreFeeConfig
   return success(fields as CoreFeeConfig)
 }
 
-export function validateEndpoint(endpoint: DuskEndpoint, requirePrimaryEligible: boolean): DuskNamesResult<DuskEndpoint> {
+export function validateEndpoint(endpoint: DuskEndpoint, requirePrimaryEligible: boolean): DuskDomainsResult<DuskEndpoint> {
   const definition = getRecordDefinition(endpoint.type)
   if (!definition) return failure('invalid_record', `Unsupported resolver record key: ${endpoint.type}`)
   if (requirePrimaryEligible && !definition.eligibleForPrimaryName) {
@@ -203,14 +203,14 @@ export function validateEndpoint(endpoint: DuskEndpoint, requirePrimaryEligible:
   return success(endpoint)
 }
 
-export function canonicalOnChainRecordKey(key: DuskNamesOnChainRecordKey): DuskNamesResult<ResolverRecordKey> {
+export function canonicalOnChainRecordKey(key: DuskDomainsOnChainRecordKey): DuskDomainsResult<ResolverRecordKey> {
   if (key === 'dusk_public_address') return success('moonlight_address')
   if (key === 'dusk_shielded_address') return success('phoenix_payment_endpoint')
   if (!getRecordDefinition(key)) return failure('invalid_record', `Unsupported resolver record key: ${key}`)
   return success(key)
 }
 
-export function normalizeBytes32Hex(value: string, label: string): DuskNamesResult<string> {
+export function normalizeBytes32Hex(value: string, label: string): DuskDomainsResult<string> {
   const normalized = value.trim().toLowerCase()
   if (!/^0x[a-f0-9]{64}$/.test(normalized)) {
     return failure('invalid_node', `${label} must be a 32-byte hex string.`)
@@ -224,7 +224,7 @@ export function unwrapReadOutput(value: unknown): unknown {
   return value
 }
 
-function decodeEndpoint(payload: unknown): DuskNamesResult<DuskEndpoint> {
+function decodeEndpoint(payload: unknown): DuskDomainsResult<DuskEndpoint> {
   const endpoint = objectRecord(payload)
   if (!endpoint) return failure('contract_read_failed', 'Endpoint payload is malformed.')
 
@@ -240,7 +240,7 @@ function decodeEndpoint(payload: unknown): DuskNamesResult<DuskEndpoint> {
   return success(validation.value)
 }
 
-function decodePrincipal(payload: unknown): DuskNamesResult<DuskPrincipal> {
+function decodePrincipal(payload: unknown): DuskDomainsResult<DuskPrincipal> {
   const principal = objectRecord(payload)
   if (!principal) return failure('contract_read_failed', 'Principal payload is malformed.')
 
@@ -267,7 +267,7 @@ function endpointKindToRecordKey(kind: string | null): ResolverRecordKey | null 
   return null
 }
 
-function hexFromBytesField(value: unknown, label: string, expectedLength: number): DuskNamesResult<string> {
+function hexFromBytesField(value: unknown, label: string, expectedLength: number): DuskDomainsResult<string> {
   if (typeof value === 'string' && /^0x[a-fA-F0-9]+$/.test(value)) {
     const normalized = value.toLowerCase()
     if (normalized.length !== 2 + expectedLength * 2) {

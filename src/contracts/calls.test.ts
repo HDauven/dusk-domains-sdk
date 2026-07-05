@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import { dataDrivers } from '@dusk/w3sper'
 import { describe, expect, it } from 'vitest'
 import {
-  DUSK_NAME_CONTRACTS,
+  DUSK_DOMAINS_CONTRACTS,
   coreClearPrimaryNameRuntimeCall,
   coreClearRecordSenderRuntimeCall,
   coreCommitRuntimeCall,
@@ -23,12 +23,12 @@ import {
   coreSetPrimaryNameRuntimeCall,
   coreSetReferralConfigRuntimeCall,
   coreSetRecordSenderRuntimeCall,
-  decodeDuskNameOutput,
-  decodedDuskNameContext,
-  duskNameCallDepositLux,
-  encodeDuskNameCall,
-  prepareDuskNameContractCall,
-  toDuskNameWireArgs,
+  decodeDuskDomainOutput,
+  decodedDuskDomainContext,
+  duskDomainCallDepositLux,
+  encodeDuskDomainCall,
+  prepareDuskDomainContractCall,
+  toDuskDomainWireArgs,
   treasuryClaimAllReferralRewardsRuntimeCall,
   treasuryClaimAllRuntimeCall,
   treasuryClaimReferralRewardRuntimeCall,
@@ -38,7 +38,7 @@ import {
   treasuryUpdateOperatorRuntimeCall,
   type DuskConnectAppLike,
   type DuskDataDriverLike,
-  type DuskNameCallMetadata,
+  type DuskDomainCallMetadata,
 } from './calls'
 import { registrationCommitmentHex, registrationCommitWindow } from '../core/commitment'
 import { decodeBase58 } from '../core/principal'
@@ -102,7 +102,7 @@ function registrationCall() {
   })
 }
 
-function schemaCalls(): DuskNameCallMetadata[] {
+function schemaCalls(): DuskDomainCallMetadata[] {
   return [
     coreInitCall({
       treasuryContract,
@@ -216,11 +216,11 @@ describe('Dusk Domains contract call helpers', () => {
   })
 
   it('keeps the public contract surface to core and treasury', () => {
-    expect(Object.keys(DUSK_NAME_CONTRACTS)).toEqual(['core', 'treasury'])
+    expect(Object.keys(DUSK_DOMAINS_CONTRACTS)).toEqual(['core', 'treasury'])
   })
 
   it('encodes core registration payloads for the data-driver schema', () => {
-    expect(toDuskNameWireArgs(registrationCall())).toMatchObject({
+    expect(toDuskDomainWireArgs(registrationCall())).toMatchObject({
       commitment: Array(32).fill(49),
       secret: Array(32).fill(3),
       node: Array(32).fill(7),
@@ -242,7 +242,7 @@ describe('Dusk Domains contract call helpers', () => {
   })
 
   it('encodes core record and primary-name calls as sender-bound one-step writes', () => {
-    expect(toDuskNameWireArgs(coreUpdateAuthoritiesRuntimeCall({
+    expect(toDuskDomainWireArgs(coreUpdateAuthoritiesRuntimeCall({
       node,
       owner,
       manager: `0x${'10'.repeat(32)}`,
@@ -252,7 +252,7 @@ describe('Dusk Domains contract call helpers', () => {
       manager: Array(32).fill(16),
     })
 
-    expect(toDuskNameWireArgs(coreSetRecordSenderRuntimeCall({
+    expect(toDuskDomainWireArgs(coreSetRecordSenderRuntimeCall({
       node,
       record: {
         key: 'website',
@@ -271,7 +271,7 @@ describe('Dusk Domains contract call helpers', () => {
       },
     })
 
-    expect(toDuskNameWireArgs(coreSetPrimaryNameRuntimeCall({
+    expect(toDuskDomainWireArgs(coreSetPrimaryNameRuntimeCall({
       endpointType: 'moonlight_address',
       endpointValue,
       node,
@@ -285,7 +285,7 @@ describe('Dusk Domains contract call helpers', () => {
       name: 'aurora.dusk',
     })
 
-    expect(toDuskNameWireArgs(coreMutateRecordsSenderRuntimeCall({
+    expect(toDuskDomainWireArgs(coreMutateRecordsSenderRuntimeCall({
       node,
       mutations: [
         {
@@ -319,14 +319,14 @@ describe('Dusk Domains contract call helpers', () => {
   })
 
   it('rejects malformed arguments for recognized contract methods before wallet preparation', () => {
-    expect(() => toDuskNameWireArgs({
+    expect(() => toDuskDomainWireArgs({
       contract: 'core',
       functionName: 'complete_registration_runtime',
       kind: 'write',
       args: { commitment },
     })).toThrow('Invalid Dusk Domains core.complete_registration_runtime arguments')
 
-    expect(() => toDuskNameWireArgs({
+    expect(() => toDuskDomainWireArgs({
       contract: 'treasury',
       functionName: 'claim_referral_reward_runtime',
       kind: 'write',
@@ -336,7 +336,7 @@ describe('Dusk Domains contract call helpers', () => {
 
   it('keeps raw passthrough available only for unknown debug calls', () => {
     const raw = { opaque: true }
-    expect(toDuskNameWireArgs({
+    expect(toDuskDomainWireArgs({
       contract: 'core',
       functionName: 'debug_passthrough',
       kind: 'read',
@@ -357,28 +357,28 @@ describe('Dusk Domains contract call helpers', () => {
       },
     }
 
-    await expect(prepareDuskNameContractCall(app, registrationCall())).resolves.toMatchObject({
+    await expect(prepareDuskDomainContractCall(app, registrationCall())).resolves.toMatchObject({
       contract: { name: 'Dusk Domains Core' },
       functionName: 'complete_registration_runtime',
       deposit: '50000000000',
     })
-    expect(duskNameCallDepositLux(coreRenewRuntimeCall({ node, durationYears: 1, feeLux: 50_000_000_000 }))).toBe('50000000000')
-    expect(duskNameCallDepositLux(coreCommitRuntimeCall({ commitment }))).toBeUndefined()
-    expect(duskNameCallDepositLux(treasuryClaimRuntimeCall({ amountLux: 1_000_000_000 }))).toBeUndefined()
+    expect(duskDomainCallDepositLux(coreRenewRuntimeCall({ node, durationYears: 1, feeLux: 50_000_000_000 }))).toBe('50000000000')
+    expect(duskDomainCallDepositLux(coreCommitRuntimeCall({ commitment }))).toBeUndefined()
+    expect(duskDomainCallDepositLux(treasuryClaimRuntimeCall({ amountLux: 1_000_000_000 }))).toBeUndefined()
   })
 
   it('provides wallet approval context for core and treasury writes', () => {
-    expect(decodedDuskNameContext(registrationCall())).toMatchObject({
+    expect(decodedDuskDomainContext(registrationCall())).toMatchObject({
       title: 'Register aurora.dusk',
       fields: expect.arrayContaining([
         { label: 'Registration fee', value: '50 DUSK' },
         { label: 'Records', value: '1' },
       ]),
     })
-    expect(decodedDuskNameContext(treasuryClaimAllRuntimeCall())).toMatchObject({
+    expect(decodedDuskDomainContext(treasuryClaimAllRuntimeCall())).toMatchObject({
       title: 'Claim all collected fees',
     })
-    expect(decodedDuskNameContext(treasuryUpdateOperatorRuntimeCall({
+    expect(decodedDuskDomainContext(treasuryUpdateOperatorRuntimeCall({
       operator: operatorPrincipal(),
       operatorRecipient: recipient,
     }))).toMatchObject({
@@ -388,7 +388,7 @@ describe('Dusk Domains contract call helpers', () => {
         { label: 'Claim recipient', value: recipient },
       ]),
     })
-    expect(decodedDuskNameContext(coreSetRecordSenderRuntimeCall({
+    expect(decodedDuskDomainContext(coreSetRecordSenderRuntimeCall({
       node,
       record: {
         key: 'website',
@@ -400,7 +400,7 @@ describe('Dusk Domains contract call helpers', () => {
     }))).toMatchObject({
       title: 'Update website',
     })
-    expect(decodedDuskNameContext(coreUpdateAuthoritiesRuntimeCall({
+    expect(decodedDuskDomainContext(coreUpdateAuthoritiesRuntimeCall({
       node,
       owner,
       manager: `0x${'10'.repeat(32)}`,
@@ -416,8 +416,8 @@ describe('Dusk Domains contract call helpers', () => {
   it('encodes and decodes through a data-driver-like adapter', () => {
     const driver = fakeDriver()
     const call = coreCommitRuntimeCall({ commitment })
-    const encoded = encodeDuskNameCall(driver, call)
-    const decoded = decodeDuskNameOutput(driver, call, new TextEncoder().encode(JSON.stringify({ ok: true })))
+    const encoded = encodeDuskDomainCall(driver, call)
+    const decoded = decodeDuskDomainOutput(driver, call, new TextEncoder().encode(JSON.stringify({ ok: true })))
 
     expect(JSON.parse(new TextDecoder().decode(encoded))).toEqual({
       fnName: 'commit_runtime',
@@ -430,7 +430,7 @@ describe('Dusk Domains contract call helpers', () => {
   })
 
   it('covers every configured method with a fixture', () => {
-    const expectedMethods = Object.entries(DUSK_NAME_CONTRACTS)
+    const expectedMethods = Object.entries(DUSK_DOMAINS_CONTRACTS)
       .flatMap(([contract, preset]) => Object.keys(preset.methodSigs).map((functionName) => `${contract}.${functionName}`))
       .sort()
     const actualMethods = schemaCalls().map((call) => `${call.contract}.${call.functionName}`).sort()
@@ -441,8 +441,8 @@ describe('Dusk Domains contract call helpers', () => {
 
   it('encodes configured calls with generated data-driver schemas when artifacts are present', async () => {
     const driverFiles = {
-      core: 'dusk-names-core.data-driver.wasm',
-      treasury: 'dusk-name-treasury.data-driver.wasm',
+      core: 'dusk-domains-core.data-driver.wasm',
+      treasury: 'dusk-domains-treasury.data-driver.wasm',
     } as const
     const publicContractsDir = resolve(process.cwd(), 'public/contracts')
 
@@ -461,7 +461,7 @@ describe('Dusk Domains contract call helpers', () => {
       const schemaFunctions = driver.getSchema?.().functions?.map((fn) => fn.name).filter((name) => (
         !['receive_fee', 'accrue_referral_reward'].includes(name)
       )).sort() ?? []
-      const configuredFunctions = Object.keys(DUSK_NAME_CONTRACTS[contract].methodSigs).sort()
+      const configuredFunctions = Object.keys(DUSK_DOMAINS_CONTRACTS[contract].methodSigs).sort()
       expect(schemaFunctions).toEqual(configuredFunctions)
     }
 
@@ -469,7 +469,7 @@ describe('Dusk Domains contract call helpers', () => {
       const schemaFunctions = drivers[call.contract].getSchema?.().functions?.map((fn) => fn.name) ?? []
       expect(schemaFunctions).toContain(call.functionName)
       try {
-        encodeDuskNameCall(drivers[call.contract], call)
+        encodeDuskDomainCall(drivers[call.contract], call)
       } catch (error) {
         throw new Error(`${call.contract}.${call.functionName}: ${error instanceof Error ? error.message : String(error)}`, {
           cause: error,

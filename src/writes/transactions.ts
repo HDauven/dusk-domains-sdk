@@ -1,15 +1,15 @@
 import {
-  decodedDuskNameContext,
-  isRuntimeBoundDuskNameWrite,
-  prepareDuskNameContractCall,
-  writeDuskNameContract,
+  decodedDuskDomainContext,
+  isRuntimeBoundDuskDomainWrite,
+  prepareDuskDomainContractCall,
+  writeDuskDomainContract,
   type DuskConnectAppLike,
-  type DuskNameCallMetadata,
-  type DuskNameContractMap,
-  type DuskNameDecodedContext,
+  type DuskDomainCallMetadata,
+  type DuskDomainContractMap,
+  type DuskDomainDecodedContext,
 } from '../contracts/calls'
 
-export type DuskNameTxStatus =
+export type DuskDomainTxStatus =
   | 'preparing'
   | 'awaiting_approval'
   | 'submitted'
@@ -19,28 +19,28 @@ export type DuskNameTxStatus =
   | 'rejected'
   | 'timeout'
 
-export type DuskNameTxState = {
-  status: DuskNameTxStatus
-  context: DuskNameDecodedContext
-  call?: DuskNameTxCall
+export type DuskDomainTxState = {
+  status: DuskDomainTxStatus
+  context: DuskDomainDecodedContext
+  call?: DuskDomainTxCall
   txId?: string
   message?: string
   result?: unknown
 }
 
-const busyDuskNameTxStatuses = new Set<DuskNameTxStatus>([
+const busyDuskDomainTxStatuses = new Set<DuskDomainTxStatus>([
   'preparing',
   'awaiting_approval',
   'submitted',
   'executing',
 ])
 
-export function isDuskNameTxBusy(txState: DuskNameTxState | null | undefined): boolean {
-  return txState ? busyDuskNameTxStatuses.has(txState.status) : false
+export function isDuskDomainTxBusy(txState: DuskDomainTxState | null | undefined): boolean {
+  return txState ? busyDuskDomainTxStatuses.has(txState.status) : false
 }
 
-export type DuskNameTxCall = {
-  contract: DuskNameCallMetadata['contract']
+export type DuskDomainTxCall = {
+  contract: DuskDomainCallMetadata['contract']
   functionName: string
 }
 
@@ -57,33 +57,33 @@ export type DuskTxHandleLike = {
   on?: (event: string, handler: (status: unknown) => void) => (() => void) | void
 }
 
-export type SubmitDuskNameWriteOptions = {
-  onUpdate?: (state: DuskNameTxState) => void
+export type SubmitDuskDomainWriteOptions = {
+  onUpdate?: (state: DuskDomainTxState) => void
   timeoutMs?: number
-  contracts?: DuskNameContractMap
-  call?: DuskNameTxCall
+  contracts?: DuskDomainContractMap
+  call?: DuskDomainTxCall
   allowUnsafePreviewCall?: boolean
 }
 
-export async function submitDuskNameWrite(
+export async function submitDuskDomainWrite(
   app: DuskConnectAppLike,
-  call: DuskNameCallMetadata,
-  options: SubmitDuskNameWriteOptions = {},
-): Promise<DuskNameTxState> {
-  const context = decodedDuskNameContext(call, options.contracts)
+  call: DuskDomainCallMetadata,
+  options: SubmitDuskDomainWriteOptions = {},
+): Promise<DuskDomainTxState> {
+  const context = decodedDuskDomainContext(call, options.contracts)
   const txCall = txCallFrom(call)
   try {
     emit(options, { status: 'preparing', context, call: txCall })
-    if (!options.allowUnsafePreviewCall && !isRuntimeBoundDuskNameWrite(call)) {
+    if (!options.allowUnsafePreviewCall && !isRuntimeBoundDuskDomainWrite(call)) {
       throw new Error('This action cannot be submitted safely from the browser yet.')
     }
-    const preparedCall = await prepareDuskNameContractCall(app, call, options.contracts)
+    const preparedCall = await prepareDuskDomainContractCall(app, call, options.contracts)
 
     emit(options, { status: 'awaiting_approval', context, call: txCall })
-    const result = await writeDuskNameContract(app, call, preparedCall, options.contracts)
+    const result = await writeDuskDomainContract(app, call, preparedCall, options.contracts)
 
     if (isTxHandleLike(result)) {
-      return await trackDuskNameTransaction(result, context, { ...options, call: txCall })
+      return await trackDuskDomainTransaction(result, context, { ...options, call: txCall })
     }
 
     const executed = {
@@ -92,7 +92,7 @@ export async function submitDuskNameWrite(
       call: txCall,
       txId: txIdFrom(result),
       result,
-    } satisfies DuskNameTxState
+    } satisfies DuskDomainTxState
     emit(options, executed)
     return executed
   } catch (error) {
@@ -102,14 +102,14 @@ export async function submitDuskNameWrite(
   }
 }
 
-export async function trackDuskNameTransaction(
+export async function trackDuskDomainTransaction(
   handle: DuskTxHandleLike,
-  context: DuskNameDecodedContext,
-  options: SubmitDuskNameWriteOptions = {},
-): Promise<DuskNameTxState> {
+  context: DuskDomainDecodedContext,
+  options: SubmitDuskDomainWriteOptions = {},
+): Promise<DuskDomainTxState> {
   let unsubscribe: (() => void) | undefined
   let latestTxId = txIdFrom(handle)
-  const submitted: DuskNameTxState = {
+  const submitted: DuskDomainTxState = {
     status: normalizeTxStatus(handle.status) ?? 'submitted',
     context,
     call: options.call,
@@ -148,7 +148,7 @@ export async function trackDuskNameTransaction(
       txId: latestTxId,
       message: finalStatus === 'executed' ? undefined : txMessageFrom(result),
       result,
-    } satisfies DuskNameTxState
+    } satisfies DuskDomainTxState
     emit(options, executed)
     return executed
   } catch (error) {
@@ -181,21 +181,21 @@ export function createPreviewDuskTxHandle(options: {
   }
 }
 
-function emit(options: SubmitDuskNameWriteOptions, state: DuskNameTxState) {
+function emit(options: SubmitDuskDomainWriteOptions, state: DuskDomainTxState) {
   options.onUpdate?.(state)
 }
 
-function failedTxState(error: unknown, context: DuskNameDecodedContext, txId?: string, call?: DuskNameTxCall) {
+function failedTxState(error: unknown, context: DuskDomainDecodedContext, txId?: string, call?: DuskDomainTxCall) {
   return {
     status: isTimeout(error) ? 'timeout' : isRejected(error) ? 'rejected' : 'failed',
     context,
     call,
     txId,
     message: error instanceof Error ? error.message : String(error),
-  } satisfies DuskNameTxState
+  } satisfies DuskDomainTxState
 }
 
-function txCallFrom(call: DuskNameCallMetadata): DuskNameTxCall {
+function txCallFrom(call: DuskDomainCallMetadata): DuskDomainTxCall {
   return {
     contract: call.contract,
     functionName: call.functionName,
@@ -231,7 +231,7 @@ async function waitForHandle(handle: DuskTxHandleLike) {
   return handle
 }
 
-function normalizeTxStatus(status: unknown): DuskNameTxStatus | null {
+function normalizeTxStatus(status: unknown): DuskDomainTxStatus | null {
   const value = typeof status === 'string'
     ? status
     : status && typeof status === 'object' && 'status' in status && typeof status.status === 'string'
@@ -252,14 +252,14 @@ function normalizeTxStatus(status: unknown): DuskNameTxStatus | null {
   return null
 }
 
-function finalStatusFromWaitResult(result: unknown, lastStatus: DuskNameTxStatus): DuskNameTxStatus {
+function finalStatusFromWaitResult(result: unknown, lastStatus: DuskDomainTxStatus): DuskDomainTxStatus {
   const resultStatus = normalizeTxStatus(result)
   if (isTerminalTxStatus(resultStatus)) return resultStatus
   if (isTerminalTxStatus(lastStatus)) return lastStatus
   return 'executed'
 }
 
-function isTerminalTxStatus(status: DuskNameTxStatus | null): status is DuskNameTxStatus {
+function isTerminalTxStatus(status: DuskDomainTxStatus | null): status is DuskDomainTxStatus {
   return status === 'executed'
     || status === 'failed'
     || status === 'rejected'

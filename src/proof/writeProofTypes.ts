@@ -1,4 +1,4 @@
-import type { DuskNameTxState } from '../writes/transactions'
+import type { DuskDomainTxState } from '../writes/transactions'
 
 export type BrowserWriteProofKind =
   | 'commit'
@@ -57,7 +57,7 @@ export type RecordBrowserWriteProofOptions = {
   name: string
   account: string
   provider?: string
-  state: DuskNameTxState
+  state: DuskDomainTxState
   storage?: Pick<Storage, 'getItem' | 'setItem'>
   captureUrl?: string
   fetcher?: typeof fetch
@@ -78,4 +78,4 @@ export type RecordBrowserWriteProofUiConfirmationOptions = {
   now?: () => Date
 }
 
-export const DUSK_NAMES_WRITE_PROOF_STORAGE_KEY = 'dusk-names:browser-write-proof:v1'
+export const DUSK_DOMAINS_WRITE_PROOF_STORAGE_KEY = 'dusk-domains:browser-write-proof:v1'

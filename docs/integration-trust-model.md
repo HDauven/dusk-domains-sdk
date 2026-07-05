@@ -1,7 +1,7 @@
 # Integration Trust Model
 
 Status: public beta integration guidance
-Owner issue: [#127 Public integration release boundary and artifact strategy](https://github.com/HDauven/dusk-names/issues/127)
+Owner issue: [#127 Public integration release boundary and artifact strategy](https://github.com/HDauven/dusk-domains/issues/127)
 
 Dusk Domains exposes two read paths. They are intentionally different.
 

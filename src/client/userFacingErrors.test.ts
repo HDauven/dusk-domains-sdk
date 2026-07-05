@@ -15,8 +15,8 @@ describe('user-facing error copy', () => {
   })
 
   it('maps reveal-too-early failures to the reservation wait state', () => {
-    expect(isRevealTooEarlyMessage('DuskNames: reveal too early')).toBe(true)
-    expect(userFacingMessageFromText('DuskNames: reveal too early')).toBe(
+    expect(isRevealTooEarlyMessage('DuskDomains: reveal too early')).toBe(true)
+    expect(userFacingMessageFromText('DuskDomains: reveal too early')).toBe(
       'Your reservation is still settling. Try again after a few more blocks.',
     )
   })

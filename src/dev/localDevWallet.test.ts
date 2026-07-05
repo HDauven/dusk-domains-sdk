@@ -30,7 +30,7 @@ describe('local dev Dusk wallet provider', () => {
     expect(announced).toHaveLength(1)
     expect(announced[0]).toMatchObject({
       info: {
-        uuid: 'dusk-names-local-dev-wallet',
+        uuid: 'dusk-domains-local-dev-wallet',
         name: 'Local Dusk Wallet',
       },
       provider: {

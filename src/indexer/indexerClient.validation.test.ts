@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
-  createDuskNamesIndexerClient,
+  createDuskDomainsIndexerClient,
 } from '../internal'
 
-describe('Dusk Names indexer client validation', () => {
+describe('Dusk Domains indexer client validation', () => {
   it('rejects malformed lifecycle and subname read models', async () => {
-    const client = createDuskNamesIndexerClient({
-      baseUrl: '/api/dusk-names',
+    const client = createDuskDomainsIndexerClient({
+      baseUrl: '/api/dusk-domains',
       fetch: async (url) => {
         if (String(url).includes('/name?')) return Response.json({ node: '0x1' })
         return Response.json([{ node: '0x2' }])
@@ -18,8 +18,8 @@ describe('Dusk Names indexer client validation', () => {
   })
 
   it('rejects name summaries without primary status', async () => {
-    const client = createDuskNamesIndexerClient({
-      baseUrl: '/api/dusk-names',
+    const client = createDuskDomainsIndexerClient({
+      baseUrl: '/api/dusk-domains',
       fetch: async () => Response.json([nameSummaryPayload({ primaryStatus: undefined })]),
     })
 
@@ -27,8 +27,8 @@ describe('Dusk Names indexer client validation', () => {
   })
 
   it('rejects name summaries with invalid count fields', async () => {
-    const client = createDuskNamesIndexerClient({
-      baseUrl: '/api/dusk-names',
+    const client = createDuskDomainsIndexerClient({
+      baseUrl: '/api/dusk-domains',
       fetch: async () => Response.json([nameSummaryPayload({
         subnameCount: 1.5,
         activityCount: -1,
@@ -39,8 +39,8 @@ describe('Dusk Names indexer client validation', () => {
   })
 
   it('throws on invalid forward resolution responses', async () => {
-    const client = createDuskNamesIndexerClient({
-      baseUrl: '/api/dusk-names',
+    const client = createDuskDomainsIndexerClient({
+      baseUrl: '/api/dusk-domains',
       fetch: async () => Response.json({ canonicalName: 'aurora.dusk' }),
     })
 
@@ -48,8 +48,8 @@ describe('Dusk Names indexer client validation', () => {
   })
 
   it('includes structured indexer error payloads in failed request messages', async () => {
-    const client = createDuskNamesIndexerClient({
-      baseUrl: '/api/dusk-names',
+    const client = createDuskDomainsIndexerClient({
+      baseUrl: '/api/dusk-domains',
       fetch: async () => Response.json({ error: 'not_found' }, { status: 404 }),
     })
 
@@ -57,8 +57,8 @@ describe('Dusk Names indexer client validation', () => {
   })
 
   it('includes bounded text details in failed request messages', async () => {
-    const client = createDuskNamesIndexerClient({
-      baseUrl: '/api/dusk-names',
+    const client = createDuskDomainsIndexerClient({
+      baseUrl: '/api/dusk-domains',
       fetch: async () => new Response(` ${'indexer unavailable '.repeat(20)}`, { status: 503 }),
     })
 

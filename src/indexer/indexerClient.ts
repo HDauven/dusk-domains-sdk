@@ -29,15 +29,15 @@ import { endpointUrl, getJson, normalizeBaseUrl } from './indexerClientHttp'
 import { primaryNameFromPayload } from './indexerClientReverse'
 import type { NameResult } from '../core/namePolicy'
 import type { ResolverRecord } from '../core/records'
-import type { DuskEndpoint, DuskNamesReadTransport } from '../client/sdk'
+import type { DuskEndpoint, DuskDomainsReadTransport } from '../client/sdk'
 
-export type DuskNamesIndexerClientOptions = {
+export type DuskDomainsIndexerClientOptions = {
   baseUrl: string
   fetch?: typeof fetch
 }
 
-export type DuskNamesIndexerClient = DuskNamesReadTransport & {
-  getHealth: () => Promise<DuskNamesIndexerHealth>
+export type DuskDomainsIndexerClient = DuskDomainsReadTransport & {
+  getHealth: () => Promise<DuskDomainsIndexerHealth>
   searchName: (query: string) => Promise<NameResult>
   getCommitment: (commitment: string) => Promise<IndexedRegistrationCommitment | null>
   resolveForward: (canonicalName: string) => Promise<ForwardResolutionResponse>
@@ -55,7 +55,7 @@ export type DuskNamesIndexerClient = DuskNamesReadTransport & {
   getFeeConfig: () => Promise<IndexedFeeConfig>
 }
 
-export type DuskNamesIndexerHealth = {
+export type DuskDomainsIndexerHealth = {
   ok: boolean
   apiVersion?: string
   generatedAt: string
@@ -125,7 +125,7 @@ export type DuskNamesIndexerHealth = {
   }
 }
 
-export function createDuskNamesIndexerClient(options: DuskNamesIndexerClientOptions): DuskNamesIndexerClient {
+export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClientOptions): DuskDomainsIndexerClient {
   const baseUrl = normalizeBaseUrl(options.baseUrl)
   const fetcher = options.fetch ?? globalThis.fetch
 

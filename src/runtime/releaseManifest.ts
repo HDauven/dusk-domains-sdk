@@ -1,11 +1,11 @@
 import {
-  DUSK_NAME_CONTRACTS,
-  type DuskNameContractKey,
-  type DuskNameContractMap,
+  DUSK_DOMAINS_CONTRACTS,
+  type DuskDomainContractKey,
+  type DuskDomainContractMap,
 } from '../contracts/calls'
 import { isValidDuskContractId } from './config'
 import { failure, success } from '../client/sdkResults'
-import type { DuskNamesResult } from '../client/sdkTypes'
+import type { DuskDomainsResult } from '../client/sdkTypes'
 
 export type DuskDomainsReleaseArtifact = {
   path: string
@@ -15,7 +15,7 @@ export type DuskDomainsReleaseArtifact = {
 }
 
 export type DuskDomainsReleaseContract = {
-  key: DuskNameContractKey
+  key: DuskDomainContractKey
   name: string
   crate: string
   contractId: string
@@ -46,7 +46,7 @@ export type DuskDomainsReleaseManifest = {
     indexerClient: string
     indexer: string
   }
-  contracts: Record<DuskNameContractKey, DuskDomainsReleaseContract>
+  contracts: Record<DuskDomainContractKey, DuskDomainsReleaseContract>
   indexer: {
     apiVersion: string
     schemaVersion: string
@@ -55,11 +55,11 @@ export type DuskDomainsReleaseManifest = {
   }
 }
 
-const contractKeys = ['core', 'treasury'] as const satisfies readonly DuskNameContractKey[]
+const contractKeys = ['core', 'treasury'] as const satisfies readonly DuskDomainContractKey[]
 
 export function validateDuskDomainsReleaseManifest(
   value: unknown,
-): DuskNamesResult<DuskDomainsReleaseManifest> {
+): DuskDomainsResult<DuskDomainsReleaseManifest> {
   const manifest = objectRecord(value)
   if (!manifest) return failure('invalid_manifest', 'Release manifest must be an object.')
 
@@ -93,7 +93,7 @@ export function validateDuskDomainsReleaseManifest(
     const methodSigs = objectRecord(contract.methodSigs)
     if (!methodSigs) return failure('invalid_manifest', `Release manifest ${key} method signatures are missing.`)
 
-    const requiredMethods = Object.keys(DUSK_NAME_CONTRACTS[key].methodSigs)
+    const requiredMethods = Object.keys(DUSK_DOMAINS_CONTRACTS[key].methodSigs)
     const missingMethods = requiredMethods.filter((method) => typeof methodSigs[method] !== 'string')
     if (missingMethods.length > 0) {
       return failure(
@@ -109,7 +109,7 @@ export function validateDuskDomainsReleaseManifest(
 export function contractsFromDuskDomainsReleaseManifest(
   manifest: DuskDomainsReleaseManifest,
   artifactBaseUrl = '',
-): DuskNameContractMap {
+): DuskDomainContractMap {
   const validated = validateDuskDomainsReleaseManifest(manifest)
   if (!validated.ok) throw new Error(validated.error.message)
 
@@ -121,17 +121,17 @@ export function contractsFromDuskDomainsReleaseManifest(
 
 function contractPresetFromManifest(
   manifest: DuskDomainsReleaseManifest,
-  key: DuskNameContractKey,
+  key: DuskDomainContractKey,
   artifactBaseUrl: string,
 ) {
   const contract = manifest.contracts[key]
   return {
-    ...DUSK_NAME_CONTRACTS[key],
+    ...DUSK_DOMAINS_CONTRACTS[key],
     name: contract.name,
     contractId: contract.contractId,
     driverUrl: joinUrl(artifactBaseUrl, contract.dataDriver.path),
     methodSigs: {
-      ...DUSK_NAME_CONTRACTS[key].methodSigs,
+      ...DUSK_DOMAINS_CONTRACTS[key].methodSigs,
       ...contract.methodSigs,
     },
   }

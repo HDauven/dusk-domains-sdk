@@ -19,7 +19,7 @@ const requiredOfficialNames = [
   'support.dusk',
 ] as const
 
-describe('Dusk Names official ecosystem policy', () => {
+describe('Dusk Domains official ecosystem policy', () => {
   it('preconfigures required official names as sale-locked profiles', () => {
     expect(OFFICIAL_NAME_PROFILES.map((profile) => profile.name)).toEqual(requiredOfficialNames)
     expect(OFFICIAL_NAME_PROFILES.every((profile) => profile.saleLocked)).toBe(true)

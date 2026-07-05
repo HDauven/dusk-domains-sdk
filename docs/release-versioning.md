@@ -12,7 +12,7 @@ Track these independently:
 | --- | --- | --- |
 | SDK package version | `@duskdomains/sdk` | TypeScript API and client behavior. |
 | Release manifest | deployment artifact bundle | Contract IDs, data-driver URLs, method signatures, event schema and artifact hashes. |
-| Contract source commit | `HDauven/dusk-names` | Canonical Rust contract behavior for a deployment. |
+| Contract source commit | `HDauven/dusk-domains` | Canonical Rust contract behavior for a deployment. |
 | Indexer package commit/tag | `@hdauven/dusk-domains-indexer` | Server projection, SQLite and API behavior. |
 
 ## Dependency Rule

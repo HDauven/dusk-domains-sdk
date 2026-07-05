@@ -1,19 +1,19 @@
-import { DUSK_NAME_CONTRACTS } from './callContracts'
-import { decodedCoreDuskNameContext } from './callContextCore'
-import { decodedTreasuryDuskNameContext } from './callContextTreasury'
+import { DUSK_DOMAINS_CONTRACTS } from './callContracts'
+import { decodedCoreDuskDomainContext } from './callContextCore'
+import { decodedTreasuryDuskDomainContext } from './callContextTreasury'
 import type {
-  DuskNameCallMetadata,
-  DuskNameContractMap,
-  DuskNameDecodedContext,
+  DuskDomainCallMetadata,
+  DuskDomainContractMap,
+  DuskDomainDecodedContext,
 } from './callTypes'
 
-export function decodedDuskNameContext(
-  call: DuskNameCallMetadata,
-  _contracts: DuskNameContractMap = DUSK_NAME_CONTRACTS,
-): DuskNameDecodedContext {
+export function decodedDuskDomainContext(
+  call: DuskDomainCallMetadata,
+  _contracts: DuskDomainContractMap = DUSK_DOMAINS_CONTRACTS,
+): DuskDomainDecodedContext {
   void _contracts
-  return decodedCoreDuskNameContext(call)
-    ?? decodedTreasuryDuskNameContext(call)
+  return decodedCoreDuskDomainContext(call)
+    ?? decodedTreasuryDuskDomainContext(call)
     ?? {
       title: 'Review Dusk Domains update',
       description: 'Confirm this Dusk Domains request in your wallet.',

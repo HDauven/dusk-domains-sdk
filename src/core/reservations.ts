@@ -1,4 +1,4 @@
-export const PENDING_NAME_RESERVATIONS_STORAGE_KEY = 'dusk-names:pending-reservations:v1'
+export const PENDING_NAME_RESERVATIONS_STORAGE_KEY = 'dusk-domains:pending-reservations:v1'
 
 export type PendingNameReservation = {
   name: string

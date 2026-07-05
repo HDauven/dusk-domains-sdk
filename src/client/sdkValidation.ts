@@ -4,9 +4,9 @@ import {
   validateRecordValue,
 } from '../core/records'
 import type {
-  DuskNamesRecordMutation,
-  DuskNamesRecordMutationInput,
-  DuskNamesResult,
+  DuskDomainsRecordMutation,
+  DuskDomainsRecordMutationInput,
+  DuskDomainsResult,
 } from './sdkTypes'
 import { failure, success } from './sdkResults'
 import { validateName } from '../core/namePolicy'
@@ -14,8 +14,8 @@ import { validateName } from '../core/namePolicy'
 const MAX_RECORD_MUTATIONS_PER_BATCH = 8
 
 export function validateRecordMutations(
-  mutations: DuskNamesRecordMutationInput[],
-): DuskNamesResult<DuskNamesRecordMutation[]> {
+  mutations: DuskDomainsRecordMutationInput[],
+): DuskDomainsResult<DuskDomainsRecordMutation[]> {
   if (mutations.length === 0) {
     return failure('invalid_record', 'Record batch is empty.')
   }
@@ -24,7 +24,7 @@ export function validateRecordMutations(
   }
 
   const keys = new Set<string>()
-  const normalized: DuskNamesRecordMutation[] = []
+  const normalized: DuskDomainsRecordMutation[] = []
   for (const mutation of mutations) {
     if (keys.has(mutation.key)) {
       return failure('invalid_record', `Record batch contains duplicate key: ${mutation.key}.`)
@@ -55,7 +55,7 @@ export function validateRecordMutations(
   return success(normalized)
 }
 
-export function normalizeSdkName(name: string): DuskNamesResult<string> {
+export function normalizeSdkName(name: string): DuskDomainsResult<string> {
   const validation = validateName(name)
 
   if (!validation.ok) {

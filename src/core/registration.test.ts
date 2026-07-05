@@ -9,7 +9,7 @@ import {
 
 const now = 220_000
 
-describe('Dusk Names registration lifecycle helpers', () => {
+describe('Dusk Domains registration lifecycle helpers', () => {
   it('creates deterministic expiry and grace windows in block heights', () => {
     expect(createRegistrationLifecycle({ startsAt: now, years: 3 })).toEqual({
       expiresAt: now + 3 * REGISTRATION_YEAR_BLOCKS,

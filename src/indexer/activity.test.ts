@@ -7,7 +7,7 @@ import {
   type ActivityEventType,
 } from './activity'
 
-describe('Dusk Names activity entries', () => {
+describe('Dusk Domains activity entries', () => {
   it('supports every MVP activity event type', () => {
     const labels = new Map<ActivityEventType, string>(
       ACTIVITY_EVENT_TYPES.map((eventType) => [eventType, activityLabel(eventType)]),
