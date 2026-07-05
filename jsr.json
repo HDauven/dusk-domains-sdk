@@ -1,9 +1,14 @@
 {
   "name": "@duskdomains/sdk",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "license": "MIT",
   "exports": {
     ".": "./src/index.ts",
+    "./internal": "./src/internal.ts",
+    "./writes": "./src/writes.ts",
+    "./connect": "./src/connect.ts",
+    "./local-dev": "./src/local-dev.ts",
+    "./write-proof": "./src/write-proof.ts",
     "./event-catalog": "./src/indexer/events/indexerEventCatalog.ts"
   },
   "publish": {
