@@ -4,7 +4,7 @@ import {
   checkPublicBalanceForWrite,
   formatLuxAsDusk,
   parseLuxString,
-} from './balance'
+} from '../core/balance'
 
 describe('Dusk public balance helpers', () => {
   it('parses wallet Lux balance strings conservatively', () => {

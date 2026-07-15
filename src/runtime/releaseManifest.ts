@@ -2,6 +2,7 @@ import {
   DUSK_DOMAINS_CONTRACTS,
   type DuskDomainContractKey,
   type DuskDomainContractMap,
+  type DuskDomainRequiredContractKey,
 } from '../contracts/calls'
 import { isValidDuskContractId } from './config'
 import { failure, success } from '../client/sdkResults'
@@ -46,7 +47,8 @@ export type DuskDomainsReleaseManifest = {
     indexerClient: string
     indexer: string
   }
-  contracts: Record<DuskDomainContractKey, DuskDomainsReleaseContract>
+  contracts: Record<DuskDomainRequiredContractKey, DuskDomainsReleaseContract>
+    & Partial<Record<Exclude<DuskDomainContractKey, DuskDomainRequiredContractKey>, DuskDomainsReleaseContract>>
   indexer: {
     apiVersion: string
     schemaVersion: string
@@ -55,7 +57,7 @@ export type DuskDomainsReleaseManifest = {
   }
 }
 
-const contractKeys = ['core', 'treasury'] as const satisfies readonly DuskDomainContractKey[]
+const contractKeys = ['core', 'treasury'] as const satisfies readonly DuskDomainRequiredContractKey[]
 
 export function validateDuskDomainsReleaseManifest(
   value: unknown,
@@ -121,7 +123,7 @@ export function contractsFromDuskDomainsReleaseManifest(
 
 function contractPresetFromManifest(
   manifest: DuskDomainsReleaseManifest,
-  key: DuskDomainContractKey,
+  key: DuskDomainRequiredContractKey,
   artifactBaseUrl: string,
 ) {
   const contract = manifest.contracts[key]

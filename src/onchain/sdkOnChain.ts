@@ -350,6 +350,7 @@ export function createDuskDomainsOnChainClient(
   }
 
   return {
+    getCurrentBlockHeight: currentBlockHeight,
     getName,
     getNameByNode,
     getNameOwner,

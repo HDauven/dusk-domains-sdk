@@ -50,6 +50,30 @@ export function fakeIndexer(overrides: Partial<DuskDomainsIndexerClient>): DuskD
     async getSubname() {
       throw new Error('not implemented')
     },
+    async getMarketplaceConfig() {
+      throw new Error('not implemented')
+    },
+    async getMarketplaceFixedSales() {
+      throw new Error('not implemented')
+    },
+    async getMarketplaceFixedSale() {
+      throw new Error('not implemented')
+    },
+    async getMarketplaceAuctions() {
+      throw new Error('not implemented')
+    },
+    async getMarketplaceAuction() {
+      throw new Error('not implemented')
+    },
+    async getMarketplaceOffers() {
+      throw new Error('not implemented')
+    },
+    async getMarketplaceOffer() {
+      throw new Error('not implemented')
+    },
+    async getMarketplaceRefund() {
+      throw new Error('not implemented')
+    },
     async getTreasury() {
       throw new Error('not implemented')
     },
@@ -65,6 +89,9 @@ export function fakeIndexer(overrides: Partial<DuskDomainsIndexerClient>): DuskD
 
 export function fakeOnChain(overrides: Partial<DuskDomainsOnChainClient>): DuskDomainsOnChainClient {
   return {
+    async getCurrentBlockHeight() {
+      throw new Error('not implemented')
+    },
     async getName() {
       throw new Error('not implemented')
     },
@@ -162,6 +189,9 @@ export function releaseManifest() {
           complete_registration_runtime: 'complete_registration_runtime(CompleteRegistrationRuntime)',
           renew_runtime: 'renew_runtime(RenewNameRuntime)',
           update_authorities_runtime: 'update_authorities_runtime(UpdateAuthoritiesRuntime)',
+          escrow_fixed_sale_runtime: 'escrow_fixed_sale_runtime(EscrowFixedSaleRuntime)',
+          escrow_auction_runtime: 'escrow_auction_runtime(EscrowAuctionRuntime)',
+          accept_marketplace_offer_runtime: 'accept_marketplace_offer_runtime(AcceptMarketplaceOfferRuntime)',
           set_record_sender_runtime: 'set_record_sender_runtime(SetRecordSenderRuntime)',
           clear_record_sender_runtime: 'clear_record_sender_runtime(ClearRecordSenderRuntime)',
           mutate_records_sender_runtime: 'mutate_records_sender_runtime(MutateRecordsSenderRuntime)',

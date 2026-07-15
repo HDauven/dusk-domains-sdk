@@ -11,6 +11,7 @@ import type {
   SubnameRegistryEvent,
   TreasuryEvent,
   TreasuryFeeReason,
+  MarketplaceEvent,
 } from './events/indexerEventTypes'
 
 export type IndexedFeeConfig = CoreFeeConfig & {
@@ -159,6 +160,82 @@ export type IndexedSubname = {
   createdAt: string
   revokedAt: string | null
   lastEventType: SubnameRegistryEvent['type']
+  txId: string | null
+  blockHeight: number | null
+}
+
+export type IndexedMarketplaceConfig = {
+  initialized: boolean
+  coreContract: string | null
+  treasuryContract: string | null
+  marketplaceAuthority: string | null
+  operator: string | null
+  feeBps: number
+  updatedAtBlockHeight: number | null
+  txId: string | null
+  blockHeight: number | null
+}
+
+export type IndexedMarketplaceFixedSale = {
+  node: string
+  name: string
+  sellerAuthority: string
+  priceLux: number
+  privateBuyer: string | null
+  feeBps: number
+  expiresAtBlockHeight: number
+  openedAtBlockHeight: number
+  marketplaceContractId: string | null
+  escrowed: boolean
+  txId: string | null
+  blockHeight: number | null
+  lastEventType: MarketplaceEvent['type']
+}
+
+export type IndexedMarketplaceBid = {
+  bidderAuthority: string
+  amountLux: number
+  placedAtBlockHeight: number
+}
+
+export type IndexedMarketplaceAuction = {
+  node: string
+  name: string
+  sellerAuthority: string
+  reservePriceLux: number
+  durationBlocks: number
+  startDeadlineBlockHeight: number
+  feeBps: number
+  startBlockHeight: number | null
+  endBlockHeight: number | null
+  highestBid: IndexedMarketplaceBid | null
+  bidCount: number
+  createdAtBlockHeight: number
+  marketplaceContractId: string | null
+  escrowed: boolean
+  txId: string | null
+  blockHeight: number | null
+  lastEventType: MarketplaceEvent['type']
+}
+
+export type IndexedMarketplaceOffer = {
+  node: string
+  name: string
+  buyerAuthority: string
+  amountLux: number
+  feeBps: number
+  expiresAtBlockHeight: number
+  placedAtBlockHeight: number
+  txId: string | null
+  blockHeight: number | null
+  lastEventType: MarketplaceEvent['type']
+}
+
+export type IndexedMarketplaceRefund = {
+  authority: string
+  recipient: string | null
+  amountLux: number
+  lastEventType: MarketplaceEvent['type']
   txId: string | null
   blockHeight: number | null
 }

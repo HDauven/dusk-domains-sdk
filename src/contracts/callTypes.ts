@@ -3,7 +3,8 @@ import type { DuskPrincipal } from '../core/principal'
 import type { ResolverRecord } from '../core/records'
 import type { SubnameRevocationPolicy } from '../core/subnames'
 
-export type DuskDomainContractKey = 'core' | 'treasury'
+export type DuskDomainContractKey = 'core' | 'treasury' | 'marketplace'
+export type DuskDomainRequiredContractKey = 'core' | 'treasury'
 
 export type DuskDomainContractPreset = {
   contractId: string
@@ -12,7 +13,9 @@ export type DuskDomainContractPreset = {
   methodSigs: Record<string, string>
 }
 
-export type DuskDomainContractMap = Record<DuskDomainContractKey, DuskDomainContractPreset>
+export type DuskDomainContractMap =
+  & Record<DuskDomainRequiredContractKey, DuskDomainContractPreset>
+  & Partial<Record<'marketplace', DuskDomainContractPreset>>
 
 export type DuskDomainCallKind = 'read' | 'write'
 
@@ -103,6 +106,32 @@ export type CoreUpdateAuthoritiesRuntimeArgs = {
   node: string
   owner: string
   manager: string
+}
+
+export type CoreEscrowFixedSaleRuntimeArgs = {
+  node: string
+  marketplaceContract: string
+  name: string
+  priceLux: number
+  privateBuyer?: string | null
+  expiresAt: number
+  sellerRecipient: string
+}
+
+export type CoreEscrowAuctionRuntimeArgs = {
+  node: string
+  marketplaceContract: string
+  name: string
+  reservePriceLux: number
+  durationBlocks: number
+  sellerRecipient: string
+}
+
+export type CoreAcceptMarketplaceOfferRuntimeArgs = {
+  node: string
+  marketplaceContract: string
+  buyerAuthority: string
+  sellerRecipient: string
 }
 
 export type CoreSetRecordSenderRuntimeArgs = {
@@ -197,4 +226,54 @@ export type TreasuryClaimReferralRewardRuntimeArgs = {
 
 export type TreasuryClaimAllReferralRewardsRuntimeArgs = {
   recipient: string
+}
+
+export type MarketplaceInitArgs = {
+  coreContract: string
+  treasuryContract: string
+  marketplaceAuthority: string
+  operator: string
+  feeBps: number
+}
+
+export type MarketplaceSetFeeRuntimeArgs = {
+  feeBps: number
+}
+
+export type MarketplaceUpdateOperatorRuntimeArgs = {
+  operator: string
+}
+
+export type MarketplaceBuyFixedSaleRuntimeArgs = {
+  node: string
+  priceLux: number
+  buyerManager?: string | null
+}
+
+export type MarketplacePlaceBidRuntimeArgs = {
+  node: string
+  amountLux: number
+  bidderManager?: string | null
+}
+
+export type MarketplaceAuctionNodeArgs = {
+  node: string
+}
+
+export type MarketplacePlaceOfferRuntimeArgs = {
+  node: string
+  amountLux: number
+  expiresAt: number
+  buyerManager?: string | null
+}
+
+export type MarketplaceOfferArgs = {
+  node: string
+  buyerAuthority: string
+}
+
+export type MarketplaceClaimRefundRuntimeArgs = Record<string, never>
+
+export type MarketplaceReadRefundArgs = {
+  authority: string
 }

@@ -28,9 +28,10 @@ export function decodeNameResponse(
 
   const node = hexFromBytesField(response.node, 'node', 32)
   if (!node.ok) return node
+  const marketplaceTransferable = response.marketplace_transferable === true
 
   if (response.record == null) {
-    return success({ canonicalName, node: node.value, record: null })
+    return success({ canonicalName, marketplaceTransferable, node: node.value, record: null })
   }
 
   const record = objectRecord(response.record)
@@ -57,6 +58,7 @@ export function decodeNameResponse(
 
   return success({
     canonicalName,
+    marketplaceTransferable,
     node: node.value,
     record: {
       label,

@@ -19,6 +19,7 @@ describe('Dusk Domains runtime config', () => {
     expect(config.nodeUrl).toBe('https://testnet.nodes.dusk.network')
     expect(config.chainId).toBe('dusk:2')
     expect(config.liveWritesEnabled).toBe(false)
+    expect(config.capabilities.marketplace).toBe(false)
     expect(config.capabilities.referralAttribution).toBe(false)
     expect(config.capabilities.referralRewardClaims).toBe(false)
     expect(config.launchLinks).toEqual({
@@ -71,6 +72,46 @@ describe('Dusk Domains runtime config', () => {
     })
     expect(config.missingLiveInputs).toEqual([])
     expect(config.warnings).toEqual([])
+    expect(config.capabilities.marketplace).toBe(false)
+  })
+
+  it('enables marketplace only when the optional contract and driver are configured', () => {
+    const config = createDuskDomainsRuntimeConfig({
+      VITE_DUSK_DOMAINS_CORE_CONTRACT_ID: `0x${'77'.repeat(32)}`,
+      VITE_DUSK_DOMAINS_TREASURY_CONTRACT_ID: `0x${'66'.repeat(32)}`,
+      VITE_DUSK_DOMAINS_INDEXER_URL: '/api/dusk-domains',
+      VITE_DUSK_DOMAINS_ENABLE_MARKETPLACE: 'true',
+      VITE_DUSK_DOMAINS_MARKETPLACE_CONTRACT_ID: `0x${'55'.repeat(32)}`,
+      VITE_DUSK_DOMAINS_MARKETPLACE_DRIVER_URL: '/contracts/dusk-domains-marketplace.data-driver.wasm',
+    })
+
+    expect(config.mode).toBe('live_ready')
+    expect(config.capabilities.marketplace).toBe(true)
+    expect(config.contracts.marketplace).toMatchObject({
+      contractId: `0x${'55'.repeat(32)}`,
+      driverUrl: '/contracts/dusk-domains-marketplace.data-driver.wasm',
+    })
+    expect(config.missingLiveInputs).toEqual([])
+    expect(config.warnings).toEqual([])
+  })
+
+  it('warns and disables marketplace when optional deployment inputs are malformed', () => {
+    const config = createDuskDomainsRuntimeConfig({
+      VITE_DUSK_DOMAINS_CORE_CONTRACT_ID: `0x${'77'.repeat(32)}`,
+      VITE_DUSK_DOMAINS_TREASURY_CONTRACT_ID: `0x${'66'.repeat(32)}`,
+      VITE_DUSK_DOMAINS_INDEXER_URL: '/api/dusk-domains',
+      VITE_DUSK_DOMAINS_ENABLE_MARKETPLACE: 'true',
+      VITE_DUSK_DOMAINS_MARKETPLACE_CONTRACT_ID: 'marketplace',
+      VITE_DUSK_DOMAINS_MARKETPLACE_DRIVER_URL: '//cdn.example/marketplace.wasm',
+    })
+
+    expect(config.mode).toBe('live_ready')
+    expect(config.capabilities.marketplace).toBe(false)
+    expect(config.contracts.marketplace).toBeUndefined()
+    expect(config.missingLiveInputs).toEqual([])
+    expect(config.warnings).toEqual([
+      'VITE_DUSK_DOMAINS_MARKETPLACE_CONTRACT_ID must be a 32-byte hex contract ID; marketplace stays disabled.',
+    ])
   })
 
   it('keeps legacy VITE_DUSK_DOMAINS env vars as compatibility aliases', () => {

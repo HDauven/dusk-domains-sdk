@@ -7,6 +7,7 @@ import {
   type ForwardResolutionResponse,
   type IndexedFeeConfig,
   type IndexedLifecycleName,
+  type IndexedMarketplaceAuction,
   type IndexedNameSummary,
   type IndexedReferralState,
   type IndexedRegistrationCommitment,
@@ -256,6 +257,42 @@ describe('Dusk Domains indexer client', () => {
     })
 
     await expect(client.getFeeConfig()).resolves.toEqual(feeConfig)
+  })
+
+  it('fetches marketplace auctions', async () => {
+    const node = namehashHex('market.dusk')
+    const auction: IndexedMarketplaceAuction = {
+      node,
+      name: 'market.dusk',
+      sellerAuthority: `0x${'44'.repeat(32)}`,
+      reservePriceLux: 25_000_000_000,
+      durationBlocks: 8_640,
+      startDeadlineBlockHeight: 20_000,
+      feeBps: 250,
+      startBlockHeight: null,
+      endBlockHeight: null,
+      highestBid: null,
+      bidCount: 0,
+      createdAtBlockHeight: 42,
+      marketplaceContractId: `0x${'55'.repeat(32)}`,
+      escrowed: true,
+      txId: 'tx-auction',
+      blockHeight: 42,
+      lastEventType: 'domain_auction_created',
+    }
+    const responses = new Map<string, unknown>([
+      ['https://api.example/names/marketplace/auctions', [auction]],
+      [`https://api.example/names/marketplace/auction?node=${node}`, auction],
+      [`https://api.example/names/marketplace/auction?node=${namehashHex('none.dusk')}`, null],
+    ])
+    const client = createDuskDomainsIndexerClient({
+      baseUrl: 'https://api.example/names',
+      fetch: async (url) => Response.json(responses.get(String(url)) ?? null),
+    })
+
+    await expect(client.getMarketplaceAuctions()).resolves.toEqual([auction])
+    await expect(client.getMarketplaceAuction(node)).resolves.toEqual(auction)
+    await expect(client.getMarketplaceAuction(namehashHex('none.dusk'))).resolves.toBeNull()
   })
 
   it('treats reverse lookup responses with mismatched node metadata as missing', async () => {

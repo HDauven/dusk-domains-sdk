@@ -32,6 +32,7 @@ export type DuskDomainsOnChainNameRecord = {
 
 export type DuskDomainsOnChainNameResponse = {
   canonicalName: string | null
+  marketplaceTransferable: boolean
   node: string
   record: DuskDomainsOnChainNameRecord | null
 }
@@ -75,6 +76,7 @@ export type DuskDomainsOnChainPendingCommitment = {
 }
 
 export type DuskDomainsOnChainClient = {
+  getCurrentBlockHeight: () => Promise<DuskDomainsResult<number>>
   getName: (name: string) => Promise<DuskDomainsResult<DuskDomainsOnChainNameResponse>>
   getNameByNode: (node: string) => Promise<DuskDomainsResult<DuskDomainsOnChainNameResponse>>
   getNameOwner: (name: string) => Promise<DuskDomainsResult<string>>

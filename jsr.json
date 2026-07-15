@@ -6,9 +6,8 @@
     ".": "./src/index.ts",
     "./internal": "./src/internal.ts",
     "./writes": "./src/writes.ts",
-    "./connect": "./src/connect.ts",
-    "./local-dev": "./src/local-dev.ts",
     "./write-proof": "./src/write-proof.ts",
+    "./marketplace": "./src/marketplace.ts",
     "./event-catalog": "./src/indexer/events/indexerEventCatalog.ts"
   },
   "publish": {
@@ -23,6 +22,10 @@
       "src/**/*.test.ts",
       "src/**/*.test.mjs",
       "src/**/*test-fixtures*",
+      "src/connect.ts",
+      "src/local-dev.ts",
+      "src/wallet/**",
+      "src/dev/**",
       "src/indexer/events/indexerEventCatalog.d.mts",
       "src/indexer/events/indexerEventCatalog.mjs"
     ]

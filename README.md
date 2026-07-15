@@ -46,13 +46,39 @@ import { namehashHex, createDuskDomainsClientFromManifest } from '@duskdomains/s
 The SDK supports two read paths:
 
 - On-chain reads for canonical ownership, records, primary-name checks and fee config.
-- Indexer reads for search, history, My Domains, subdomains, treasury views and referral dashboards.
+- Indexer reads for search, history, My Domains, subdomains, treasury views,
+  referral dashboards and marketplace discovery.
 
 Value-bearing flows should verify indexed discovery with canonical reads before treating a domain as authoritative.
+
+`getCurrentBlockHeight()` uses the direct client's configured node-height
+reader. Applications should combine it with direct ownership and order reads
+immediately before preparing lifecycle-sensitive writes. Indexer height is for
+discovery and display, not signing authorization.
+
+The marketplace entrypoint exposes fixed-sale, English-auction, offer and
+aggregate-refund call builders plus matching indexed read models:
+
+```ts
+import {
+  MARKETPLACE_MIN_AMOUNT_LUX,
+  marketplacePlaceBidRuntimeCall,
+  marketplaceReadAuctionCall,
+} from '@duskdomains/sdk/marketplace'
+```
+
+Paid calls derive their exact DUSK deposit from typed call metadata.
+Marketplace writes remain runtime-bound and require a matching core, treasury
+and marketplace deployment plus Forge data drivers.
+
+JavaScript write builders reject Lux amounts above `Number.MAX_SAFE_INTEGER`
+(about 9,007,199 DUSK) instead of risking JSON precision loss. Canonical reads
+retain the full contract `u64` as `bigint`.
 
 ## Entrypoints
 
 - `@duskdomains/sdk`: public client, records, namehashing, principals and release manifests.
+- `@duskdomains/sdk/marketplace`: marketplace constants, call builders and indexed models.
 - `@duskdomains/sdk/event-catalog`: event names for independent indexer implementations.
 
 The JSR package intentionally excludes first-party browser wallet adapters, local development shims and write-proof tooling. Those remain repository-internal until their public contracts are stable.

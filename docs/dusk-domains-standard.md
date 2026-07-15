@@ -134,7 +134,7 @@ Policy reference: [Subname Policy](subnames.md).
 - Annual rentals for second-level `.dusk` names.
 - One-year minimum.
 - Grace period after expiry.
-- No auction mechanics in MVP.
+- Marketplace auctions are an optional extension, not part of the core naming MVP.
 - Fees in DUSK for mainnet beta, framed primarily as anti-squatting.
 
 Implementation reference: `src/names/registration.ts` defines deterministic annual lifecycle helpers for registration, renewal, grace-period calculation, and active/grace/expired status.

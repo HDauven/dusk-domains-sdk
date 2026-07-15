@@ -10,6 +10,16 @@ export const ACTIVITY_EVENT_TYPES = [
   'subname_created',
   'subname_delegated',
   'subname_revoked',
+  'domain_fixed_sale_opened',
+  'domain_fixed_sale_closed',
+  'domain_fixed_sale_filled',
+  'domain_auction_created',
+  'domain_bid_placed',
+  'domain_auction_cancelled',
+  'domain_auction_settled',
+  'domain_offer_placed',
+  'domain_offer_closed',
+  'domain_offer_accepted',
 ] as const
 
 export type ActivityEventType = (typeof ACTIVITY_EVENT_TYPES)[number]
@@ -68,7 +78,17 @@ export function activityLabel(eventType: ActivityEventType): string {
   if (eventType === 'primary_name') return 'Primary domain set'
   if (eventType === 'subname_created') return 'Subdomain created'
   if (eventType === 'subname_delegated') return 'Subdomain delegated'
-  return 'Subdomain revoked'
+  if (eventType === 'subname_revoked') return 'Subdomain revoked'
+  if (eventType === 'domain_fixed_sale_opened') return 'Listed for sale'
+  if (eventType === 'domain_fixed_sale_closed') return 'Sale closed'
+  if (eventType === 'domain_fixed_sale_filled') return 'Domain sold'
+  if (eventType === 'domain_auction_created') return 'Auction created'
+  if (eventType === 'domain_bid_placed') return 'Bid placed'
+  if (eventType === 'domain_auction_cancelled') return 'Auction canceled'
+  if (eventType === 'domain_auction_settled') return 'Auction settled'
+  if (eventType === 'domain_offer_placed') return 'Offer placed'
+  if (eventType === 'domain_offer_closed') return 'Offer closed'
+  return 'Offer accepted'
 }
 
 export function activityDescription(entry: ActivityEntry): string {

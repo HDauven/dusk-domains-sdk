@@ -49,6 +49,22 @@ export const feeConfigEventTypes = Object.freeze([
   'fee_config_updated',
 ])
 
+export const marketplaceEventTypes = Object.freeze([
+  'marketplace_initialized',
+  'marketplace_config_updated',
+  'domain_fixed_sale_opened',
+  'domain_fixed_sale_closed',
+  'domain_fixed_sale_filled',
+  'domain_auction_created',
+  'domain_bid_placed',
+  'domain_auction_cancelled',
+  'domain_auction_settled',
+  'domain_offer_placed',
+  'domain_offer_closed',
+  'domain_offer_accepted',
+  'marketplace_refund_claimed',
+])
+
 export const duskDomainsIndexedEventTypes = Object.freeze([
   ...controllerEventTypes,
   ...lifecycleEventTypes,
@@ -58,6 +74,7 @@ export const duskDomainsIndexedEventTypes = Object.freeze([
   ...treasuryEventTypes,
   ...referralEventTypes,
   ...feeConfigEventTypes,
+  ...marketplaceEventTypes,
 ])
 
 const controllerEventTypeSet = new Set(controllerEventTypes)
@@ -68,6 +85,7 @@ const subnameEventTypeSet = new Set(subnameEventTypes)
 const treasuryEventTypeSet = new Set(treasuryEventTypes)
 const referralEventTypeSet = new Set(referralEventTypes)
 const feeConfigEventTypeSet = new Set(feeConfigEventTypes)
+const marketplaceEventTypeSet = new Set(marketplaceEventTypes)
 const duskDomainsIndexedEventTypeSet = new Set(duskDomainsIndexedEventTypes)
 
 export function isDuskDomainsIndexedEventType(value) {
@@ -104,4 +122,8 @@ export function isReferralEventType(value) {
 
 export function isFeeConfigEventType(value) {
   return feeConfigEventTypeSet.has(value)
+}
+
+export function isMarketplaceEventType(value) {
+  return marketplaceEventTypeSet.has(value)
 }

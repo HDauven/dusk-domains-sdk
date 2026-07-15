@@ -12,6 +12,7 @@ export const subnameEventTypes: readonly string[]
 export const treasuryEventTypes: readonly string[]
 export const referralEventTypes: readonly string[]
 export const feeConfigEventTypes: readonly string[]
+export const marketplaceEventTypes: readonly string[]
 export const duskDomainsIndexedEventTypes: readonly string[]
 
 export function isDuskDomainsIndexedEventType(value: string): boolean
@@ -23,3 +24,4 @@ export function isSubnameEventType(value: string): boolean
 export function isTreasuryEventType(value: string): boolean
 export function isReferralEventType(value: string): boolean
 export function isFeeConfigEventType(value: string): boolean
+export function isMarketplaceEventType(value: string): boolean

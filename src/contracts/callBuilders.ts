@@ -4,6 +4,9 @@ import type {
   CoreCommitRuntimeArgs,
   CoreCompleteRegistrationRuntimeArgs,
   CoreCreateSubnameRuntimeArgs,
+  CoreEscrowAuctionRuntimeArgs,
+  CoreEscrowFixedSaleRuntimeArgs,
+  CoreAcceptMarketplaceOfferRuntimeArgs,
   CoreGetNameArgs,
   CoreInitArgs,
   CoreMutateRecordsSenderRuntimeArgs,
@@ -17,6 +20,16 @@ import type {
   CoreSetReferralConfigRuntimeArgs,
   CoreUpdateAuthoritiesRuntimeArgs,
   DuskDomainCallMetadata,
+  MarketplaceAuctionNodeArgs,
+  MarketplaceBuyFixedSaleRuntimeArgs,
+  MarketplaceClaimRefundRuntimeArgs,
+  MarketplaceInitArgs,
+  MarketplaceOfferArgs,
+  MarketplacePlaceOfferRuntimeArgs,
+  MarketplacePlaceBidRuntimeArgs,
+  MarketplaceReadRefundArgs,
+  MarketplaceSetFeeRuntimeArgs,
+  MarketplaceUpdateOperatorRuntimeArgs,
   TreasuryClaimAllReferralRewardsRuntimeArgs,
   TreasuryClaimReferralRewardRuntimeArgs,
   TreasuryClaimRuntimeArgs,
@@ -97,6 +110,24 @@ export function coreUpdateAuthoritiesRuntimeCall(
     kind: 'write',
     args,
   }
+}
+
+export function coreEscrowFixedSaleRuntimeCall(
+  args: CoreEscrowFixedSaleRuntimeArgs,
+): DuskDomainCallMetadata<CoreEscrowFixedSaleRuntimeArgs> {
+  return { contract: 'core', functionName: 'escrow_fixed_sale_runtime', kind: 'write', args }
+}
+
+export function coreEscrowAuctionRuntimeCall(
+  args: CoreEscrowAuctionRuntimeArgs,
+): DuskDomainCallMetadata<CoreEscrowAuctionRuntimeArgs> {
+  return { contract: 'core', functionName: 'escrow_auction_runtime', kind: 'write', args }
+}
+
+export function coreAcceptMarketplaceOfferRuntimeCall(
+  args: CoreAcceptMarketplaceOfferRuntimeArgs,
+): DuskDomainCallMetadata<CoreAcceptMarketplaceOfferRuntimeArgs> {
+  return { contract: 'core', functionName: 'accept_marketplace_offer_runtime', kind: 'write', args }
 }
 
 export function coreSetRecordSenderRuntimeCall(
@@ -270,6 +301,154 @@ export function treasuryClaimAllReferralRewardsRuntimeCall(
     contract: 'treasury',
     functionName: 'claim_all_referral_rewards_runtime',
     kind: 'write',
+    args,
+  }
+}
+
+export function marketplaceInitCall(args: MarketplaceInitArgs): DuskDomainCallMetadata<MarketplaceInitArgs> {
+  return {
+    contract: 'marketplace',
+    functionName: 'init',
+    kind: 'write',
+    args,
+  }
+}
+
+export function marketplaceSetFeeRuntimeCall(
+  args: MarketplaceSetFeeRuntimeArgs,
+): DuskDomainCallMetadata<MarketplaceSetFeeRuntimeArgs> {
+  return { contract: 'marketplace', functionName: 'set_fee_runtime', kind: 'write', args }
+}
+
+export function marketplaceUpdateOperatorRuntimeCall(
+  args: MarketplaceUpdateOperatorRuntimeArgs,
+): DuskDomainCallMetadata<MarketplaceUpdateOperatorRuntimeArgs> {
+  return { contract: 'marketplace', functionName: 'update_operator_runtime', kind: 'write', args }
+}
+
+export function marketplaceBuyFixedSaleRuntimeCall(
+  args: MarketplaceBuyFixedSaleRuntimeArgs,
+): DuskDomainCallMetadata<MarketplaceBuyFixedSaleRuntimeArgs> {
+  return { contract: 'marketplace', functionName: 'buy_fixed_sale_runtime', kind: 'write', args }
+}
+
+export function marketplaceCancelFixedSaleRuntimeCall(
+  args: MarketplaceAuctionNodeArgs,
+): DuskDomainCallMetadata<MarketplaceAuctionNodeArgs> {
+  return { contract: 'marketplace', functionName: 'cancel_fixed_sale_runtime', kind: 'write', args }
+}
+
+export function marketplaceExpireFixedSaleRuntimeCall(
+  args: MarketplaceAuctionNodeArgs,
+): DuskDomainCallMetadata<MarketplaceAuctionNodeArgs> {
+  return { contract: 'marketplace', functionName: 'expire_fixed_sale_runtime', kind: 'write', args }
+}
+
+export function marketplacePlaceBidRuntimeCall(
+  args: MarketplacePlaceBidRuntimeArgs,
+): DuskDomainCallMetadata<MarketplacePlaceBidRuntimeArgs> {
+  return {
+    contract: 'marketplace',
+    functionName: 'place_bid_runtime',
+    kind: 'write',
+    args,
+  }
+}
+
+export function marketplaceCancelAuctionRuntimeCall(
+  args: MarketplaceAuctionNodeArgs,
+): DuskDomainCallMetadata<MarketplaceAuctionNodeArgs> {
+  return {
+    contract: 'marketplace',
+    functionName: 'cancel_auction_runtime',
+    kind: 'write',
+    args,
+  }
+}
+
+export function marketplaceExpireAuctionRuntimeCall(
+  args: MarketplaceAuctionNodeArgs,
+): DuskDomainCallMetadata<MarketplaceAuctionNodeArgs> {
+  return {
+    contract: 'marketplace',
+    functionName: 'expire_auction_runtime',
+    kind: 'write',
+    args,
+  }
+}
+
+export function marketplaceSettleAuctionRuntimeCall(
+  args: MarketplaceAuctionNodeArgs,
+): DuskDomainCallMetadata<MarketplaceAuctionNodeArgs> {
+  return {
+    contract: 'marketplace',
+    functionName: 'settle_auction_runtime',
+    kind: 'write',
+    args,
+  }
+}
+
+export function marketplacePlaceOfferRuntimeCall(
+  args: MarketplacePlaceOfferRuntimeArgs,
+): DuskDomainCallMetadata<MarketplacePlaceOfferRuntimeArgs> {
+  return { contract: 'marketplace', functionName: 'place_offer_runtime', kind: 'write', args }
+}
+
+export function marketplaceCancelOfferRuntimeCall(
+  args: MarketplaceAuctionNodeArgs,
+): DuskDomainCallMetadata<MarketplaceAuctionNodeArgs> {
+  return { contract: 'marketplace', functionName: 'cancel_offer_runtime', kind: 'write', args }
+}
+
+export function marketplaceExpireOfferRuntimeCall(
+  args: MarketplaceOfferArgs,
+): DuskDomainCallMetadata<MarketplaceOfferArgs> {
+  return { contract: 'marketplace', functionName: 'expire_offer_runtime', kind: 'write', args }
+}
+
+export function marketplaceClaimRefundRuntimeCall(): DuskDomainCallMetadata<MarketplaceClaimRefundRuntimeArgs> {
+  return {
+    contract: 'marketplace',
+    functionName: 'claim_refund_runtime',
+    kind: 'write',
+    args: {},
+  }
+}
+
+export function marketplaceReadConfigCall(): DuskDomainCallMetadata<undefined> {
+  return { contract: 'marketplace', functionName: 'read_config', kind: 'read', args: undefined }
+}
+
+export function marketplaceReadFixedSaleCall(
+  args: MarketplaceAuctionNodeArgs,
+): DuskDomainCallMetadata<MarketplaceAuctionNodeArgs> {
+  return { contract: 'marketplace', functionName: 'read_fixed_sale', kind: 'read', args }
+}
+
+export function marketplaceReadAuctionCall(
+  args: MarketplaceAuctionNodeArgs,
+): DuskDomainCallMetadata<MarketplaceAuctionNodeArgs> {
+  return {
+    contract: 'marketplace',
+    functionName: 'read_auction',
+    kind: 'read',
+    args,
+  }
+}
+
+export function marketplaceReadOfferCall(
+  args: MarketplaceOfferArgs,
+): DuskDomainCallMetadata<MarketplaceOfferArgs> {
+  return { contract: 'marketplace', functionName: 'read_offer', kind: 'read', args }
+}
+
+export function marketplaceReadRefundCall(
+  args: MarketplaceReadRefundArgs,
+): DuskDomainCallMetadata<MarketplaceReadRefundArgs> {
+  return {
+    contract: 'marketplace',
+    functionName: 'read_refund',
+    kind: 'read',
     args,
   }
 }

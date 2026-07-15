@@ -11,10 +11,16 @@ import type {
   ReverseRegistryEvent,
   SubnameRegistryEvent,
   TreasuryEvent,
+  MarketplaceEvent,
 } from './events/indexerEventTypes'
 import type {
   IndexedFeeConfig,
   IndexedLifecycleName,
+  IndexedMarketplaceConfig,
+  IndexedMarketplaceFixedSale,
+  IndexedMarketplaceAuction,
+  IndexedMarketplaceOffer,
+  IndexedMarketplaceRefund,
   IndexedReferralState,
   IndexedRegistrationCommitment,
   IndexedReversePrimaryName,
@@ -31,6 +37,13 @@ export type LifecycleEventProjector = {
   applyTreasury: (event: TreasuryEvent, meta?: IndexerEventMeta) => IndexedTreasuryState
   applyReferral: (event: ReferralEvent, meta?: IndexerEventMeta) => IndexedReferralState
   applyFeeConfig: (event: FeeConfigEvent, meta?: IndexerEventMeta) => IndexedFeeConfig
+  applyMarketplace: (event: MarketplaceEvent, meta?: IndexerEventMeta) =>
+    | IndexedMarketplaceConfig
+    | IndexedMarketplaceFixedSale
+    | IndexedMarketplaceAuction
+    | IndexedMarketplaceOffer
+    | IndexedMarketplaceRefund
+    | null
   getNameByNode: (node: string) => IndexedLifecycleName | null
   getCommitment: (commitment: string) => IndexedRegistrationCommitment | null
   getResolverRecords: (node: string) => ResolverRecord[]
@@ -40,5 +53,13 @@ export type LifecycleEventProjector = {
   getTreasuryState: () => IndexedTreasuryState
   getReferralState: (referrer: string) => IndexedReferralState
   getFeeConfig: () => IndexedFeeConfig
+  getMarketplaceConfig: () => IndexedMarketplaceConfig
+  getMarketplaceFixedSaleByNode: (node: string) => IndexedMarketplaceFixedSale | null
+  getMarketplaceFixedSales: () => IndexedMarketplaceFixedSale[]
+  getMarketplaceAuctionByNode: (node: string) => IndexedMarketplaceAuction | null
+  getMarketplaceAuctions: () => IndexedMarketplaceAuction[]
+  getMarketplaceOffer: (node: string, buyerAuthority: string) => IndexedMarketplaceOffer | null
+  getMarketplaceOffers: (filters?: { node?: string; buyerAuthority?: string }) => IndexedMarketplaceOffer[]
+  getMarketplaceRefund: (authority: string) => IndexedMarketplaceRefund | null
   getActivity: (node: string) => ActivityEntry[]
 }

@@ -1,5 +1,6 @@
 import { DUSK_DOMAINS_CONTRACTS } from './callContracts'
 import { decodedCoreDuskDomainContext } from './callContextCore'
+import { decodedMarketplaceDuskDomainContext } from './callContextMarketplace'
 import { decodedTreasuryDuskDomainContext } from './callContextTreasury'
 import type {
   DuskDomainCallMetadata,
@@ -14,6 +15,7 @@ export function decodedDuskDomainContext(
   void _contracts
   return decodedCoreDuskDomainContext(call)
     ?? decodedTreasuryDuskDomainContext(call)
+    ?? decodedMarketplaceDuskDomainContext(call)
     ?? {
       title: 'Review Dusk Domains update',
       description: 'Confirm this Dusk Domains request in your wallet.',

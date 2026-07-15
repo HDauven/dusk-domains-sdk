@@ -57,6 +57,23 @@ export const feeConfigEventTypes = [
   'fee_config_updated',
 ] as const
 
+/** Event types emitted by the optional Dusk Domains marketplace. */
+export const marketplaceEventTypes = [
+  'marketplace_initialized',
+  'marketplace_config_updated',
+  'domain_fixed_sale_opened',
+  'domain_fixed_sale_closed',
+  'domain_fixed_sale_filled',
+  'domain_auction_created',
+  'domain_bid_placed',
+  'domain_auction_cancelled',
+  'domain_auction_settled',
+  'domain_offer_placed',
+  'domain_offer_closed',
+  'domain_offer_accepted',
+  'marketplace_refund_claimed',
+] as const
+
 /** All event types known to the public Dusk Domains indexer schema. */
 export const duskDomainsIndexedEventTypes = [
   ...controllerEventTypes,
@@ -67,6 +84,7 @@ export const duskDomainsIndexedEventTypes = [
   ...treasuryEventTypes,
   ...referralEventTypes,
   ...feeConfigEventTypes,
+  ...marketplaceEventTypes,
 ] as const
 
 const controllerEventTypeSet = new Set<string>(controllerEventTypes)
@@ -77,6 +95,7 @@ const subnameEventTypeSet = new Set<string>(subnameEventTypes)
 const treasuryEventTypeSet = new Set<string>(treasuryEventTypes)
 const referralEventTypeSet = new Set<string>(referralEventTypes)
 const feeConfigEventTypeSet = new Set<string>(feeConfigEventTypes)
+const marketplaceEventTypeSet = new Set<string>(marketplaceEventTypes)
 const duskDomainsIndexedEventTypeSet = new Set<string>(duskDomainsIndexedEventTypes)
 
 /** Returns true when a value is any known Dusk Domains indexed event type. */
@@ -122,4 +141,9 @@ export function isReferralEventType(value: string): boolean {
 /** Returns true when a value is a fee config event type. */
 export function isFeeConfigEventType(value: string): boolean {
   return feeConfigEventTypeSet.has(value)
+}
+
+/** Returns true when a value is a marketplace event type. */
+export function isMarketplaceEventType(value: string): boolean {
+  return marketplaceEventTypeSet.has(value)
 }

@@ -7,6 +7,9 @@ import {
   isCoreCommitRuntimeArgs,
   isCoreCompleteRegistrationRuntimeArgs,
   isCoreCreateSubnameRuntimeArgs,
+  isCoreEscrowAuctionRuntimeArgs,
+  isCoreEscrowFixedSaleRuntimeArgs,
+  isCoreAcceptMarketplaceOfferRuntimeArgs,
   isCoreInitArgs,
   isCoreMutateRecordsSenderRuntimeArgs,
   isCoreRenewRuntimeArgs,
@@ -16,6 +19,16 @@ import {
   isCoreSetReferralConfigRuntimeArgs,
   isCoreUpdateAuthoritiesRuntimeArgs,
   isDuskPrincipal,
+  isMarketplaceAuctionNodeArgs,
+  isMarketplaceBuyFixedSaleRuntimeArgs,
+  isMarketplaceClaimRefundRuntimeArgs,
+  isMarketplaceInitArgs,
+  isMarketplaceOfferArgs,
+  isMarketplacePlaceOfferRuntimeArgs,
+  isMarketplacePlaceBidRuntimeArgs,
+  isMarketplaceReadRefundArgs,
+  isMarketplaceSetFeeRuntimeArgs,
+  isMarketplaceUpdateOperatorRuntimeArgs,
   isRecord,
   isTreasuryClaimAllReferralRewardsRuntimeArgs,
   isTreasuryClaimReferralRewardRuntimeArgs,
@@ -107,6 +120,47 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
       node: bytes32(args.node, 'node'),
       owner: bytes32(args.owner, 'owner'),
       manager: bytes32(args.manager, 'manager'),
+    }
+  }
+  if (
+    call.contract === 'core' &&
+    call.functionName === 'escrow_fixed_sale_runtime' &&
+    isCoreEscrowFixedSaleRuntimeArgs(args)
+  ) {
+    return {
+      node: bytes32(args.node, 'node'),
+      marketplace_contract: bytes32(args.marketplaceContract, 'marketplaceContract'),
+      name: args.name,
+      price_lux: args.priceLux,
+      private_buyer: args.privateBuyer ? bytes32(args.privateBuyer, 'privateBuyer') : null,
+      expires_at: args.expiresAt,
+      seller_recipient: moonlightPublicKeyBytes(args.sellerRecipient, 'sellerRecipient'),
+    }
+  }
+  if (
+    call.contract === 'core' &&
+    call.functionName === 'escrow_auction_runtime' &&
+    isCoreEscrowAuctionRuntimeArgs(args)
+  ) {
+    return {
+      node: bytes32(args.node, 'node'),
+      marketplace_contract: bytes32(args.marketplaceContract, 'marketplaceContract'),
+      name: args.name,
+      reserve_price_lux: args.reservePriceLux,
+      duration_blocks: args.durationBlocks,
+      seller_recipient: moonlightPublicKeyBytes(args.sellerRecipient, 'sellerRecipient'),
+    }
+  }
+  if (
+    call.contract === 'core' &&
+    call.functionName === 'accept_marketplace_offer_runtime' &&
+    isCoreAcceptMarketplaceOfferRuntimeArgs(args)
+  ) {
+    return {
+      node: bytes32(args.node, 'node'),
+      marketplace_contract: bytes32(args.marketplaceContract, 'marketplaceContract'),
+      buyer_authority: bytes32(args.buyerAuthority, 'buyerAuthority'),
+      seller_recipient: moonlightPublicKeyBytes(args.sellerRecipient, 'sellerRecipient'),
     }
   }
   if (
@@ -227,6 +281,104 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
       recipient: moonlightPublicKeyBytes(args.recipient),
     }
   }
+  if (call.contract === 'marketplace' && call.functionName === 'init' && isMarketplaceInitArgs(args)) {
+    return {
+      core_contract: bytes32(args.coreContract, 'coreContract'),
+      treasury_contract: bytes32(args.treasuryContract, 'treasuryContract'),
+      marketplace_authority: bytes32(args.marketplaceAuthority, 'marketplaceAuthority'),
+      operator: bytes32(args.operator, 'operator'),
+      fee_bps: args.feeBps,
+    }
+  }
+  if (
+    call.contract === 'marketplace' &&
+    call.functionName === 'set_fee_runtime' &&
+    isMarketplaceSetFeeRuntimeArgs(args)
+  ) {
+    return { fee_bps: args.feeBps }
+  }
+  if (
+    call.contract === 'marketplace' &&
+    call.functionName === 'update_operator_runtime' &&
+    isMarketplaceUpdateOperatorRuntimeArgs(args)
+  ) {
+    return { operator: bytes32(args.operator, 'operator') }
+  }
+  if (
+    call.contract === 'marketplace' &&
+    call.functionName === 'buy_fixed_sale_runtime' &&
+    isMarketplaceBuyFixedSaleRuntimeArgs(args)
+  ) {
+    return {
+      node: bytes32(args.node, 'node'),
+      buyer_manager: args.buyerManager ? bytes32(args.buyerManager, 'buyerManager') : null,
+    }
+  }
+  if (
+    call.contract === 'marketplace' &&
+    call.functionName === 'place_bid_runtime' &&
+    isMarketplacePlaceBidRuntimeArgs(args)
+  ) {
+    return {
+      node: bytes32(args.node, 'node'),
+      amount_lux: args.amountLux,
+      bidder_manager: args.bidderManager ? bytes32(args.bidderManager, 'bidderManager') : null,
+    }
+  }
+  if (
+    call.contract === 'marketplace' &&
+    (
+      call.functionName === 'cancel_auction_runtime' ||
+      call.functionName === 'expire_auction_runtime' ||
+      call.functionName === 'settle_auction_runtime' ||
+      call.functionName === 'cancel_fixed_sale_runtime' ||
+      call.functionName === 'expire_fixed_sale_runtime' ||
+      call.functionName === 'cancel_offer_runtime' ||
+      call.functionName === 'read_fixed_sale' ||
+      call.functionName === 'read_auction'
+    ) &&
+    isMarketplaceAuctionNodeArgs(args)
+  ) {
+    return {
+      node: bytes32(args.node, 'node'),
+    }
+  }
+  if (
+    call.contract === 'marketplace' &&
+    call.functionName === 'place_offer_runtime' &&
+    isMarketplacePlaceOfferRuntimeArgs(args)
+  ) {
+    return {
+      node: bytes32(args.node, 'node'),
+      amount_lux: args.amountLux,
+      expires_at: args.expiresAt,
+      buyer_manager: args.buyerManager ? bytes32(args.buyerManager, 'buyerManager') : null,
+    }
+  }
+  if (
+    call.contract === 'marketplace' &&
+    (call.functionName === 'expire_offer_runtime' || call.functionName === 'read_offer') &&
+    isMarketplaceOfferArgs(args)
+  ) {
+    return {
+      node: bytes32(args.node, 'node'),
+      buyer_authority: bytes32(args.buyerAuthority, 'buyerAuthority'),
+    }
+  }
+  if (
+    call.contract === 'marketplace' &&
+    call.functionName === 'claim_refund_runtime' &&
+    isMarketplaceClaimRefundRuntimeArgs(args)
+  ) {
+    return {}
+  }
+  if (
+    call.contract === 'marketplace' &&
+    call.functionName === 'read_refund' &&
+    isMarketplaceReadRefundArgs(args)
+  ) {
+    return { authority: bytes32(args.authority, 'authority') }
+  }
 
   if (knownDuskDomainCalls.has(callKey)) {
     throw invalidKnownCallArgs(call)
@@ -239,6 +391,7 @@ const noArgDuskDomainCalls = new Set([
   'core.fee_config',
   'treasury.claim_all_runtime',
   'treasury.read_state',
+  'marketplace.read_config',
 ])
 
 const knownDuskDomainCalls = new Set([
@@ -249,6 +402,9 @@ const knownDuskDomainCalls = new Set([
   'core.complete_registration_runtime',
   'core.renew_runtime',
   'core.update_authorities_runtime',
+  'core.escrow_fixed_sale_runtime',
+  'core.escrow_auction_runtime',
+  'core.accept_marketplace_offer_runtime',
   'core.set_record_sender_runtime',
   'core.clear_record_sender_runtime',
   'core.mutate_records_sender_runtime',
@@ -267,6 +423,25 @@ const knownDuskDomainCalls = new Set([
   'treasury.claim_referral_reward_runtime',
   'treasury.claim_all_referral_rewards_runtime',
   'treasury.read_state',
+  'marketplace.init',
+  'marketplace.set_fee_runtime',
+  'marketplace.update_operator_runtime',
+  'marketplace.buy_fixed_sale_runtime',
+  'marketplace.cancel_fixed_sale_runtime',
+  'marketplace.expire_fixed_sale_runtime',
+  'marketplace.place_bid_runtime',
+  'marketplace.cancel_auction_runtime',
+  'marketplace.expire_auction_runtime',
+  'marketplace.settle_auction_runtime',
+  'marketplace.place_offer_runtime',
+  'marketplace.cancel_offer_runtime',
+  'marketplace.expire_offer_runtime',
+  'marketplace.claim_refund_runtime',
+  'marketplace.read_config',
+  'marketplace.read_fixed_sale',
+  'marketplace.read_auction',
+  'marketplace.read_offer',
+  'marketplace.read_refund',
 ])
 
 function invalidKnownCallArgs(call: DuskDomainCallMetadata) {

@@ -1,9 +1,12 @@
 import {
   isCoreClearPrimaryNameRuntimeArgs,
   isCoreClearRecordSenderRuntimeArgs,
+  isCoreAcceptMarketplaceOfferRuntimeArgs,
   isCoreCommitRuntimeArgs,
   isCoreCompleteRegistrationRuntimeArgs,
   isCoreCreateSubnameRuntimeArgs,
+  isCoreEscrowAuctionRuntimeArgs,
+  isCoreEscrowFixedSaleRuntimeArgs,
   isCoreInitArgs,
   isCoreMutateRecordsSenderRuntimeArgs,
   isCoreRenewRuntimeArgs,
@@ -106,6 +109,44 @@ export function decodedCoreDuskDomainContext(call: DuskDomainCallMetadata): Dusk
         { label: 'Domain reference', value: call.args.node },
         { label: 'Owner authority', value: call.args.owner },
         { label: 'Manager authority', value: call.args.manager },
+      ],
+    }
+  }
+
+  if (call.functionName === 'escrow_fixed_sale_runtime' && isCoreEscrowFixedSaleRuntimeArgs(call.args)) {
+    return {
+      title: `List ${call.args.name}`,
+      description: 'Move this domain into marketplace escrow and open a fixed-price sale.',
+      fields: [
+        { label: 'Domain', value: call.args.name },
+        { label: 'Price', value: `${formatLux(call.args.priceLux)} DUSK` },
+        { label: 'Buyer', value: call.args.privateBuyer ?? 'Anyone' },
+        { label: 'Marketplace', value: call.args.marketplaceContract },
+      ],
+    }
+  }
+
+  if (call.functionName === 'escrow_auction_runtime' && isCoreEscrowAuctionRuntimeArgs(call.args)) {
+    return {
+      title: `Auction ${call.args.name}`,
+      description: 'Move this domain into marketplace escrow and open a reserve auction.',
+      fields: [
+        { label: 'Domain', value: call.args.name },
+        { label: 'Reserve', value: `${formatLux(call.args.reservePriceLux)} DUSK` },
+        { label: 'Duration', value: `${call.args.durationBlocks} blocks after the first bid` },
+        { label: 'Marketplace', value: call.args.marketplaceContract },
+      ],
+    }
+  }
+
+  if (call.functionName === 'accept_marketplace_offer_runtime' && isCoreAcceptMarketplaceOfferRuntimeArgs(call.args)) {
+    return {
+      title: 'Accept domain offer',
+      description: 'Transfer this domain to the bidder and receive the sale proceeds.',
+      fields: [
+        { label: 'Domain reference', value: call.args.node },
+        { label: 'Buyer', value: call.args.buyerAuthority },
+        { label: 'Marketplace', value: call.args.marketplaceContract },
       ],
     }
   }

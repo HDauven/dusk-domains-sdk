@@ -1,9 +1,9 @@
 import {
   DUSK_DOMAINS_CONTRACTS,
   DUSK_DOMAINS_PLACEHOLDER_CONTRACT_ID,
-  type DuskDomainContractKey,
   type DuskDomainContractMap,
   type DuskDomainContractPreset,
+  type DuskDomainRequiredContractKey,
 } from '../contracts/calls'
 
 export type DuskDomainsRuntimeMode = 'preview' | 'live_ready'
@@ -12,6 +12,7 @@ export type DuskDomainsRuntimeConfig = {
   mode: DuskDomainsRuntimeMode
   contracts: DuskDomainContractMap
   capabilities: {
+    marketplace: boolean
     referralAttribution: boolean
     referralRewardClaims: boolean
   }
@@ -38,17 +39,17 @@ type RuntimeEnvKey = string | {
   legacy?: string
 }
 
-const contractKeys = ['core', 'treasury'] as const satisfies readonly DuskDomainContractKey[]
+const contractKeys = ['core', 'treasury'] as const satisfies readonly DuskDomainRequiredContractKey[]
 
 const contractIdEnvKeys = {
   core: envKey('VITE_DUSK_DOMAINS_CORE_CONTRACT_ID', 'VITE_DUSK_DOMAINS_CORE_CONTRACT_ID'),
   treasury: envKey('VITE_DUSK_DOMAINS_TREASURY_CONTRACT_ID', 'VITE_DUSK_DOMAINS_TREASURY_CONTRACT_ID'),
-} as const satisfies Record<DuskDomainContractKey, RuntimeEnvKey>
+} as const satisfies Record<DuskDomainRequiredContractKey, RuntimeEnvKey>
 
 const driverUrlEnvKeys = {
   core: envKey('VITE_DUSK_DOMAINS_CORE_DRIVER_URL', 'VITE_DUSK_DOMAINS_CORE_DRIVER_URL'),
   treasury: envKey('VITE_DUSK_DOMAINS_TREASURY_DRIVER_URL', 'VITE_DUSK_DOMAINS_TREASURY_DRIVER_URL'),
-} as const satisfies Record<DuskDomainContractKey, RuntimeEnvKey>
+} as const satisfies Record<DuskDomainRequiredContractKey, RuntimeEnvKey>
 
 const indexerUrlEnvKey = envKey('VITE_DUSK_DOMAINS_INDEXER_URL', 'VITE_DUSK_DOMAINS_INDEXER_URL')
 const nodeUrlEnvKey = envKey('VITE_DUSK_DOMAINS_NODE_URL', 'VITE_DUSK_DOMAINS_NODE_URL')
@@ -61,6 +62,18 @@ const referralAttributionEnabledEnvKey = envKey(
 const referralClaimsEnabledEnvKey = envKey(
   'VITE_DUSK_DOMAINS_ENABLE_REFERRAL_CLAIMS',
   'VITE_DUSK_DOMAINS_ENABLE_REFERRAL_CLAIMS',
+)
+const marketplaceEnabledEnvKey = envKey(
+  'VITE_DUSK_DOMAINS_ENABLE_MARKETPLACE',
+  'VITE_DUSK_DOMAINS_ENABLE_MARKETPLACE',
+)
+const marketplaceContractIdEnvKey = envKey(
+  'VITE_DUSK_DOMAINS_MARKETPLACE_CONTRACT_ID',
+  'VITE_DUSK_DOMAINS_MARKETPLACE_CONTRACT_ID',
+)
+const marketplaceDriverUrlEnvKey = envKey(
+  'VITE_DUSK_DOMAINS_MARKETPLACE_DRIVER_URL',
+  'VITE_DUSK_DOMAINS_MARKETPLACE_DRIVER_URL',
 )
 const launchLinkEnvKeys = {
   support: envKey('VITE_DUSK_DOMAINS_SUPPORT_URL', 'VITE_DUSK_DOMAINS_SUPPORT_URL'),
@@ -100,6 +113,7 @@ export function createDuskDomainsRuntimeConfig(
   const liveWritesEnabled = booleanEnv(env, liveWritesEnabledEnvKey)
   const referralAttributionRequested = booleanEnv(env, referralAttributionEnabledEnvKey)
   const referralClaimsRequested = booleanEnv(env, referralClaimsEnabledEnvKey)
+  const marketplaceRequested = booleanEnv(env, marketplaceEnabledEnvKey)
   const launchLinks = {
     support: validLaunchLinkOrNull(stringEnv(env, launchLinkEnvKeys.support), launchLinkEnvKeys.support, warnings),
     abuse: validLaunchLinkOrNull(stringEnv(env, launchLinkEnvKeys.abuse), launchLinkEnvKeys.abuse, warnings),
@@ -121,10 +135,31 @@ export function createDuskDomainsRuntimeConfig(
     warnings.push(`${envName(referralClaimsEnabledEnvKey)} is set, but no treasury contract is configured; reward claims stay disabled.`)
   }
 
+  if (marketplaceRequested) {
+    const marketplacePreset = baseContracts.marketplace
+    const marketplaceContractId = stringEnv(env, marketplaceContractIdEnvKey)
+    const marketplaceDriverUrl = stringEnv(env, marketplaceDriverUrlEnvKey)
+
+    if (!marketplacePreset) {
+      warnings.push(`${envName(marketplaceEnabledEnvKey)} is set, but the SDK does not have a marketplace contract preset.`)
+    } else if (!marketplaceContractId || !isValidDuskContractId(marketplaceContractId)) {
+      warnings.push(`${envName(marketplaceContractIdEnvKey)} must be a 32-byte hex contract ID; marketplace stays disabled.`)
+    } else if (!marketplaceDriverUrl || !isValidRuntimeUrl(marketplaceDriverUrl)) {
+      warnings.push(`${envName(marketplaceDriverUrlEnvKey)} must be an http(s) or root-relative URL; marketplace stays disabled.`)
+    } else {
+      contracts.marketplace = {
+        ...marketplacePreset,
+        contractId: marketplaceContractId,
+        driverUrl: marketplaceDriverUrl,
+      }
+    }
+  }
+
   return {
     mode: missingLiveInputs.length === 0 ? 'live_ready' : 'preview',
     contracts,
     capabilities: {
+      marketplace: Boolean(contracts.marketplace),
       referralAttribution: referralAttributionSupported,
       referralRewardClaims: referralClaimsSupported,
     },

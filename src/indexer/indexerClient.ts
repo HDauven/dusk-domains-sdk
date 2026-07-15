@@ -5,6 +5,11 @@ import type {
   IndexedTreasuryState,
   IndexedFeeConfig,
   IndexedLifecycleName,
+  IndexedMarketplaceConfig,
+  IndexedMarketplaceFixedSale,
+  IndexedMarketplaceAuction,
+  IndexedMarketplaceOffer,
+  IndexedMarketplaceRefund,
   IndexedNameSummary,
   IndexedRegistrationCommitment,
   IndexedResolverRecordHistoryEntry,
@@ -15,6 +20,11 @@ import {
   isForwardResolutionResponse,
   isIndexedFeeConfig,
   isIndexedLifecycleName,
+  isIndexedMarketplaceConfig,
+  isIndexedMarketplaceFixedSale,
+  isIndexedMarketplaceAuction,
+  isIndexedMarketplaceOffer,
+  isIndexedMarketplaceRefund,
   isIndexedNameSummary,
   isIndexedReferralState,
   isIndexedRegistrationCommitment,
@@ -50,6 +60,14 @@ export type DuskDomainsIndexerClient = DuskDomainsReadTransport & {
   getActivity: (node: string) => Promise<ActivityEntry[]>
   getSubnames: (parentNode: string) => Promise<IndexedSubname[]>
   getSubname: (node: string) => Promise<IndexedSubname | null>
+  getMarketplaceConfig: () => Promise<IndexedMarketplaceConfig>
+  getMarketplaceFixedSales: () => Promise<IndexedMarketplaceFixedSale[]>
+  getMarketplaceFixedSale: (node: string) => Promise<IndexedMarketplaceFixedSale | null>
+  getMarketplaceAuctions: () => Promise<IndexedMarketplaceAuction[]>
+  getMarketplaceAuction: (node: string) => Promise<IndexedMarketplaceAuction | null>
+  getMarketplaceOffers: (filters?: { node?: string; buyerAuthority?: string }) => Promise<IndexedMarketplaceOffer[]>
+  getMarketplaceOffer: (node: string, buyerAuthority: string) => Promise<IndexedMarketplaceOffer | null>
+  getMarketplaceRefund: (authority: string) => Promise<IndexedMarketplaceRefund | null>
   getTreasury: () => Promise<IndexedTreasuryState>
   getReferralState: (referrer: string) => Promise<IndexedReferralState>
   getFeeConfig: () => Promise<IndexedFeeConfig>
@@ -271,6 +289,78 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
     return payload
   }
 
+  async function getMarketplaceConfig() {
+    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'marketplace/config', {}))
+    if (!isIndexedMarketplaceConfig(payload)) {
+      throw new Error('Dusk Domains indexer returned an invalid marketplace config response.')
+    }
+    return payload
+  }
+
+  async function getMarketplaceFixedSales() {
+    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'marketplace/fixed-sales', {}))
+    if (!Array.isArray(payload) || !payload.every(isIndexedMarketplaceFixedSale)) {
+      throw new Error('Dusk Domains indexer returned an invalid marketplace fixed-sale response.')
+    }
+    return payload
+  }
+
+  async function getMarketplaceFixedSale(node: string) {
+    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'marketplace/fixed-sale', { node }))
+    if (payload === null) return null
+    if (!isIndexedMarketplaceFixedSale(payload)) {
+      throw new Error('Dusk Domains indexer returned an invalid marketplace fixed-sale response.')
+    }
+    return payload
+  }
+
+  async function getMarketplaceAuctions() {
+    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'marketplace/auctions', {}))
+
+    if (!Array.isArray(payload) || !payload.every(isIndexedMarketplaceAuction)) {
+      throw new Error('Dusk Domains indexer returned an invalid marketplace auction response.')
+    }
+
+    return payload
+  }
+
+  async function getMarketplaceAuction(node: string) {
+    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'marketplace/auction', { node }))
+    if (payload === null) return null
+
+    if (!isIndexedMarketplaceAuction(payload)) {
+      throw new Error('Dusk Domains indexer returned an invalid marketplace auction response.')
+    }
+
+    return payload
+  }
+
+  async function getMarketplaceOffers(filters: { node?: string; buyerAuthority?: string } = {}) {
+    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'marketplace/offers', filters))
+    if (!Array.isArray(payload) || !payload.every(isIndexedMarketplaceOffer)) {
+      throw new Error('Dusk Domains indexer returned an invalid marketplace offer response.')
+    }
+    return payload
+  }
+
+  async function getMarketplaceOffer(node: string, buyerAuthority: string) {
+    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'marketplace/offer', { node, buyerAuthority }))
+    if (payload === null) return null
+    if (!isIndexedMarketplaceOffer(payload)) {
+      throw new Error('Dusk Domains indexer returned an invalid marketplace offer response.')
+    }
+    return payload
+  }
+
+  async function getMarketplaceRefund(authority: string) {
+    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'marketplace/refund', { authority }))
+    if (payload === null) return null
+    if (!isIndexedMarketplaceRefund(payload)) {
+      throw new Error('Dusk Domains indexer returned an invalid marketplace refund response.')
+    }
+    return payload
+  }
+
   async function getTreasury() {
     const payload = await getJson(fetcher, endpointUrl(baseUrl, 'treasury', {}))
 
@@ -316,6 +406,14 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
     getActivity,
     getSubnames,
     getSubname,
+    getMarketplaceConfig,
+    getMarketplaceFixedSales,
+    getMarketplaceFixedSale,
+    getMarketplaceAuctions,
+    getMarketplaceAuction,
+    getMarketplaceOffers,
+    getMarketplaceOffer,
+    getMarketplaceRefund,
     getTreasury,
     getReferralState,
     getFeeConfig,

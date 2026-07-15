@@ -44,6 +44,7 @@ import {
   reduceReversePrimaryName,
   reduceSubname,
 } from './lifecycleProjectorReducers'
+import { createMarketplaceProjector } from './marketplaceProjector'
 
 export function createLifecycleEventProjector(): LifecycleEventProjector {
   const names = new Map<string, IndexedLifecycleName>()
@@ -56,6 +57,10 @@ export function createLifecycleEventProjector(): LifecycleEventProjector {
   let treasuryState: IndexedTreasuryState = emptyTreasuryState()
   let feeConfig: IndexedFeeConfig = emptyFeeConfig()
   let referralRewardsSupported = false
+  const marketplace = createMarketplaceProjector({
+    getName: (node) => names.get(node),
+    addActivity: (node, entry) => activity.set(node, [entry, ...(activity.get(node) ?? [])]),
+  })
 
   function apply(event: NameLifecycleEvent, meta: IndexerEventMeta = {}) {
     const current = names.get(event.node)
@@ -180,6 +185,8 @@ export function createLifecycleEventProjector(): LifecycleEventProjector {
     return { ...feeConfig }
   }
 
+  const applyMarketplace = marketplace.apply
+
   function getNameByNode(node: string) {
     return names.get(node) ?? null
   }
@@ -284,6 +291,7 @@ export function createLifecycleEventProjector(): LifecycleEventProjector {
     applyTreasury,
     applyReferral,
     applyFeeConfig,
+    applyMarketplace,
     getNameByNode,
     getCommitment,
     getResolverRecords,
@@ -293,6 +301,14 @@ export function createLifecycleEventProjector(): LifecycleEventProjector {
     getTreasuryState,
     getReferralState,
     getFeeConfig,
+    getMarketplaceConfig: marketplace.getConfig,
+    getMarketplaceFixedSaleByNode: marketplace.getFixedSaleByNode,
+    getMarketplaceFixedSales: marketplace.getFixedSales,
+    getMarketplaceAuctionByNode: marketplace.getAuctionByNode,
+    getMarketplaceAuctions: marketplace.getAuctions,
+    getMarketplaceOffer: marketplace.getOffer,
+    getMarketplaceOffers: marketplace.getOffers,
+    getMarketplaceRefund: marketplace.getRefund,
     getActivity,
   }
 }

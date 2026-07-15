@@ -6,6 +6,7 @@ import type { SubnameExpiryPolicy, SubnameRevocationPolicy } from '../../core/su
 export type IndexerEventMeta = {
   txId?: string
   blockHeight?: number | null
+  contractId?: string | null
 }
 
 export type NameLifecycleEvent =
@@ -215,3 +216,130 @@ export type FeeConfigEvent = {
   previousConfig?: CoreFeeConfig
   config: CoreFeeConfig
 }
+
+export type MarketplaceEvent =
+  | {
+      type: 'marketplace_initialized'
+      coreContract: string
+      treasuryContract: string
+      marketplaceAuthority: string
+      operator: string
+      feeBps: number
+    }
+  | {
+      type: 'marketplace_config_updated'
+      operator: string
+      previousOperator: string
+      previousFeeBps: number
+      feeBps: number
+      updatedAtBlockHeight: number
+    }
+  | {
+      type: 'domain_fixed_sale_opened'
+      node: string
+      name: string
+      sellerAuthority: string
+      priceLux: number
+      privateBuyer: string | null
+      feeBps: number
+      expiresAtBlockHeight: number
+      openedAtBlockHeight: number
+    }
+  | {
+      type: 'domain_fixed_sale_closed'
+      node: string
+      sellerAuthority: string
+      expired: boolean
+      domainExpired: boolean
+      closedAtBlockHeight: number
+    }
+  | {
+      type: 'domain_fixed_sale_filled'
+      node: string
+      name: string
+      sellerAuthority: string
+      buyerAuthority: string
+      grossAmountLux: number
+      protocolFeeLux: number
+      sellerProceedsLux: number
+      filledAtBlockHeight: number
+    }
+  | {
+      type: 'domain_auction_created'
+      node: string
+      name: string
+      sellerAuthority: string
+      reservePriceLux: number
+      durationBlocks: number
+      startDeadlineBlockHeight: number
+      feeBps: number
+      createdAtBlockHeight: number
+    }
+  | {
+      type: 'domain_bid_placed'
+      node: string
+      bidderAuthority: string
+      amountLux: number
+      previousBidderAuthority: string | null
+      previousBidLux: number
+      startBlock: number
+      endBlock: number
+      started: boolean
+      extended: boolean
+      bidCount: number
+      placedAtBlockHeight: number
+    }
+  | {
+      type: 'domain_auction_cancelled'
+      node: string
+      sellerAuthority: string
+      expired: boolean
+      domainExpired: boolean
+      cancelledAtBlockHeight: number
+    }
+  | {
+      type: 'domain_auction_settled'
+      node: string
+      name: string
+      sellerAuthority: string
+      winnerAuthority: string | null
+      grossAmountLux: number
+      protocolFeeLux: number
+      sellerProceedsLux: number
+      domainExpired: boolean
+      settledAtBlockHeight: number
+    }
+  | {
+      type: 'domain_offer_placed'
+      node: string
+      buyerAuthority: string
+      amountLux: number
+      feeBps: number
+      expiresAtBlockHeight: number
+      placedAtBlockHeight: number
+    }
+  | {
+      type: 'domain_offer_closed'
+      node: string
+      buyerAuthority: string
+      amountLux: number
+      expired: boolean
+      closedAtBlockHeight: number
+    }
+  | {
+      type: 'domain_offer_accepted'
+      node: string
+      sellerAuthority: string
+      buyerAuthority: string
+      grossAmountLux: number
+      protocolFeeLux: number
+      sellerProceedsLux: number
+      acceptedAtBlockHeight: number
+    }
+  | {
+      type: 'marketplace_refund_claimed'
+      authority: string
+      recipient: string
+      amountLux: number
+      claimedAtBlockHeight: number
+    }

@@ -3,6 +3,11 @@ import type { ForwardResolutionResponse } from './indexer'
 import type {
   IndexedFeeConfig,
   IndexedLifecycleName,
+  IndexedMarketplaceConfig,
+  IndexedMarketplaceFixedSale,
+  IndexedMarketplaceAuction,
+  IndexedMarketplaceOffer,
+  IndexedMarketplaceRefund,
   IndexedNameSummary,
   IndexedReferralState,
   IndexedRegistrationCommitment,
@@ -21,7 +26,7 @@ export function isNameResult(value: unknown): value is NameResult {
     typeof value.displayName === 'string' &&
     typeof value.label === 'string' &&
     isNameStatus(value.status) &&
-    typeof value.price === 'number' &&
+    typeof value.price === 'number' && Number.isFinite(value.price) && value.price >= 0 &&
     Array.isArray(value.issues) &&
     value.issues.every(isSearchIssue) &&
     typeof value.transactionBlocked === 'boolean'
@@ -62,25 +67,25 @@ export function isIndexerHealth(value: unknown): value is {
     (
       value.schemaVersion === undefined ||
       typeof value.schemaVersion === 'string' ||
-      typeof value.schemaVersion === 'number'
+      isNonNegativeInteger(value.schemaVersion)
     ) &&
     (
       value.eventSchemaVersion === undefined ||
       typeof value.eventSchemaVersion === 'string' ||
-      typeof value.eventSchemaVersion === 'number'
+      isNonNegativeInteger(value.eventSchemaVersion)
     ) &&
     (
       value.readModelSchemaVersion === undefined ||
       typeof value.readModelSchemaVersion === 'string' ||
-      typeof value.readModelSchemaVersion === 'number'
+      isNonNegativeInteger(value.readModelSchemaVersion)
     ) &&
-    (typeof value.currentBlockHeight === 'number' || value.currentBlockHeight === null) &&
+    (isNonNegativeInteger(value.currentBlockHeight) || value.currentBlockHeight === null) &&
     isNullableNumber(value.finalizedBlockHeight) &&
     isNullableNumber(value.lagBlocks) &&
     (value.eventCount === undefined || isNonNegativeInteger(value.eventCount)) &&
     Array.isArray(value.routes) &&
     value.routes.every((route) => typeof route === 'string') &&
-    typeof value.names === 'number'
+    isNonNegativeInteger(value.names)
   )
 }
 
@@ -93,9 +98,9 @@ export function isIndexedRegistrationCommitment(value: unknown): value is Indexe
     isNullableString(value.node) &&
     (value.status === 'committed' || value.status === 'revealed') &&
     isNullableString(value.committedTxId) &&
-    (typeof value.committedBlockHeight === 'number' || value.committedBlockHeight === null) &&
+    (isNonNegativeInteger(value.committedBlockHeight) || value.committedBlockHeight === null) &&
     isNullableString(value.revealedTxId) &&
-    (typeof value.revealedBlockHeight === 'number' || value.revealedBlockHeight === null) &&
+    (isNonNegativeInteger(value.revealedBlockHeight) || value.revealedBlockHeight === null) &&
     (value.lastEventType === 'registration_committed' || value.lastEventType === 'registration_revealed')
   )
 }
@@ -126,7 +131,7 @@ export function isActivityEntry(value: unknown): value is ActivityEntry {
     typeof value.name === 'string' &&
     typeof value.actor === 'string' &&
     typeof value.timestamp === 'string' &&
-    (typeof value.blockHeight === 'number' || value.blockHeight === null) &&
+    (isNonNegativeInteger(value.blockHeight) || value.blockHeight === null) &&
     (value.txId === undefined || typeof value.txId === 'string') &&
     (value.target === undefined || typeof value.target === 'string')
   )
@@ -158,7 +163,7 @@ export function isResolverRecord(value: unknown): value is ResolverRecord {
     typeof value.value === 'string' &&
     (value.visibility === 'public' || value.visibility === 'sensitive_public') &&
     typeof value.updatedAt === 'string' &&
-    typeof value.ttlSeconds === 'number'
+    isNonNegativeInteger(value.ttlSeconds)
   )
 }
 
@@ -201,7 +206,103 @@ export function isIndexedSubname(value: unknown): value is IndexedSubname {
     isNullableString(value.revokedAt) &&
     typeof value.lastEventType === 'string' &&
     isNullableString(value.txId) &&
-    (typeof value.blockHeight === 'number' || value.blockHeight === null)
+    (isNonNegativeInteger(value.blockHeight) || value.blockHeight === null)
+  )
+}
+
+export function isIndexedMarketplaceConfig(value: unknown): value is IndexedMarketplaceConfig {
+  return (
+    isRecord(value) &&
+    typeof value.initialized === 'boolean' &&
+    isNullableString(value.coreContract) &&
+    isNullableString(value.treasuryContract) &&
+    isNullableString(value.marketplaceAuthority) &&
+    isNullableString(value.operator) &&
+    isNonNegativeInteger(value.feeBps) &&
+    isNullableNumber(value.updatedAtBlockHeight) &&
+    isNullableString(value.txId) &&
+    isNullableNumber(value.blockHeight)
+  )
+}
+
+export function isIndexedMarketplaceFixedSale(value: unknown): value is IndexedMarketplaceFixedSale {
+  return (
+    isRecord(value) &&
+    typeof value.node === 'string' &&
+    typeof value.name === 'string' &&
+    typeof value.sellerAuthority === 'string' &&
+    isNonNegativeInteger(value.priceLux) &&
+    isNullableString(value.privateBuyer) &&
+    isNonNegativeInteger(value.feeBps) &&
+    isNonNegativeInteger(value.expiresAtBlockHeight) &&
+    isNonNegativeInteger(value.openedAtBlockHeight) &&
+    isNullableString(value.marketplaceContractId) &&
+    typeof value.escrowed === 'boolean' &&
+    isNullableString(value.txId) &&
+    isNullableNumber(value.blockHeight) &&
+    value.lastEventType === 'domain_fixed_sale_opened'
+  )
+}
+
+export function isIndexedMarketplaceAuction(value: unknown): value is IndexedMarketplaceAuction {
+  return (
+    isRecord(value) &&
+    typeof value.node === 'string' &&
+    typeof value.name === 'string' &&
+    typeof value.sellerAuthority === 'string' &&
+    isNonNegativeInteger(value.reservePriceLux) &&
+    isNonNegativeInteger(value.durationBlocks) &&
+    isNonNegativeInteger(value.startDeadlineBlockHeight) &&
+    isNonNegativeInteger(value.feeBps) &&
+    isNullableNumber(value.startBlockHeight) &&
+    isNullableNumber(value.endBlockHeight) &&
+    (
+      value.highestBid === null ||
+      (
+        isRecord(value.highestBid) &&
+        typeof value.highestBid.bidderAuthority === 'string' &&
+        isNonNegativeInteger(value.highestBid.amountLux) &&
+        isNonNegativeInteger(value.highestBid.placedAtBlockHeight)
+      )
+    ) &&
+    isNonNegativeInteger(value.bidCount) &&
+    isNonNegativeInteger(value.createdAtBlockHeight) &&
+    isNullableString(value.marketplaceContractId) &&
+    typeof value.escrowed === 'boolean' &&
+    isNullableString(value.txId) &&
+    isNullableNumber(value.blockHeight) &&
+    (
+      value.lastEventType === 'domain_auction_created' ||
+      value.lastEventType === 'domain_bid_placed'
+    )
+  )
+}
+
+export function isIndexedMarketplaceOffer(value: unknown): value is IndexedMarketplaceOffer {
+  return (
+    isRecord(value) &&
+    typeof value.node === 'string' &&
+    typeof value.name === 'string' &&
+    typeof value.buyerAuthority === 'string' &&
+    isNonNegativeInteger(value.amountLux) &&
+    isNonNegativeInteger(value.feeBps) &&
+    isNonNegativeInteger(value.expiresAtBlockHeight) &&
+    isNonNegativeInteger(value.placedAtBlockHeight) &&
+    value.lastEventType === 'domain_offer_placed' &&
+    isNullableString(value.txId) &&
+    isNullableNumber(value.blockHeight)
+  )
+}
+
+export function isIndexedMarketplaceRefund(value: unknown): value is IndexedMarketplaceRefund {
+  return (
+    isRecord(value) &&
+    typeof value.authority === 'string' &&
+    isNullableString(value.recipient) &&
+    isNonNegativeInteger(value.amountLux) &&
+    typeof value.lastEventType === 'string' &&
+    isNullableString(value.txId) &&
+    isNullableNumber(value.blockHeight)
   )
 }
 
@@ -233,7 +334,7 @@ export function isIndexedTreasuryState(value: unknown): value is IndexedTreasury
       value.lastEventType === null
     ) &&
     isNullableString(value.txId) &&
-    (typeof value.blockHeight === 'number' || value.blockHeight === null) &&
+    (isNonNegativeInteger(value.blockHeight) || value.blockHeight === null) &&
     Array.isArray(value.claims) &&
     value.claims.every(isIndexedTreasuryClaim)
   )
@@ -251,7 +352,7 @@ export function isIndexedReferralState(value: unknown): value is IndexedReferral
     value.recentActivity.every((activity) => (
       isRecord(activity) &&
       isNullableString(activity.txId) &&
-      (typeof activity.blockHeight === 'number' || activity.blockHeight === null) &&
+      (isNonNegativeInteger(activity.blockHeight) || activity.blockHeight === null) &&
       isNonNegativeInteger(activity.amountLux) &&
       (activity.kind === 'accrual' || activity.kind === 'claim') &&
       isNullableString(activity.counterparty)
@@ -272,7 +373,7 @@ export function isIndexedFeeConfig(value: unknown): value is IndexedFeeConfig {
     isNonNegativeInteger(value.updatedAt) &&
     (value.operator === null || typeof value.operator === 'string' || isDuskPrincipal(value.operator)) &&
     isNullableString(value.txId) &&
-    (typeof value.blockHeight === 'number' || value.blockHeight === null)
+    (isNonNegativeInteger(value.blockHeight) || value.blockHeight === null)
   )
 }
 
@@ -289,7 +390,7 @@ function isIndexedTreasuryClaim(value: unknown) {
     isNonNegativeInteger(value.amountLux) &&
     isNonNegativeInteger(value.remainingLux) &&
     isNullableString(value.txId) &&
-    (typeof value.blockHeight === 'number' || value.blockHeight === null)
+    (isNonNegativeInteger(value.blockHeight) || value.blockHeight === null)
   )
 }
 
@@ -315,7 +416,7 @@ function isSearchIssue(value: unknown): value is SearchIssue {
 }
 
 function isNonNegativeInteger(value: unknown) {
-  return Number.isInteger(value) && Number(value) >= 0
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
 }
 
 function isNullableString(value: unknown): value is string | null {
@@ -323,5 +424,5 @@ function isNullableString(value: unknown): value is string | null {
 }
 
 function isNullableNumber(value: unknown): value is number | null | undefined {
-  return typeof value === 'number' || value === null || value === undefined
+  return isNonNegativeInteger(value) || value === null || value === undefined
 }

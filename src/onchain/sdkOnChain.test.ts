@@ -18,6 +18,24 @@ const manager = `0x${'10'.repeat(32)}`
 const commitment = `0x${'31'.repeat(32)}`
 
 describe('Dusk Domains on-chain SDK reads', () => {
+  it('exposes the canonical node height used by lifecycle checks', async () => {
+    const { client } = onChainClient(() => nameResponse(), 3_718_430)
+
+    await expect(client.getCurrentBlockHeight()).resolves.toEqual({
+      ok: true,
+      value: 3_718_430,
+    })
+  })
+
+  it('fails closed when canonical node height is unavailable', async () => {
+    const { client } = onChainClient(() => nameResponse(), () => null)
+
+    await expect(client.getCurrentBlockHeight()).resolves.toMatchObject({
+      ok: false,
+      error: { code: 'lifecycle_unavailable' },
+    })
+  })
+
   it('normalizes names and reads canonical name ownership from the core contract', async () => {
     const { client, calls } = onChainClient((call) => {
       expect(call.functionName).toBe('get_name')
@@ -338,6 +356,7 @@ function nameResponse(options: { expiresAtBlock?: number; graceEndsAtBlock?: num
   const expiresAtBlock = options.expiresAtBlock ?? 12_345
   return {
     node: hexBytes(node),
+    marketplace_transferable: true,
     record: {
       label: 'aurora',
       owner: hexBytes(owner),

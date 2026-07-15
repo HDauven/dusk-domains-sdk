@@ -4,6 +4,9 @@ import type {
   CoreCommitRuntimeArgs,
   CoreCompleteRegistrationRuntimeArgs,
   CoreCreateSubnameRuntimeArgs,
+  CoreEscrowAuctionRuntimeArgs,
+  CoreEscrowFixedSaleRuntimeArgs,
+  CoreAcceptMarketplaceOfferRuntimeArgs,
   CoreInitArgs,
   CoreMutateRecordsSenderRuntimeArgs,
   CoreRenewRuntimeArgs,
@@ -12,6 +15,16 @@ import type {
   CoreSetRecordSenderRuntimeArgs,
   CoreSetReferralConfigRuntimeArgs,
   CoreUpdateAuthoritiesRuntimeArgs,
+  MarketplaceAuctionNodeArgs,
+  MarketplaceBuyFixedSaleRuntimeArgs,
+  MarketplaceClaimRefundRuntimeArgs,
+  MarketplaceInitArgs,
+  MarketplaceOfferArgs,
+  MarketplacePlaceOfferRuntimeArgs,
+  MarketplacePlaceBidRuntimeArgs,
+  MarketplaceReadRefundArgs,
+  MarketplaceSetFeeRuntimeArgs,
+  MarketplaceUpdateOperatorRuntimeArgs,
   TreasuryClaimAllReferralRewardsRuntimeArgs,
   TreasuryClaimReferralRewardRuntimeArgs,
   TreasuryClaimRuntimeArgs,
@@ -30,7 +43,7 @@ export function isCoreInitArgs(value: unknown): value is CoreInitArgs {
     typeof value.treasuryContract === 'string' &&
     typeof value.recordSourceContract === 'string' &&
     isDuskPrincipal(value.operator) &&
-    typeof value.referralRewardBps === 'number'
+    isNonNegativeSafeInteger(value.referralRewardBps)
   )
 }
 
@@ -39,19 +52,19 @@ export function isCoreSetReferralConfigRuntimeArgs(
 ): value is CoreSetReferralConfigRuntimeArgs {
   return (
     isRecord(value) &&
-    typeof value.referralRewardBps === 'number'
+    isNonNegativeSafeInteger(value.referralRewardBps)
   )
 }
 
 export function isCoreSetFeeConfigRuntimeArgs(value: unknown): value is CoreSetFeeConfigRuntimeArgs {
   return (
     isRecord(value) &&
-    typeof value.threeCharYearLux === 'number' &&
-    typeof value.fourCharYearLux === 'number' &&
-    typeof value.fivePlusYearLux === 'number' &&
-    typeof value.referralRewardBps === 'number' &&
-    typeof value.renewalReferralRewardBps === 'number' &&
-    typeof value.premiumReferralRewardBps === 'number'
+    isNonNegativeSafeInteger(value.threeCharYearLux) &&
+    isNonNegativeSafeInteger(value.fourCharYearLux) &&
+    isNonNegativeSafeInteger(value.fivePlusYearLux) &&
+    isNonNegativeSafeInteger(value.referralRewardBps) &&
+    isNonNegativeSafeInteger(value.renewalReferralRewardBps) &&
+    isNonNegativeSafeInteger(value.premiumReferralRewardBps)
   )
 }
 
@@ -64,8 +77,8 @@ export function isCoreCompleteRegistrationRuntimeArgs(
     typeof value.secret === 'string' &&
     typeof value.node === 'string' &&
     typeof value.label === 'string' &&
-    typeof value.durationYears === 'number' &&
-    typeof value.feeLux === 'number' &&
+    isNonNegativeSafeInteger(value.durationYears) &&
+    isNonNegativeSafeInteger(value.feeLux) &&
     Array.isArray(value.records) &&
     value.records.every(isResolverRecordArgs) &&
     (
@@ -84,8 +97,8 @@ export function isCoreRenewRuntimeArgs(value: unknown): value is CoreRenewRuntim
   return (
     isRecord(value) &&
     typeof value.node === 'string' &&
-    typeof value.durationYears === 'number' &&
-    typeof value.feeLux === 'number'
+    isNonNegativeSafeInteger(value.durationYears) &&
+    isNonNegativeSafeInteger(value.feeLux)
   )
 }
 
@@ -108,7 +121,7 @@ export function isCoreCreateSubnameRuntimeArgs(value: unknown): value is CoreCre
     typeof value.label === 'string' &&
     typeof value.owner === 'string' &&
     typeof value.manager === 'string' &&
-    typeof value.expiresAt === 'number' &&
+    isNonNegativeSafeInteger(value.expiresAt) &&
     typeof value.expiryPolicy === 'string' &&
     typeof value.revocationPolicy === 'string'
   )
@@ -149,7 +162,7 @@ export function isCoreMutateRecordsSenderRuntimeArgs(value: unknown): value is C
         (
           mutation.action === 'set' &&
           typeof mutation.value === 'string' &&
-          typeof mutation.ttlSeconds === 'number'
+          isNonNegativeSafeInteger(mutation.ttlSeconds)
         ) ||
         mutation.action === 'clear'
       )
@@ -185,6 +198,43 @@ export function isTreasuryInitArgs(value: unknown): value is TreasuryInitArgs {
   )
 }
 
+export function isCoreEscrowFixedSaleRuntimeArgs(value: unknown): value is CoreEscrowFixedSaleRuntimeArgs {
+  return (
+    isRecord(value) &&
+    typeof value.node === 'string' &&
+    typeof value.marketplaceContract === 'string' &&
+    typeof value.name === 'string' &&
+    isNonNegativeSafeInteger(value.priceLux) &&
+    (value.privateBuyer == null || typeof value.privateBuyer === 'string') &&
+    isNonNegativeSafeInteger(value.expiresAt) &&
+    typeof value.sellerRecipient === 'string'
+  )
+}
+
+export function isCoreEscrowAuctionRuntimeArgs(value: unknown): value is CoreEscrowAuctionRuntimeArgs {
+  return (
+    isRecord(value) &&
+    typeof value.node === 'string' &&
+    typeof value.marketplaceContract === 'string' &&
+    typeof value.name === 'string' &&
+    isNonNegativeSafeInteger(value.reservePriceLux) &&
+    isNonNegativeSafeInteger(value.durationBlocks) &&
+    typeof value.sellerRecipient === 'string'
+  )
+}
+
+export function isCoreAcceptMarketplaceOfferRuntimeArgs(
+  value: unknown,
+): value is CoreAcceptMarketplaceOfferRuntimeArgs {
+  return (
+    isRecord(value) &&
+    typeof value.node === 'string' &&
+    typeof value.marketplaceContract === 'string' &&
+    typeof value.buyerAuthority === 'string' &&
+    typeof value.sellerRecipient === 'string'
+  )
+}
+
 export function isTreasuryUpdateOperatorRuntimeArgs(value: unknown): value is TreasuryUpdateOperatorRuntimeArgs {
   return (
     isRecord(value) &&
@@ -196,7 +246,7 @@ export function isTreasuryUpdateOperatorRuntimeArgs(value: unknown): value is Tr
 export function isTreasuryClaimRuntimeArgs(value: unknown): value is TreasuryClaimRuntimeArgs {
   return (
     isRecord(value) &&
-    typeof value.amountLux === 'number'
+    isNonNegativeSafeInteger(value.amountLux)
   )
 }
 
@@ -205,7 +255,7 @@ export function isTreasuryClaimReferralRewardRuntimeArgs(
 ): value is TreasuryClaimReferralRewardRuntimeArgs {
   return (
     isRecord(value) &&
-    typeof value.amountLux === 'number' &&
+    isNonNegativeSafeInteger(value.amountLux) &&
     typeof value.recipient === 'string'
   )
 }
@@ -217,6 +267,88 @@ export function isTreasuryClaimAllReferralRewardsRuntimeArgs(
     isRecord(value) &&
     typeof value.recipient === 'string'
   )
+}
+
+export function isMarketplaceInitArgs(value: unknown): value is MarketplaceInitArgs {
+  return (
+    isRecord(value) &&
+    typeof value.coreContract === 'string' &&
+    typeof value.treasuryContract === 'string' &&
+    typeof value.marketplaceAuthority === 'string' &&
+    typeof value.operator === 'string' &&
+    isNonNegativeSafeInteger(value.feeBps)
+  )
+}
+
+export function isMarketplaceSetFeeRuntimeArgs(value: unknown): value is MarketplaceSetFeeRuntimeArgs {
+  return isRecord(value) && isNonNegativeSafeInteger(value.feeBps)
+}
+
+export function isMarketplaceUpdateOperatorRuntimeArgs(
+  value: unknown,
+): value is MarketplaceUpdateOperatorRuntimeArgs {
+  return isRecord(value) && typeof value.operator === 'string'
+}
+
+export function isMarketplaceBuyFixedSaleRuntimeArgs(
+  value: unknown,
+): value is MarketplaceBuyFixedSaleRuntimeArgs {
+  return (
+    isRecord(value) &&
+    typeof value.node === 'string' &&
+    isNonNegativeSafeInteger(value.priceLux) &&
+    (value.buyerManager == null || typeof value.buyerManager === 'string')
+  )
+}
+
+export function isMarketplaceAuctionNodeArgs(
+  value: unknown,
+): value is MarketplaceAuctionNodeArgs {
+  return isRecord(value) && typeof value.node === 'string'
+}
+
+export function isMarketplacePlaceBidRuntimeArgs(
+  value: unknown,
+): value is MarketplacePlaceBidRuntimeArgs {
+  return (
+    isRecord(value) &&
+    typeof value.node === 'string' &&
+    isNonNegativeSafeInteger(value.amountLux) &&
+    (
+      value.bidderManager == null ||
+      typeof value.bidderManager === 'string'
+    )
+  )
+}
+
+export function isMarketplacePlaceOfferRuntimeArgs(
+  value: unknown,
+): value is MarketplacePlaceOfferRuntimeArgs {
+  return (
+    isRecord(value) &&
+    typeof value.node === 'string' &&
+    isNonNegativeSafeInteger(value.amountLux) &&
+    isNonNegativeSafeInteger(value.expiresAt) &&
+    (value.buyerManager == null || typeof value.buyerManager === 'string')
+  )
+}
+
+export function isMarketplaceOfferArgs(value: unknown): value is MarketplaceOfferArgs {
+  return (
+    isRecord(value) &&
+    typeof value.node === 'string' &&
+    typeof value.buyerAuthority === 'string'
+  )
+}
+
+export function isMarketplaceClaimRefundRuntimeArgs(
+  value: unknown,
+): value is MarketplaceClaimRefundRuntimeArgs {
+  return isRecord(value) && Object.keys(value).length === 0
+}
+
+export function isMarketplaceReadRefundArgs(value: unknown): value is MarketplaceReadRefundArgs {
+  return isRecord(value) && typeof value.authority === 'string'
 }
 
 export function isDuskPrincipal(value: unknown): value is DuskPrincipal {
@@ -234,7 +366,11 @@ function isResolverRecordArgs(value: unknown) {
     typeof value.key === 'string' &&
     typeof value.value === 'string' &&
     typeof value.updatedAt === 'string' &&
-    typeof value.ttlSeconds === 'number' &&
+    isNonNegativeSafeInteger(value.ttlSeconds) &&
     typeof value.visibility === 'string'
   )
+}
+
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
 }

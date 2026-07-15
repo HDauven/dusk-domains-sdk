@@ -7,6 +7,7 @@ import {
   isDuskDomainsIndexedEventType as isKnownDuskDomainsIndexedEventType,
   isFeeConfigEventType,
   isLifecycleEventType,
+  isMarketplaceEventType,
   isReferralEventType,
   isResolverEventType,
   isReverseEventType,
@@ -18,6 +19,11 @@ import type {
   IndexedFeeConfig,
   IndexedReferralState,
   IndexedRegistrationCommitment,
+  IndexedMarketplaceConfig,
+  IndexedMarketplaceFixedSale,
+  IndexedMarketplaceAuction,
+  IndexedMarketplaceOffer,
+  IndexedMarketplaceRefund,
   IndexedReversePrimaryName,
   IndexedSubname,
   IndexedTreasuryState,
@@ -29,6 +35,7 @@ import type {
   ReverseRegistryEvent,
   SubnameRegistryEvent,
   TreasuryEvent,
+  MarketplaceEvent,
 } from './indexerTypes'
 import type { LifecycleEventProjector } from './indexerProjectorTypes'
 
@@ -43,6 +50,7 @@ export type DuskDomainsIndexedEvent =
   | TreasuryEvent
   | ReferralEvent
   | FeeConfigEvent
+  | MarketplaceEvent
 
 export type DuskDomainsIndexedEventEnvelope = {
   event: DuskDomainsIndexedEvent
@@ -57,6 +65,11 @@ export type DuskDomainsIndexedEventApplication =
   | IndexedTreasuryState
   | IndexedReferralState
   | IndexedFeeConfig
+  | IndexedMarketplaceConfig
+  | IndexedMarketplaceFixedSale
+  | IndexedMarketplaceAuction
+  | IndexedMarketplaceOffer
+  | IndexedMarketplaceRefund
   | null
 
 export const createDuskDomainsProjector = createLifecycleEventProjector
@@ -89,6 +102,9 @@ export function applyDuskDomainsIndexedEvent(
   }
   if (isFeeConfigEvent(event)) {
     return projector.applyFeeConfig(event, meta)
+  }
+  if (isMarketplaceEvent(event)) {
+    return projector.applyMarketplace(event, meta)
   }
 
   if (isLifecycleEvent(event)) {
@@ -157,6 +173,10 @@ function isReferralEvent(event: DuskDomainsIndexedEvent): event is ReferralEvent
 
 function isFeeConfigEvent(event: DuskDomainsIndexedEvent): event is FeeConfigEvent {
   return isFeeConfigEventType(event.type)
+}
+
+function isMarketplaceEvent(event: DuskDomainsIndexedEvent): event is MarketplaceEvent {
+  return isMarketplaceEventType(event.type)
 }
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {

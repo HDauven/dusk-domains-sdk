@@ -25,6 +25,16 @@ describe('Dusk Domains activity entries', () => {
       ['subname_created', 'Subdomain created'],
       ['subname_delegated', 'Subdomain delegated'],
       ['subname_revoked', 'Subdomain revoked'],
+      ['domain_fixed_sale_opened', 'Listed for sale'],
+      ['domain_fixed_sale_closed', 'Sale closed'],
+      ['domain_fixed_sale_filled', 'Domain sold'],
+      ['domain_auction_created', 'Auction created'],
+      ['domain_bid_placed', 'Bid placed'],
+      ['domain_auction_cancelled', 'Auction canceled'],
+      ['domain_auction_settled', 'Auction settled'],
+      ['domain_offer_placed', 'Offer placed'],
+      ['domain_offer_closed', 'Offer closed'],
+      ['domain_offer_accepted', 'Offer accepted'],
     ]))
   })
 

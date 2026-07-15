@@ -47,6 +47,27 @@ describe('Dusk Domains indexer client validation', () => {
     await expect(client.resolveForward('aurora.dusk')).rejects.toThrow('invalid forward-resolution response')
   })
 
+  it('rejects malformed marketplace auction responses', async () => {
+    const client = createDuskDomainsIndexerClient({
+      baseUrl: '/api/dusk-domains',
+      fetch: async (url) => Response.json(String(url).includes('/auction?') ? { node: '0x1' } : [{ node: '0x1' }]),
+    })
+
+    await expect(client.getMarketplaceAuctions()).rejects.toThrow('invalid marketplace auction response')
+    await expect(client.getMarketplaceAuction('0x1')).rejects.toThrow('invalid marketplace auction response')
+  })
+
+  it('rejects marketplace amounts outside JavaScript safe integers', async () => {
+    const client = createDuskDomainsIndexerClient({
+      baseUrl: '/api/dusk-domains',
+      fetch: async () => Response.json([marketplaceAuctionPayload({
+        reservePriceLux: 9_007_199_254_740_992,
+      })]),
+    })
+
+    await expect(client.getMarketplaceAuctions()).rejects.toThrow('invalid marketplace auction response')
+  })
+
   it('includes structured indexer error payloads in failed request messages', async () => {
     const client = createDuskDomainsIndexerClient({
       baseUrl: '/api/dusk-domains',
@@ -83,6 +104,29 @@ function nameSummaryPayload(overrides: Record<string, unknown> = {}) {
     primaryStatus: 'verified',
     subnameCount: 1,
     activityCount: 1,
+    ...overrides,
+  }
+}
+
+function marketplaceAuctionPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    node: `0x${'18'.repeat(32)}`,
+    name: 'aurora.dusk',
+    sellerAuthority: `0x${'22'.repeat(32)}`,
+    reservePriceLux: 25_000_000_000,
+    durationBlocks: 8_640,
+    startDeadlineBlockHeight: 20_000,
+    feeBps: 250,
+    startBlockHeight: null,
+    endBlockHeight: null,
+    highestBid: null,
+    bidCount: 0,
+    createdAtBlockHeight: 1_000,
+    marketplaceContractId: `0x${'33'.repeat(32)}`,
+    escrowed: true,
+    txId: null,
+    blockHeight: 1_000,
+    lastEventType: 'domain_auction_created',
     ...overrides,
   }
 }

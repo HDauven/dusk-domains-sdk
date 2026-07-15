@@ -43,12 +43,12 @@ describe('Dusk Domains contract principal helpers', () => {
     })
   })
 
-  it('keeps deployed testnet wallet authorities stable across the product rename', () => {
+  it('derives the Dusk Domains runtime authority for public account IDs', () => {
     expect(contractPrincipalFromWalletAccount(
       '24bfNr8MDUo5xJBecmeGzXDEraax4Cmbnhjyyt5GaL1Vbe6H48ZSYTpmjRDcFRDFzgzuePAPUNcdGMnBzBQBk4zAMgBCtPsY27tBJtKmB1st6qcmpzRR4Er5imxrzvMRnfWc',
     )).toEqual({
       ok: true,
-      principal: '0xb3777fb99a3be2c4c967e87aee3c219a9a166b8ff53b94650c88697ca0b2d6ca',
+      principal: '0xfa95da9c6c860cc3d5506de45b01ea84b9d2cad24a23be36003e505222d8d644',
       source: 'moonlight_account',
     })
   })

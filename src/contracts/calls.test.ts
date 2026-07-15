@@ -13,6 +13,9 @@ import {
   coreFeeConfigCall,
   coreGetNameCall,
   coreInitCall,
+  coreAcceptMarketplaceOfferRuntimeCall,
+  coreEscrowAuctionRuntimeCall,
+  coreEscrowFixedSaleRuntimeCall,
   coreMutateRecordsSenderRuntimeCall,
   corePendingCommitmentCall,
   coreReadPrimaryNameCall,
@@ -27,6 +30,25 @@ import {
   decodedDuskDomainContext,
   duskDomainCallDepositLux,
   encodeDuskDomainCall,
+  marketplaceBuyFixedSaleRuntimeCall,
+  marketplaceCancelFixedSaleRuntimeCall,
+  marketplaceCancelAuctionRuntimeCall,
+  marketplaceCancelOfferRuntimeCall,
+  marketplaceClaimRefundRuntimeCall,
+  marketplaceExpireAuctionRuntimeCall,
+  marketplaceExpireFixedSaleRuntimeCall,
+  marketplaceExpireOfferRuntimeCall,
+  marketplaceInitCall,
+  marketplacePlaceBidRuntimeCall,
+  marketplacePlaceOfferRuntimeCall,
+  marketplaceReadAuctionCall,
+  marketplaceReadConfigCall,
+  marketplaceReadFixedSaleCall,
+  marketplaceReadOfferCall,
+  marketplaceReadRefundCall,
+  marketplaceSetFeeRuntimeCall,
+  marketplaceSettleAuctionRuntimeCall,
+  marketplaceUpdateOperatorRuntimeCall,
   prepareDuskDomainContractCall,
   toDuskDomainWireArgs,
   treasuryClaimAllReferralRewardsRuntimeCall,
@@ -51,6 +73,7 @@ const secret = `0x${'03'.repeat(32)}`
 const owner = `0x${'09'.repeat(32)}`
 const treasuryContract = `0x${'43'.repeat(32)}`
 const coreContract = `0x${'44'.repeat(32)}`
+const marketplaceContract = `0x${'45'.repeat(32)}`
 const recipient = '244Sywxj7PuMHpcPxemaXLcrY5rPgztra6H9Vz8cU1Ro5v23SxKTfVqr2yS7NXAXE1iq59ndn4aMZmYxuzu3Te3e9fokQKTUkYvFxYg2P2E8EEg1gWUbs3AFL2aNx62HQd7r'
 const endpointValue = recipient
 const endpointBytes = Array.from(decodeBase58(endpointValue) ?? [])
@@ -127,6 +150,29 @@ function schemaCalls(): DuskDomainCallMetadata[] {
       owner,
       manager: `0x${'10'.repeat(32)}`,
     }),
+    coreEscrowFixedSaleRuntimeCall({
+      node,
+      marketplaceContract,
+      name: 'aurora.dusk',
+      priceLux: 25_000_000_000,
+      privateBuyer: null,
+      expiresAt: 20_000,
+      sellerRecipient: recipient,
+    }),
+    coreEscrowAuctionRuntimeCall({
+      node,
+      marketplaceContract,
+      name: 'aurora.dusk',
+      reservePriceLux: 40_000_000_000,
+      durationBlocks: 8_640,
+      sellerRecipient: recipient,
+    }),
+    coreAcceptMarketplaceOfferRuntimeCall({
+      node,
+      marketplaceContract,
+      buyerAuthority: owner,
+      sellerRecipient: recipient,
+    }),
     coreSetRecordSenderRuntimeCall({
       node,
       record: {
@@ -191,6 +237,35 @@ function schemaCalls(): DuskDomainCallMetadata[] {
     treasuryClaimReferralRewardRuntimeCall({ amountLux: 1_000_000_000, recipient }),
     treasuryClaimAllReferralRewardsRuntimeCall({ recipient }),
     treasuryReadStateCall(),
+    marketplaceInitCall({
+      coreContract,
+      treasuryContract,
+      marketplaceAuthority: owner,
+      operator: owner,
+      feeBps: 250,
+    }),
+    marketplaceSetFeeRuntimeCall({ feeBps: 300 }),
+    marketplaceUpdateOperatorRuntimeCall({ operator: owner }),
+    marketplaceBuyFixedSaleRuntimeCall({ node, priceLux: 25_000_000_000, buyerManager: owner }),
+    marketplaceCancelFixedSaleRuntimeCall({ node }),
+    marketplaceExpireFixedSaleRuntimeCall({ node }),
+    marketplacePlaceBidRuntimeCall({
+      node,
+      amountLux: 25_000_000_000,
+      bidderManager: owner,
+    }),
+    marketplaceCancelAuctionRuntimeCall({ node }),
+    marketplaceExpireAuctionRuntimeCall({ node }),
+    marketplaceSettleAuctionRuntimeCall({ node }),
+    marketplacePlaceOfferRuntimeCall({ node, amountLux: 30_000_000_000, expiresAt: 20_000, buyerManager: owner }),
+    marketplaceCancelOfferRuntimeCall({ node }),
+    marketplaceExpireOfferRuntimeCall({ node, buyerAuthority: owner }),
+    marketplaceClaimRefundRuntimeCall(),
+    marketplaceReadConfigCall(),
+    marketplaceReadFixedSaleCall({ node }),
+    marketplaceReadAuctionCall({ node }),
+    marketplaceReadOfferCall({ node, buyerAuthority: owner }),
+    marketplaceReadRefundCall({ authority: owner }),
   ]
 }
 
@@ -215,8 +290,8 @@ describe('Dusk Domains contract call helpers', () => {
     expect(registrationCommitWindow(100, 8_741)).toMatchObject({ status: 'stale' })
   })
 
-  it('keeps the public contract surface to core and treasury', () => {
-    expect(Object.keys(DUSK_DOMAINS_CONTRACTS)).toEqual(['core', 'treasury'])
+  it('keeps the public contract surface scoped to protocol contracts', () => {
+    expect(Object.keys(DUSK_DOMAINS_CONTRACTS)).toEqual(['core', 'treasury', 'marketplace'])
   })
 
   it('encodes core registration payloads for the data-driver schema', () => {
@@ -344,7 +419,7 @@ describe('Dusk Domains contract call helpers', () => {
     })).toBe(raw)
   })
 
-  it('attaches deposits only to paid core registration and renewal calls', async () => {
+  it('attaches deposits only to calls that transfer value', async () => {
     const app: DuskConnectAppLike = {
       async readContract() {
         throw new Error('unused')
@@ -363,6 +438,13 @@ describe('Dusk Domains contract call helpers', () => {
       deposit: '50000000000',
     })
     expect(duskDomainCallDepositLux(coreRenewRuntimeCall({ node, durationYears: 1, feeLux: 50_000_000_000 }))).toBe('50000000000')
+    expect(duskDomainCallDepositLux(marketplaceBuyFixedSaleRuntimeCall({ node, priceLux: 25_000_000_000 }))).toBe('25000000000')
+    expect(duskDomainCallDepositLux(marketplacePlaceBidRuntimeCall({ node, amountLux: 40_000_000_000 }))).toBe('40000000000')
+    expect(duskDomainCallDepositLux(marketplacePlaceOfferRuntimeCall({ node, amountLux: 30_000_000_000, expiresAt: 20_000 }))).toBe('30000000000')
+    expect(() => duskDomainCallDepositLux(marketplaceBuyFixedSaleRuntimeCall({
+      node,
+      priceLux: Number.MAX_SAFE_INTEGER + 1,
+    }))).toThrow('safe integer Lux fee')
     expect(duskDomainCallDepositLux(coreCommitRuntimeCall({ commitment }))).toBeUndefined()
     expect(duskDomainCallDepositLux(treasuryClaimRuntimeCall({ amountLux: 1_000_000_000 }))).toBeUndefined()
   })
@@ -443,8 +525,11 @@ describe('Dusk Domains contract call helpers', () => {
     const driverFiles = {
       core: 'dusk-domains-core.data-driver.wasm',
       treasury: 'dusk-domains-treasury.data-driver.wasm',
+      marketplace: 'dusk-domains-marketplace.data-driver.wasm',
     } as const
-    const publicContractsDir = resolve(process.cwd(), 'public/contracts')
+    const publicContractsDir = resolve(
+      process.env.DUSK_DOMAINS_PUBLIC_CONTRACTS_DIR ?? resolve(process.cwd(), 'public/contracts'),
+    )
 
     if (!Object.values(driverFiles).every((file) => existsSync(resolve(publicContractsDir, file)))) {
       console.warn('Skipping generated data-driver call validation; run `npm run deploy:contracts -- --build --validate-drivers` first.')
@@ -458,14 +543,22 @@ describe('Dusk Domains contract call helpers', () => {
     }))) as Record<keyof typeof driverFiles, DuskDataDriverLike & { getSchema?: () => { functions?: Array<{ name: string }> } }>
 
     for (const [contract, driver] of Object.entries(drivers) as Array<[keyof typeof driverFiles, DuskDataDriverLike & { getSchema?: () => { functions?: Array<{ name: string }> } }]>) {
+      const internalContractFunctions = new Set([
+        'receive_fee',
+        'accrue_referral_reward',
+        'finalize_marketplace_transfer_runtime',
+        'open_fixed_sale_from_core',
+        'open_auction_from_core',
+        'accept_offer_from_core',
+      ])
       const schemaFunctions = driver.getSchema?.().functions?.map((fn) => fn.name).filter((name) => (
-        !['receive_fee', 'accrue_referral_reward'].includes(name)
+        !internalContractFunctions.has(name)
       )).sort() ?? []
       const configuredFunctions = Object.keys(DUSK_DOMAINS_CONTRACTS[contract].methodSigs).sort()
       expect(schemaFunctions).toEqual(configuredFunctions)
     }
 
-    for (const call of schemaCalls()) {
+    for (const call of schemaCalls().filter((call) => call.contract in drivers)) {
       const schemaFunctions = drivers[call.contract].getSchema?.().functions?.map((fn) => fn.name) ?? []
       expect(schemaFunctions).toContain(call.functionName)
       try {
