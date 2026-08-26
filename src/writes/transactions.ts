@@ -70,7 +70,7 @@ export async function submitDuskDomainWrite(
   call: DuskDomainCallMetadata,
   options: SubmitDuskDomainWriteOptions = {},
 ): Promise<DuskDomainTxState> {
-  const context = decodedDuskDomainContext(call, options.contracts)
+  const context = decodedDuskDomainContext(call)
   const txCall = txCallFrom(call)
   try {
     emit(options, { status: 'preparing', context, call: txCall })

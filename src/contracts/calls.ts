@@ -33,7 +33,7 @@ export async function readDuskDomainContract(
     contract: requireDuskDomainContract(contracts, call.contract),
     functionName: call.functionName,
     args: toDuskDomainWireArgs(call),
-    decodedContext: decodedDuskDomainContext(call, contracts),
+    decodedContext: decodedDuskDomainContext(call),
   })
 }
 
@@ -48,7 +48,7 @@ export async function prepareDuskDomainContractCall(
     functionName: call.functionName,
     args: toDuskDomainWireArgs(call),
     ...(deposit ? { deposit } : {}),
-    decodedContext: decodedDuskDomainContext(call, contracts),
+    decodedContext: decodedDuskDomainContext(call),
   })
 }
 
@@ -64,7 +64,7 @@ export async function writeDuskDomainContract(
     functionName: call.functionName,
     args: toDuskDomainWireArgs(call),
     ...(deposit ? { deposit } : {}),
-    decodedContext: decodedDuskDomainContext(call, contracts),
+    decodedContext: decodedDuskDomainContext(call),
     preparedCall,
   })
 }
