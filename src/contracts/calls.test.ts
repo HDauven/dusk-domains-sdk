@@ -460,6 +460,12 @@ describe('Dusk Domains contract call helpers', () => {
     expect(decodedDuskDomainContext(treasuryClaimAllRuntimeCall())).toMatchObject({
       title: 'Claim all collected fees',
     })
+    expect(decodedDuskDomainContext(
+      treasuryClaimAllRuntimeCall(),
+      DUSK_DOMAINS_CONTRACTS,
+    )).toMatchObject({
+      title: 'Claim all collected fees',
+    })
     expect(decodedDuskDomainContext(treasuryUpdateOperatorRuntimeCall({
       operator: operatorPrincipal(),
       operatorRecipient: recipient,
