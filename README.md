@@ -110,6 +110,10 @@ npm run typecheck
 npm run build
 ```
 
+`npm run build` also regenerates the committed plain-Node event catalog from
+`src/indexer/events/indexerEventCatalog.ts`. Keep its `.mjs` output committed for
+raw GitHub archive installs; the public `.d.mts` declarations remain unchanged.
+
 ## License
 
 MIT
