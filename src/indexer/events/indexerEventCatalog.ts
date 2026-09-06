@@ -87,6 +87,20 @@ export const duskDomainsIndexedEventTypes = [
   ...marketplaceEventTypes,
 ] as const
 
+// Keep the TypeScript and plain-Node catalogs equally immutable.
+for (const eventTypes of [
+  controllerEventTypes,
+  lifecycleEventTypes,
+  resolverEventTypes,
+  reverseEventTypes,
+  subnameEventTypes,
+  treasuryEventTypes,
+  referralEventTypes,
+  feeConfigEventTypes,
+  marketplaceEventTypes,
+  duskDomainsIndexedEventTypes,
+]) Object.freeze(eventTypes)
+
 const controllerEventTypeSet = new Set<string>(controllerEventTypes)
 const lifecycleEventTypeSet = new Set<string>(lifecycleEventTypes)
 const resolverEventTypeSet = new Set<string>(resolverEventTypes)

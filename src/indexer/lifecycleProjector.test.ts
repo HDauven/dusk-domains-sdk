@@ -3,6 +3,24 @@ import { createLifecycleEventProjector } from './indexer'
 import { createResolverRecord } from '../core/records'
 
 describe('Dusk Domains lifecycle event projector', () => {
+  it('retains missing renewal/expiry heights but resets them on registration', () => {
+    const projector = createLifecycleEventProjector()
+    const event = {
+      node: `0x${'33'.repeat(32)}`, label: 'aurora', actor: 'owner', owner: 'owner',
+      expiresAt: '2040-01-01T00:00:00Z', graceEndsAt: '2040-02-01T00:00:00Z',
+      observedAt: '2040-01-02T00:00:00Z', feeLux: 1,
+    }
+    for (const type of ['name_registered', 'name_renewed', 'name_expired'] as const) {
+      projector.apply({ ...event, type: 'name_registered', expiresAtBlockHeight: 100, graceEndsAtBlockHeight: 200 })
+      projector.apply({ ...event, type })
+      expect(projector.getNameByNode(event.node)).toMatchObject({
+        expiresAtBlockHeight: type === 'name_registered' ? null : 100,
+        graceEndsAtBlockHeight: type === 'name_registered' ? null : 200,
+        status: type === 'name_expired' ? 'expired' : 'active',
+      })
+    }
+  })
+
   it('projects registrar lifecycle events into name state and activity history', () => {
     const projector = createLifecycleEventProjector()
     const node = `0x${'33'.repeat(32)}`
