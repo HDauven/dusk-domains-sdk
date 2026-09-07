@@ -3,7 +3,7 @@ import {
   createDuskDomainsConnectApp,
   type DuskDomainsContractCallParams,
   type DuskDomainsWriteContractCallParams,
-} from '../connect'
+} from '@duskdomains/sdk/connect-app'
 import {
   DUSK_DOMAINS_CONTRACTS,
   coreCompleteRegistrationRuntimeCall,

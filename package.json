@@ -23,6 +23,10 @@
       "types": "./src/write-proof.ts",
       "import": "./src/write-proof.ts"
     },
+    "./connect-app": {
+      "types": "./src/wallet/duskConnectApp.ts",
+      "import": "./src/wallet/duskConnectApp.ts"
+    },
     "./marketplace": {
       "types": "./src/marketplace.ts",
       "import": "./src/marketplace.ts"
@@ -39,7 +43,8 @@
     "!src/**/*test-fixtures*",
     "!src/connect.ts",
     "!src/local-dev.ts",
-    "!src/wallet",
+    "!src/wallet/duskConnect.ts",
+    "!src/wallet/duskDomainsConnectRuntime.ts",
     "!src/dev",
     "docs",
     "README.md",
