@@ -81,7 +81,9 @@ retain the full contract `u64` as `bigint`.
 - `@duskdomains/sdk/marketplace`: marketplace constants, call builders and indexed models.
 - `@duskdomains/sdk/event-catalog`: event names for independent indexer implementations.
 
-The JSR package intentionally excludes first-party browser wallet adapters, local development shims and write-proof tooling. Those remain repository-internal until their public contracts are stable.
+`@duskdomains/sdk/connect-app` exports `createDuskDomainsConnectApp` and its transport types. It adapts direct contract methods or the request fallback, preserving prepared transaction payloads and wallet display context, without a runtime dependency on a wallet library.
+
+Browser wallet creation/runtime helpers and local development shims remain repository-internal.
 
 ## Source Layout
 
