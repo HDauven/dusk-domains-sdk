@@ -1,6 +1,7 @@
 import { decodeBase58 } from '../core/principal'
 import type { DuskPrincipal } from '../core/principal'
 import type { ResolverRecord } from '../core/records'
+import { DUSK_DOMAINS_CONTRACTS } from './callContracts'
 import {
   isCoreClearPrimaryNameRuntimeArgs,
   isCoreClearRecordSenderRuntimeArgs,
@@ -394,55 +395,14 @@ const noArgDuskDomainCalls = new Set([
   'marketplace.read_config',
 ])
 
-const knownDuskDomainCalls = new Set([
-  'core.init',
-  'core.set_referral_config_runtime',
-  'core.set_fee_config_runtime',
-  'core.commit_runtime',
-  'core.complete_registration_runtime',
-  'core.renew_runtime',
-  'core.update_authorities_runtime',
-  'core.escrow_fixed_sale_runtime',
-  'core.escrow_auction_runtime',
-  'core.accept_marketplace_offer_runtime',
-  'core.set_record_sender_runtime',
-  'core.clear_record_sender_runtime',
-  'core.mutate_records_sender_runtime',
-  'core.set_primary_name_runtime',
-  'core.clear_primary_name_runtime',
-  'core.create_subname_runtime',
-  'core.get_name',
-  'core.read_record',
-  'core.read_primary_name',
-  'core.pending_commitment',
-  'core.fee_config',
-  'treasury.init',
-  'treasury.update_operator_runtime',
-  'treasury.claim_runtime',
-  'treasury.claim_all_runtime',
-  'treasury.claim_referral_reward_runtime',
-  'treasury.claim_all_referral_rewards_runtime',
-  'treasury.read_state',
-  'marketplace.init',
-  'marketplace.set_fee_runtime',
-  'marketplace.update_operator_runtime',
-  'marketplace.buy_fixed_sale_runtime',
-  'marketplace.cancel_fixed_sale_runtime',
-  'marketplace.expire_fixed_sale_runtime',
-  'marketplace.place_bid_runtime',
-  'marketplace.cancel_auction_runtime',
-  'marketplace.expire_auction_runtime',
-  'marketplace.settle_auction_runtime',
-  'marketplace.place_offer_runtime',
-  'marketplace.cancel_offer_runtime',
-  'marketplace.expire_offer_runtime',
-  'marketplace.claim_refund_runtime',
-  'marketplace.read_config',
-  'marketplace.read_fixed_sale',
-  'marketplace.read_auction',
-  'marketplace.read_offer',
-  'marketplace.read_refund',
-])
+const knownDuskDomainCalls = new Set(Object.entries(DUSK_DOMAINS_CONTRACTS)
+  .flatMap(([contract, preset]) => Object.keys(preset.methodSigs).map((name) => `${contract}.${name}`)))
+
+export function isRuntimeBoundDuskDomainWrite(call: DuskDomainCallMetadata): boolean {
+  return call.kind === 'write'
+    && knownDuskDomainCalls.has(`${call.contract}.${call.functionName}`)
+    && call.functionName.endsWith('_runtime')
+}
 
 function invalidKnownCallArgs(call: DuskDomainCallMetadata) {
   return new Error(`Invalid Dusk Domains ${call.contract}.${call.functionName} arguments for contract calls.`)
