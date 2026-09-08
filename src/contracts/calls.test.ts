@@ -30,6 +30,7 @@ import {
   decodedDuskDomainContext,
   duskDomainCallDepositLux,
   encodeDuskDomainCall,
+  isRuntimeBoundDuskDomainWrite,
   marketplaceBuyFixedSaleRuntimeCall,
   marketplaceCancelFixedSaleRuntimeCall,
   marketplaceCancelAuctionRuntimeCall,
@@ -292,6 +293,17 @@ describe('Dusk Domains contract call helpers', () => {
 
   it('keeps the public contract surface scoped to protocol contracts', () => {
     expect(Object.keys(DUSK_DOMAINS_CONTRACTS)).toEqual(['core', 'treasury', 'marketplace'])
+  })
+
+  it('allows only configured runtime writes, never reads or unknown runtime names', () => {
+    for (const call of schemaCalls()) {
+      expect(isRuntimeBoundDuskDomainWrite(call)).toBe(call.functionName.endsWith('_runtime'))
+      expect(isRuntimeBoundDuskDomainWrite({ ...call, kind: 'read' })).toBe(false)
+      expect(isRuntimeBoundDuskDomainWrite({ ...call, kind: 'write' })).toBe(call.functionName.endsWith('_runtime'))
+    }
+    for (const functionName of ['debug_runtime', 'finalize_marketplace_transfer_runtime', 'claim_runtime', 'constructor', 'toString']) {
+      expect(isRuntimeBoundDuskDomainWrite({ contract: 'core', functionName, kind: 'write' })).toBe(false)
+    }
   })
 
   it('encodes core registration payloads for the data-driver schema', () => {

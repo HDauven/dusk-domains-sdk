@@ -13,7 +13,7 @@ export * from './callBuilders'
 export { decodedDuskDomainContext } from './callContext'
 export { DUSK_DOMAINS_CONTRACTS, DUSK_DOMAINS_PLACEHOLDER_CONTRACT_ID } from './callContracts'
 export * from './callTypes'
-export { toDuskDomainWireArgs } from './callWireArgs'
+export { isRuntimeBoundDuskDomainWrite, toDuskDomainWireArgs } from './callWireArgs'
 
 export function encodeDuskDomainCall(driver: DuskDataDriverLike, call: DuskDomainCallMetadata): Uint8Array {
   const wireArgs = toDuskDomainWireArgs(call)
@@ -78,10 +78,6 @@ export function requireDuskDomainContract(
   return contract
 }
 
-export function isRuntimeBoundDuskDomainWrite(call: DuskDomainCallMetadata): boolean {
-  return call.kind === 'write' && runtimeBoundBrowserWriteCalls.has(`${call.contract}.${call.functionName}`)
-}
-
 export function duskDomainCallDepositLux(call: DuskDomainCallMetadata): string | undefined {
   if (!isPaidDuskDomainCall(call)) return undefined
   const feeLux = (call.args as { feeLux?: unknown; amountLux?: unknown; priceLux?: unknown }).feeLux
@@ -110,39 +106,3 @@ function isPaidDuskDomainCall(call: DuskDomainCallMetadata): boolean {
     )
   )
 }
-
-const runtimeBoundBrowserWriteCalls = new Set([
-  'core.set_referral_config_runtime',
-  'core.set_fee_config_runtime',
-  'core.commit_runtime',
-  'core.complete_registration_runtime',
-  'core.renew_runtime',
-  'core.update_authorities_runtime',
-  'core.escrow_fixed_sale_runtime',
-  'core.escrow_auction_runtime',
-  'core.accept_marketplace_offer_runtime',
-  'core.set_record_sender_runtime',
-  'core.clear_record_sender_runtime',
-  'core.mutate_records_sender_runtime',
-  'core.set_primary_name_runtime',
-  'core.clear_primary_name_runtime',
-  'core.create_subname_runtime',
-  'treasury.update_operator_runtime',
-  'treasury.claim_runtime',
-  'treasury.claim_all_runtime',
-  'treasury.claim_referral_reward_runtime',
-  'treasury.claim_all_referral_rewards_runtime',
-  'marketplace.set_fee_runtime',
-  'marketplace.update_operator_runtime',
-  'marketplace.buy_fixed_sale_runtime',
-  'marketplace.cancel_fixed_sale_runtime',
-  'marketplace.expire_fixed_sale_runtime',
-  'marketplace.place_bid_runtime',
-  'marketplace.cancel_auction_runtime',
-  'marketplace.expire_auction_runtime',
-  'marketplace.settle_auction_runtime',
-  'marketplace.place_offer_runtime',
-  'marketplace.cancel_offer_runtime',
-  'marketplace.expire_offer_runtime',
-  'marketplace.claim_refund_runtime',
-])
