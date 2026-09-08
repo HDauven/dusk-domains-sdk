@@ -30,6 +30,7 @@ import {
   decodedDuskDomainContext,
   duskDomainCallDepositLux,
   encodeDuskDomainCall,
+  isRuntimeBoundDuskDomainWrite,
   marketplaceBuyFixedSaleRuntimeCall,
   marketplaceCancelFixedSaleRuntimeCall,
   marketplaceCancelAuctionRuntimeCall,
@@ -294,6 +295,17 @@ describe('Dusk Domains contract call helpers', () => {
     expect(Object.keys(DUSK_DOMAINS_CONTRACTS)).toEqual(['core', 'treasury', 'marketplace'])
   })
 
+  it('allows only configured runtime writes, never reads or unknown runtime names', () => {
+    for (const call of schemaCalls()) {
+      expect(isRuntimeBoundDuskDomainWrite(call)).toBe(call.functionName.endsWith('_runtime'))
+      expect(isRuntimeBoundDuskDomainWrite({ ...call, kind: 'read' })).toBe(false)
+      expect(isRuntimeBoundDuskDomainWrite({ ...call, kind: 'write' })).toBe(call.functionName.endsWith('_runtime'))
+    }
+    for (const functionName of ['debug_runtime', 'finalize_marketplace_transfer_runtime', 'prune_commitments_runtime', 'claim_runtime', 'constructor', 'toString']) {
+      expect(isRuntimeBoundDuskDomainWrite({ contract: 'core', functionName, kind: 'write' })).toBe(false)
+    }
+  })
+
   it('encodes core registration payloads for the data-driver schema', () => {
     expect(toDuskDomainWireArgs(registrationCall())).toMatchObject({
       commitment: Array(32).fill(49),
@@ -549,16 +561,18 @@ describe('Dusk Domains contract call helpers', () => {
     }))) as Record<keyof typeof driverFiles, DuskDataDriverLike & { getSchema?: () => { functions?: Array<{ name: string }> } }>
 
     for (const [contract, driver] of Object.entries(drivers) as Array<[keyof typeof driverFiles, DuskDataDriverLike & { getSchema?: () => { functions?: Array<{ name: string }> } }]>) {
-      const internalContractFunctions = new Set([
+      const nonSdkContractFunctions = new Set([
         'receive_fee',
         'accrue_referral_reward',
         'finalize_marketplace_transfer_runtime',
         'open_fixed_sale_from_core',
         'open_auction_from_core',
         'accept_offer_from_core',
+        // Commitment pruning is keeper-facing and has no browser SDK builder.
+        ...(contract === 'core' ? ['prune_commitments_runtime'] : []),
       ])
       const schemaFunctions = driver.getSchema?.().functions?.map((fn) => fn.name).filter((name) => (
-        !internalContractFunctions.has(name)
+        !nonSdkContractFunctions.has(name)
       )).sort() ?? []
       const configuredFunctions = Object.keys(DUSK_DOMAINS_CONTRACTS[contract].methodSigs).sort()
       expect(schemaFunctions).toEqual(configuredFunctions)
