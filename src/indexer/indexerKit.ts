@@ -8,6 +8,7 @@ import {
   isFeeConfigEventType,
   isLifecycleEventType,
   isMarketplaceEventType,
+  isPoolEventType,
   isReferralEventType,
   isResolverEventType,
   isReverseEventType,
@@ -24,6 +25,7 @@ import type {
   IndexedMarketplaceAuction,
   IndexedMarketplaceOffer,
   IndexedMarketplaceRefund,
+  IndexedPoolState,
   IndexedReversePrimaryName,
   IndexedSubname,
   IndexedTreasuryState,
@@ -36,6 +38,7 @@ import type {
   SubnameRegistryEvent,
   TreasuryEvent,
   MarketplaceEvent,
+  PoolEvent,
 } from './indexerTypes'
 import type { LifecycleEventProjector } from './indexerProjectorTypes'
 
@@ -51,6 +54,7 @@ export type DuskDomainsIndexedEvent =
   | ReferralEvent
   | FeeConfigEvent
   | MarketplaceEvent
+  | PoolEvent
 
 export type DuskDomainsIndexedEventEnvelope = {
   event: DuskDomainsIndexedEvent
@@ -70,6 +74,7 @@ export type DuskDomainsIndexedEventApplication =
   | IndexedMarketplaceAuction
   | IndexedMarketplaceOffer
   | IndexedMarketplaceRefund
+  | IndexedPoolState
   | null
 
 export const createDuskDomainsProjector = createLifecycleEventProjector
@@ -105,6 +110,9 @@ export function applyDuskDomainsIndexedEvent(
   }
   if (isMarketplaceEvent(event)) {
     return projector.applyMarketplace(event, meta)
+  }
+  if (isPoolEvent(event)) {
+    return projector.applyPool(event, meta)
   }
 
   if (isLifecycleEvent(event)) {
@@ -177,6 +185,10 @@ function isFeeConfigEvent(event: DuskDomainsIndexedEvent): event is FeeConfigEve
 
 function isMarketplaceEvent(event: DuskDomainsIndexedEvent): event is MarketplaceEvent {
   return isMarketplaceEventType(event.type)
+}
+
+function isPoolEvent(event: DuskDomainsIndexedEvent): event is PoolEvent {
+  return isPoolEventType(event.type)
 }
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {

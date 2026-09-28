@@ -14,6 +14,7 @@ import type {
   IndexerEventMeta,
   LifecycleEventProjector,
   NameLifecycleEvent,
+  PoolEvent,
   ReferralEvent,
   RegistrationControllerEvent,
   ResolverRecordEvent,
@@ -45,6 +46,7 @@ import {
   reduceSubname,
 } from './lifecycleProjectorReducers'
 import { createMarketplaceProjector } from './marketplaceProjector'
+import { emptyPoolState, reducePoolState } from './poolProjectorReducers'
 
 export function createLifecycleEventProjector(): LifecycleEventProjector {
   const names = new Map<string, IndexedLifecycleName>()
@@ -56,6 +58,7 @@ export function createLifecycleEventProjector(): LifecycleEventProjector {
   const activity = new Map<string, ActivityEntry[]>()
   let treasuryState: IndexedTreasuryState = emptyTreasuryState()
   let feeConfig: IndexedFeeConfig = emptyFeeConfig()
+  let poolState = emptyPoolState()
   let referralRewardsSupported = false
   const marketplace = createMarketplaceProjector({
     getName: (node) => names.get(node),
@@ -230,6 +233,23 @@ export function createLifecycleEventProjector(): LifecycleEventProjector {
     return { ...feeConfig }
   }
 
+  function applyPool(event: PoolEvent, meta: IndexerEventMeta = {}) {
+    poolState = reducePoolState(event, poolState, meta)
+    // The router starts with a fee config; later changes arrive as fee_config_updated.
+    if (event.type === 'router_initialized') {
+      feeConfig = reduceFeeConfig(
+        { type: 'fee_config_updated', operator: event.operator, config: event.feeConfig },
+        feeConfig,
+        meta,
+      )
+    }
+    return getPoolState()
+  }
+
+  function getPoolState() {
+    return { ...poolState, registries: [...poolState.registries], resolvers: [...poolState.resolvers] }
+  }
+
   function getActivity(node: string) {
     return [...(activity.get(node) ?? [])]
   }
@@ -292,6 +312,7 @@ export function createLifecycleEventProjector(): LifecycleEventProjector {
     applyReferral,
     applyFeeConfig,
     applyMarketplace,
+    applyPool,
     getNameByNode,
     getCommitment,
     getResolverRecords,
@@ -301,6 +322,7 @@ export function createLifecycleEventProjector(): LifecycleEventProjector {
     getTreasuryState,
     getReferralState,
     getFeeConfig,
+    getPoolState,
     getMarketplaceConfig: marketplace.getConfig,
     getMarketplaceFixedSaleByNode: marketplace.getFixedSaleByNode,
     getMarketplaceFixedSales: marketplace.getFixedSales,

@@ -1,10 +1,10 @@
 import {
-  coreFeeConfigCall,
   coreGetNameCall,
   corePendingCommitmentCall,
   coreReadPrimaryNameCall,
   coreReadRecordCall,
   readDuskDomainContract,
+  routerFeeConfigCall,
   type DuskConnectAppLike,
   type DuskDomainCallMetadata,
   type DuskDomainContractMap,
@@ -320,7 +320,7 @@ export function createDuskDomainsOnChainClient(
   }
 
   async function getFeeConfig(): Promise<DuskDomainsResult<CoreFeeConfig>> {
-    const response = await readCall<unknown>(coreFeeConfigCall())
+    const response = await readCall<unknown>(routerFeeConfigCall())
     if (!response.ok) return response
     return decodeFeeConfig(response.value)
   }

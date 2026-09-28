@@ -3,14 +3,31 @@ import type { DuskDomainContractMap } from './callTypes'
 export const DUSK_DOMAINS_PLACEHOLDER_CONTRACT_ID = '0x0000000000000000000000000000000000000000000000000000000000000000'
 
 export const DUSK_DOMAINS_CONTRACTS: DuskDomainContractMap = {
+  router: {
+    contractId: DUSK_DOMAINS_PLACEHOLDER_CONTRACT_ID,
+    driverUrl: '/contracts/dusk-domains-router.data-driver.wasm',
+    name: 'Dusk Domains Router',
+    methodSigs: {
+      init: 'init(InitRouter)',
+      add_registry_runtime: 'add_registry_runtime(AddPoolMember)',
+      add_resolver_runtime: 'add_resolver_runtime(AddPoolMember)',
+      set_operator_runtime: 'set_operator_runtime(SetRouterOperatorRuntime)',
+      set_fee_config_runtime: 'set_fee_config_runtime(SetFeeConfigRuntime)',
+      set_referral_config_runtime: 'set_referral_config_runtime(SetReferralConfigRuntime)',
+      config: 'config',
+      fee_config: 'fee_config',
+      active_registry: 'active_registry',
+      active_resolver: 'active_resolver',
+      locate_name: 'locate_name(HoldsName)',
+      locate_primary: 'locate_primary(LocatePrimary)',
+    },
+  },
   core: {
     contractId: DUSK_DOMAINS_PLACEHOLDER_CONTRACT_ID,
     driverUrl: '/contracts/dusk-domains-core.data-driver.wasm',
     name: 'Dusk Domains Core',
     methodSigs: {
       init: 'init(InitCoreRuntime)',
-      set_referral_config_runtime: 'set_referral_config_runtime(SetReferralConfigRuntime)',
-      set_fee_config_runtime: 'set_fee_config_runtime(SetFeeConfigRuntime)',
       commit_runtime: 'commit_runtime(CommitRegistrationRuntime)',
       complete_registration_runtime: 'complete_registration_runtime(CompleteRegistrationRuntime)',
       renew_runtime: 'renew_runtime(RenewNameRuntime)',
@@ -28,7 +45,12 @@ export const DUSK_DOMAINS_CONTRACTS: DuskDomainContractMap = {
       read_record: 'read_record(ReadRecord)',
       read_primary_name: 'read_primary_name(ReadPrimaryName)',
       pending_commitment: 'pending_commitment(PendingCommitmentQuery)',
-      fee_config: 'fee_config',
+      router: 'router',
+      move_records_runtime: 'move_records_runtime(MoveRecordsRuntime)',
+      holds_name: 'holds_name(HoldsName)',
+      holds_primary: 'holds_primary(LocatePrimary)',
+      record_slot: 'record_slot(HoldsName)',
+      accepts_new_names: 'accepts_new_names',
     },
   },
   treasury: {

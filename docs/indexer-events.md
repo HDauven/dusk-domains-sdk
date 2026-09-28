@@ -116,19 +116,25 @@ Indexers may serve reverse lookup results from this event stream, but wallets an
 
 Phoenix payment endpoints are not v1 public primary-name identities. Indexers should reject or ignore any reverse event that attempts to expose a Phoenix endpoint as a normal display identity.
 
-## Core Configuration Events
+## Router and Pool Events
 
-| Event | Purpose | Required payload |
-| --- | --- | --- |
-| `core_referral_config_changed` | The core operator changed the future referral reward share. | `operator`, `previous_referral_reward_bps`, `referral_reward_bps`. |
+A deployment is a contract pool: one router, append-only lists of registries and resolvers, and the treasury and marketplace. Names live in the registry that created them and never move. Records live in a resolver and can move forward to a newer one.
 
-This is audit metadata. It does not change name resolution state, but production event stores should retain it so referral economics can be reconstructed from deployment onward.
+| Event | Emitted by | Purpose | Required payload |
+| --- | --- | --- | --- |
+| `router_initialized` | router | The pool was set up. A zero `marketplace` means the deployment has none. | `operator`, `treasury`, `marketplace`, `fee_config`. |
+| `pool_member_added` | router | A registry or resolver joined the pool. The newest registry creates new names; the newest resolver with room takes new records. | `kind`, `member`, `index`, `operator`. |
+| `router_operator_changed` | router | The operator role moved to another principal. | `previous_operator`, `operator`. |
+| `fee_config_updated` | router | The operator changed pricing or referral shares for future registrations and renewals. The router's `router_initialized` event carries the starting config. | `operator`, `previous_config`, `config`. |
+| `records_moved` | registry | A name's records moved to a newer resolver. The records themselves are unchanged. | `node`, `controller`, `from_resolver`, `to_resolver`, `record_count`. |
+
+Registry events carry the emitting registry in the envelope's `meta.contractId`. Indexers that serve a pool should subscribe to every registry the router lists, including ones added after they start.
 
 ## Treasury Events
 
 | Event | Purpose | Required payload |
 | --- | --- | --- |
-| `treasury_initialized` | The protocol fee treasury operator settings were configured. | `operator`, `operator_recipient`, `allowed_fee_sources`. |
+| `treasury_initialized` | The protocol fee treasury operator settings were configured. Registries in the router's pool may pay fees in addition to the listed sources. | `operator`, `operator_recipient`, `allowed_fee_sources`, `router`. |
 | `treasury_operator_changed` | The current operator rotated the treasury operator principal and Moonlight recipient. | `previous_operator`, `operator`, `operator_recipient`. |
 | `treasury_fee_received` | A controller or registrar forwarded a claimed protocol fee deposit into treasury custody. | `source_contract`, `reason`, `node`, `amount_lux`, `total_received_lux`, `available_lux`, `registration_received_lux`, `renewal_received_lux`, `other_received_lux`. |
 | `treasury_claimed` | The configured operator principal claimed available fees to the configured Moonlight recipient. | `operator`, `operator_recipient`, `amount_lux`, `remaining_lux`. |

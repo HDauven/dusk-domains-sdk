@@ -10,10 +10,15 @@ import type {
   CoreInitArgs,
   CoreMutateRecordsSenderRuntimeArgs,
   CoreRenewRuntimeArgs,
-  CoreSetFeeConfigRuntimeArgs,
+  RouterSetFeeConfigRuntimeArgs,
   CoreSetPrimaryNameRuntimeArgs,
+  PoolEndpointArgs,
+  PoolNodeArgs,
+  RouterAddPoolMemberArgs,
+  RouterInitArgs,
+  RouterSetOperatorRuntimeArgs,
   CoreSetRecordSenderRuntimeArgs,
-  CoreSetReferralConfigRuntimeArgs,
+  RouterSetReferralConfigRuntimeArgs,
   CoreUpdateAuthoritiesRuntimeArgs,
   MarketplaceAuctionNodeArgs,
   MarketplaceBuyFixedSaleRuntimeArgs,
@@ -38,25 +43,19 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function isCoreInitArgs(value: unknown): value is CoreInitArgs {
-  return (
-    isRecord(value) &&
-    typeof value.treasuryContract === 'string' &&
-    typeof value.recordSourceContract === 'string' &&
-    isDuskPrincipal(value.operator) &&
-    isNonNegativeSafeInteger(value.referralRewardBps)
-  )
+  return isRecord(value) && typeof value.router === 'string'
 }
 
-export function isCoreSetReferralConfigRuntimeArgs(
+export function isRouterSetReferralConfigRuntimeArgs(
   value: unknown,
-): value is CoreSetReferralConfigRuntimeArgs {
+): value is RouterSetReferralConfigRuntimeArgs {
   return (
     isRecord(value) &&
     isNonNegativeSafeInteger(value.referralRewardBps)
   )
 }
 
-export function isCoreSetFeeConfigRuntimeArgs(value: unknown): value is CoreSetFeeConfigRuntimeArgs {
+export function isRouterSetFeeConfigRuntimeArgs(value: unknown): value is RouterSetFeeConfigRuntimeArgs {
   return (
     isRecord(value) &&
     isNonNegativeSafeInteger(value.threeCharYearLux) &&
@@ -194,7 +193,8 @@ export function isTreasuryInitArgs(value: unknown): value is TreasuryInitArgs {
     isDuskPrincipal(value.operator) &&
     typeof value.operatorRecipient === 'string' &&
     Array.isArray(value.allowedFeeSources) &&
-    value.allowedFeeSources.every((source) => typeof source === 'string')
+    value.allowedFeeSources.every((source) => typeof source === 'string') &&
+    typeof value.router === 'string'
   )
 }
 
@@ -272,7 +272,7 @@ export function isTreasuryClaimAllReferralRewardsRuntimeArgs(
 export function isMarketplaceInitArgs(value: unknown): value is MarketplaceInitArgs {
   return (
     isRecord(value) &&
-    typeof value.coreContract === 'string' &&
+    typeof value.router === 'string' &&
     typeof value.treasuryContract === 'string' &&
     typeof value.marketplaceAuthority === 'string' &&
     typeof value.operator === 'string' &&
@@ -373,4 +373,30 @@ function isResolverRecordArgs(value: unknown) {
 
 function isNonNegativeSafeInteger(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+}
+
+export function isPoolNodeArgs(value: unknown): value is PoolNodeArgs {
+  return isRecord(value) && typeof value.node === 'string'
+}
+
+export function isPoolEndpointArgs(value: unknown): value is PoolEndpointArgs {
+  return isRecord(value) && typeof value.endpointType === 'string' && typeof value.endpointValue === 'string'
+}
+
+export function isRouterInitArgs(value: unknown): value is RouterInitArgs {
+  return (
+    isRecord(value) &&
+    isDuskPrincipal(value.operator) &&
+    typeof value.treasury === 'string' &&
+    (value.marketplace === null || typeof value.marketplace === 'string') &&
+    isNonNegativeSafeInteger(value.referralRewardBps)
+  )
+}
+
+export function isRouterAddPoolMemberArgs(value: unknown): value is RouterAddPoolMemberArgs {
+  return isRecord(value) && typeof value.member === 'string'
+}
+
+export function isRouterSetOperatorRuntimeArgs(value: unknown): value is RouterSetOperatorRuntimeArgs {
+  return isRecord(value) && isDuskPrincipal(value.operator)
 }

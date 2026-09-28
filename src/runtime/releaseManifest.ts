@@ -57,7 +57,7 @@ export type DuskDomainsReleaseManifest = {
   }
 }
 
-const contractKeys = ['core', 'treasury'] as const satisfies readonly DuskDomainRequiredContractKey[]
+const contractKeys = ['router', 'core', 'treasury'] as const satisfies readonly DuskDomainRequiredContractKey[]
 
 export function validateDuskDomainsReleaseManifest(
   value: unknown,
@@ -116,6 +116,7 @@ export function contractsFromDuskDomainsReleaseManifest(
   if (!validated.ok) throw new Error(validated.error.message)
 
   return {
+    router: contractPresetFromManifest(validated.value, 'router', artifactBaseUrl),
     core: contractPresetFromManifest(validated.value, 'core', artifactBaseUrl),
     treasury: contractPresetFromManifest(validated.value, 'treasury', artifactBaseUrl),
   }

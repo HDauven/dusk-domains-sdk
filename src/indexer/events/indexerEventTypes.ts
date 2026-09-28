@@ -158,6 +158,7 @@ export type TreasuryEvent =
       operatorAuthority?: string
       operatorRecipient: string
       allowedFeeSources: string[]
+      router?: string
     }
   | {
       type: 'treasury_operator_changed'
@@ -220,7 +221,7 @@ export type FeeConfigEvent = {
 export type MarketplaceEvent =
   | {
       type: 'marketplace_initialized'
-      coreContract: string
+      router: string
       treasuryContract: string
       marketplaceAuthority: string
       operator: string
@@ -342,4 +343,36 @@ export type MarketplaceEvent =
       recipient: string
       amountLux: number
       claimedAtBlockHeight: number
+    }
+
+export type PoolMemberKind = 'registry' | 'resolver'
+
+export type PoolEvent =
+  | {
+      type: 'router_initialized'
+      operator: DuskPrincipal
+      treasury: string
+      /** All zeros when the deployment has no marketplace. */
+      marketplace: string
+      feeConfig: CoreFeeConfig
+    }
+  | {
+      type: 'pool_member_added'
+      kind: PoolMemberKind
+      member: string
+      index: number
+      operator: DuskPrincipal
+    }
+  | {
+      type: 'router_operator_changed'
+      previousOperator: DuskPrincipal
+      operator: DuskPrincipal
+    }
+  | {
+      type: 'records_moved'
+      node: string
+      controller: string
+      fromResolver: string
+      toResolver: string
+      recordCount: number
     }

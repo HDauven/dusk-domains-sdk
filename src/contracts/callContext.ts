@@ -1,5 +1,6 @@
 import { decodedCoreDuskDomainContext } from './callContextCore'
 import { decodedMarketplaceDuskDomainContext } from './callContextMarketplace'
+import { decodedRouterDuskDomainContext } from './callContextRouter'
 import { decodedTreasuryDuskDomainContext } from './callContextTreasury'
 import type {
   DuskDomainCallMetadata,
@@ -12,7 +13,8 @@ export function decodedDuskDomainContext(
   _contracts?: DuskDomainContractMap,
 ): DuskDomainDecodedContext {
   void _contracts
-  return decodedCoreDuskDomainContext(call)
+  return decodedRouterDuskDomainContext(call)
+    ?? decodedCoreDuskDomainContext(call)
     ?? decodedTreasuryDuskDomainContext(call)
     ?? decodedMarketplaceDuskDomainContext(call)
     ?? {

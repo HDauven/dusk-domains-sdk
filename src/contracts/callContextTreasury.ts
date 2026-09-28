@@ -19,6 +19,7 @@ export function decodedTreasuryDuskDomainContext(call: DuskDomainCallMetadata): 
         { label: 'Operator', value: treasuryOperatorSummary(call.args.operator, call.args.operatorRecipient) },
         { label: 'Claim recipient', value: call.args.operatorRecipient },
         { label: 'Allowed fee sources', value: String(call.args.allowedFeeSources.length) },
+        { label: 'Router', value: call.args.router },
       ],
     }
   }

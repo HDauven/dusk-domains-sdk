@@ -30,7 +30,7 @@ export async function readDuskDomainContract(
   contracts: DuskDomainContractMap = DUSK_DOMAINS_CONTRACTS,
 ) : Promise<unknown> {
   return await app.readContract({
-    contract: requireDuskDomainContract(contracts, call.contract),
+    contract: requireDuskDomainContract(contracts, call.contract, call.contractId),
     functionName: call.functionName,
     args: toDuskDomainWireArgs(call),
     decodedContext: decodedDuskDomainContext(call),
@@ -44,7 +44,7 @@ export async function prepareDuskDomainContractCall(
 ) : Promise<unknown> {
   const deposit = duskDomainCallDepositLux(call)
   return await app.prepareContractCall({
-    contract: requireDuskDomainContract(contracts, call.contract),
+    contract: requireDuskDomainContract(contracts, call.contract, call.contractId),
     functionName: call.functionName,
     args: toDuskDomainWireArgs(call),
     ...(deposit ? { deposit } : {}),
@@ -60,7 +60,7 @@ export async function writeDuskDomainContract(
 ) : Promise<unknown> {
   const deposit = duskDomainCallDepositLux(call)
   return await app.writeContract({
-    contract: requireDuskDomainContract(contracts, call.contract),
+    contract: requireDuskDomainContract(contracts, call.contract, call.contractId),
     functionName: call.functionName,
     args: toDuskDomainWireArgs(call),
     ...(deposit ? { deposit } : {}),
@@ -72,10 +72,15 @@ export async function writeDuskDomainContract(
 export function requireDuskDomainContract(
   contracts: DuskDomainContractMap,
   key: DuskDomainCallMetadata['contract'],
+  contractId?: string,
 ): DuskDomainContractPreset {
   const contract = contracts[key]
   if (!contract) throw new Error(`Dusk Domains ${key} contract is not configured.`)
-  return contract
+  if (contractId === undefined) return contract
+  if (!/^0x[0-9a-f]{64}$/iu.test(contractId)) {
+    throw new Error(`Dusk Domains ${key} contract override must be a 32-byte hex contract ID.`)
+  }
+  return { ...contract, contractId }
 }
 
 export function duskDomainCallDepositLux(call: DuskDomainCallMetadata): string | undefined {

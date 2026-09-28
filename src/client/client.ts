@@ -386,7 +386,7 @@ export function checkDuskDomainsIndexerCompatibilityFromHealth(options: {
   }
 
   if (manifest) {
-    for (const contractKey of ['core', 'treasury'] as const) {
+    for (const contractKey of ['router', 'core', 'treasury'] as const) {
       const indexedContract = deployment?.contracts?.[contractKey]?.contractId ?? null
       const manifestContract = manifest.contracts[contractKey]?.contractId ?? null
       if (indexedContract && manifestContract) {

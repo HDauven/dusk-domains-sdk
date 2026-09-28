@@ -39,14 +39,16 @@ type RuntimeEnvKey = string | {
   legacy?: string
 }
 
-const contractKeys = ['core', 'treasury'] as const satisfies readonly DuskDomainRequiredContractKey[]
+const contractKeys = ['router', 'core', 'treasury'] as const satisfies readonly DuskDomainRequiredContractKey[]
 
 const contractIdEnvKeys = {
+  router: envKey('VITE_DUSK_DOMAINS_ROUTER_CONTRACT_ID', 'VITE_DUSK_DOMAINS_ROUTER_CONTRACT_ID'),
   core: envKey('VITE_DUSK_DOMAINS_CORE_CONTRACT_ID', 'VITE_DUSK_DOMAINS_CORE_CONTRACT_ID'),
   treasury: envKey('VITE_DUSK_DOMAINS_TREASURY_CONTRACT_ID', 'VITE_DUSK_DOMAINS_TREASURY_CONTRACT_ID'),
 } as const satisfies Record<DuskDomainRequiredContractKey, RuntimeEnvKey>
 
 const driverUrlEnvKeys = {
+  router: envKey('VITE_DUSK_DOMAINS_ROUTER_DRIVER_URL', 'VITE_DUSK_DOMAINS_ROUTER_DRIVER_URL'),
   core: envKey('VITE_DUSK_DOMAINS_CORE_DRIVER_URL', 'VITE_DUSK_DOMAINS_CORE_DRIVER_URL'),
   treasury: envKey('VITE_DUSK_DOMAINS_TREASURY_DRIVER_URL', 'VITE_DUSK_DOMAINS_TREASURY_DRIVER_URL'),
 } as const satisfies Record<DuskDomainRequiredContractKey, RuntimeEnvKey>

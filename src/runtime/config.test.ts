@@ -8,11 +8,12 @@ import {
 import { DUSK_DOMAINS_PLACEHOLDER_CONTRACT_ID } from '../contracts/callContracts'
 
 describe('Dusk Domains runtime config', () => {
-  it('defaults to preview mode when core, treasury, and indexer are missing', () => {
+  it('defaults to preview mode when the router, core, treasury, and indexer are missing', () => {
     const config = createDuskDomainsRuntimeConfig()
 
     expect(config.mode).toBe('preview')
-    expect(Object.keys(config.contracts)).toEqual(['core', 'treasury'])
+    expect(Object.keys(config.contracts)).toEqual(['router', 'core', 'treasury'])
+    expect(config.contracts.router.contractId).toBe(DUSK_DOMAINS_PLACEHOLDER_CONTRACT_ID)
     expect(config.contracts.core.contractId).toBe(DUSK_DOMAINS_PLACEHOLDER_CONTRACT_ID)
     expect(config.contracts.treasury.contractId).toBe(DUSK_DOMAINS_PLACEHOLDER_CONTRACT_ID)
     expect(config.indexerUrl).toBeNull()
@@ -30,13 +31,15 @@ describe('Dusk Domains runtime config', () => {
     })
     expect(config.missingLiveInputs).toEqual([
       'VITE_DUSK_DOMAINS_INDEXER_URL',
+      'VITE_DUSK_DOMAINS_ROUTER_CONTRACT_ID',
       'VITE_DUSK_DOMAINS_CORE_CONTRACT_ID',
       'VITE_DUSK_DOMAINS_TREASURY_CONTRACT_ID',
     ])
   })
 
-  it('uses live-ready mode when core, treasury, and the indexer URL are configured', () => {
+  it('uses live-ready mode when the router, core, treasury, and the indexer URL are configured', () => {
     const config = createDuskDomainsRuntimeConfig({
+      VITE_DUSK_DOMAINS_ROUTER_CONTRACT_ID: `0x${'78'.repeat(32)}`,
       VITE_DUSK_DOMAINS_CORE_CONTRACT_ID: `0x${'77'.repeat(32)}`,
       VITE_DUSK_DOMAINS_TREASURY_CONTRACT_ID: `0x${'66'.repeat(32)}`,
       VITE_DUSK_DOMAINS_CORE_DRIVER_URL: '/contracts/dusk-domains-core.data-driver.wasm',
@@ -52,6 +55,10 @@ describe('Dusk Domains runtime config', () => {
     })
 
     expect(config.mode).toBe('live_ready')
+    expect(config.contracts.router).toMatchObject({
+      contractId: `0x${'78'.repeat(32)}`,
+      driverUrl: '/contracts/dusk-domains-router.data-driver.wasm',
+    })
     expect(config.contracts.core).toMatchObject({
       contractId: `0x${'77'.repeat(32)}`,
       driverUrl: '/contracts/dusk-domains-core.data-driver.wasm',
@@ -77,6 +84,7 @@ describe('Dusk Domains runtime config', () => {
 
   it('enables marketplace only when the optional contract and driver are configured', () => {
     const config = createDuskDomainsRuntimeConfig({
+      VITE_DUSK_DOMAINS_ROUTER_CONTRACT_ID: `0x${'78'.repeat(32)}`,
       VITE_DUSK_DOMAINS_CORE_CONTRACT_ID: `0x${'77'.repeat(32)}`,
       VITE_DUSK_DOMAINS_TREASURY_CONTRACT_ID: `0x${'66'.repeat(32)}`,
       VITE_DUSK_DOMAINS_INDEXER_URL: '/api/dusk-domains',
@@ -97,6 +105,7 @@ describe('Dusk Domains runtime config', () => {
 
   it('warns and disables marketplace when optional deployment inputs are malformed', () => {
     const config = createDuskDomainsRuntimeConfig({
+      VITE_DUSK_DOMAINS_ROUTER_CONTRACT_ID: `0x${'78'.repeat(32)}`,
       VITE_DUSK_DOMAINS_CORE_CONTRACT_ID: `0x${'77'.repeat(32)}`,
       VITE_DUSK_DOMAINS_TREASURY_CONTRACT_ID: `0x${'66'.repeat(32)}`,
       VITE_DUSK_DOMAINS_INDEXER_URL: '/api/dusk-domains',
@@ -116,6 +125,7 @@ describe('Dusk Domains runtime config', () => {
 
   it('keeps legacy VITE_DUSK_DOMAINS env vars as compatibility aliases', () => {
     const config = createDuskDomainsRuntimeConfig({
+      VITE_DUSK_DOMAINS_ROUTER_CONTRACT_ID: `0x${'78'.repeat(32)}`,
       VITE_DUSK_DOMAINS_CORE_CONTRACT_ID: `0x${'77'.repeat(32)}`,
       VITE_DUSK_DOMAINS_TREASURY_CONTRACT_ID: `0x${'66'.repeat(32)}`,
       VITE_DUSK_DOMAINS_INDEXER_URL: '/api/dusk-domains',
@@ -131,6 +141,7 @@ describe('Dusk Domains runtime config', () => {
 
   it('enables referral attribution and claims only when requested on the core treasury path', () => {
     const config = createDuskDomainsRuntimeConfig({
+      VITE_DUSK_DOMAINS_ROUTER_CONTRACT_ID: `0x${'78'.repeat(32)}`,
       VITE_DUSK_DOMAINS_CORE_CONTRACT_ID: `0x${'77'.repeat(32)}`,
       VITE_DUSK_DOMAINS_TREASURY_CONTRACT_ID: `0x${'66'.repeat(32)}`,
       VITE_DUSK_DOMAINS_INDEXER_URL: '/api/dusk-domains',
