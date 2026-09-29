@@ -231,6 +231,7 @@ export function isCoreAcceptMarketplaceOfferRuntimeArgs(
     typeof value.node === 'string' &&
     typeof value.marketplaceContract === 'string' &&
     typeof value.buyerAuthority === 'string' &&
+    isNonNegativeSafeInteger(value.expectedAmountLux) &&
     typeof value.sellerRecipient === 'string'
   )
 }

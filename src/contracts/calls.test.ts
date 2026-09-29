@@ -204,6 +204,7 @@ function schemaCalls(): DuskDomainCallMetadata[] {
       node,
       marketplaceContract,
       buyerAuthority: owner,
+      expectedAmountLux: 30_000_000_000,
       sellerRecipient: recipient,
     }),
     coreSetRecordSenderRuntimeCall({
@@ -435,6 +436,28 @@ describe('Dusk Domains contract call helpers', () => {
         },
       ],
     })
+  })
+
+  it('binds an offer acceptance to the amount the seller saw', () => {
+    const accept = {
+      node,
+      marketplaceContract,
+      buyerAuthority: owner,
+      expectedAmountLux: 30_000_000_000,
+      sellerRecipient: recipient,
+    }
+    expect(toDuskDomainWireArgs(coreAcceptMarketplaceOfferRuntimeCall(accept))).toMatchObject({
+      node: Array(32).fill(7),
+      buyer_authority: Array(32).fill(9),
+      expected_amount_lux: 30_000_000_000,
+    })
+    const { expectedAmountLux: _, ...unbound } = accept
+    expect(() => toDuskDomainWireArgs({
+      contract: 'core',
+      functionName: 'accept_marketplace_offer_runtime',
+      kind: 'write',
+      args: unbound,
+    })).toThrow('Invalid Dusk Domains core.accept_marketplace_offer_runtime arguments')
   })
 
   it('rejects malformed arguments for recognized contract methods before wallet preparation', () => {

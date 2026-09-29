@@ -162,6 +162,8 @@ export type CoreAcceptMarketplaceOfferRuntimeArgs = {
   node: string
   marketplaceContract: string
   buyerAuthority: string
+  /** The offer's gross amount as shown to the seller; any other offer fails the acceptance. */
+  expectedAmountLux: number
   sellerRecipient: string
 }
 
