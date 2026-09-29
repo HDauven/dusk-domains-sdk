@@ -312,7 +312,7 @@ describe('Dusk Domains on-chain SDK reads', () => {
       throw new Error(`unexpected call: ${call.functionName}`)
     })
 
-    await expect(client.getPendingCommitment(commitment)).resolves.toMatchObject({
+    await expect(client.getPendingCommitment(owner, commitment)).resolves.toMatchObject({
       ok: true,
       value: {
         commitment,

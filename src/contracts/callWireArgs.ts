@@ -263,6 +263,7 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
   }
   if (call.contract === 'core' && call.functionName === 'pending_commitment' && isRecord(args)) {
     return {
+      controller: bytes32(String(args.controller), 'controller'),
       commitment: bytes32(String(args.commitment), 'commitment'),
     }
   }

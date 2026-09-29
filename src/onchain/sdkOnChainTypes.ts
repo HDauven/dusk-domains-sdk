@@ -94,6 +94,10 @@ export type DuskDomainsOnChainClient = {
     endpoint: DuskEndpoint,
     expectedName?: string,
   ) => Promise<DuskDomainsResult<DuskDomainsOnChainPrimaryNameVerification>>
-  getPendingCommitment: (commitment: string) => Promise<DuskDomainsResult<DuskDomainsOnChainPendingCommitment>>
+  /** Commitments are kept per controller: the same hash from another account is a separate entry. */
+  getPendingCommitment: (
+    controller: string,
+    commitment: string,
+  ) => Promise<DuskDomainsResult<DuskDomainsOnChainPendingCommitment>>
   getFeeConfig: () => Promise<DuskDomainsResult<CoreFeeConfig>>
 }

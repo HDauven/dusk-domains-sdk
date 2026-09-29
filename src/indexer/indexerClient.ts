@@ -49,7 +49,11 @@ export type DuskDomainsIndexerClientOptions = {
 export type DuskDomainsIndexerClient = DuskDomainsReadTransport & {
   getHealth: () => Promise<DuskDomainsIndexerHealth>
   searchName: (query: string) => Promise<NameResult>
-  getCommitment: (commitment: string) => Promise<IndexedRegistrationCommitment | null>
+  /**
+   * With a controller, reads that controller's record for the hash; commitments are scoped per
+   * controller. Without one, the indexer returns the latest record for the hash.
+   */
+  getCommitment: (commitment: string, controller?: string) => Promise<IndexedRegistrationCommitment | null>
   resolveForward: (canonicalName: string) => Promise<ForwardResolutionResponse>
   getRecords: (canonicalName: string) => Promise<ResolverRecord[]>
   getNodeRecords: (node: string) => Promise<ResolverRecord[]>
@@ -169,8 +173,9 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
     return payload
   }
 
-  async function getCommitment(commitment: string) {
-    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'commitment', { commitment }))
+  async function getCommitment(commitment: string, controller?: string) {
+    const params: Record<string, string> = controller ? { commitment, controller } : { commitment }
+    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'commitment', params))
     if (payload === null) return null
 
     if (!isIndexedRegistrationCommitment(payload)) {

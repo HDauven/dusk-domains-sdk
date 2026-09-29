@@ -161,6 +161,39 @@ describe('Dusk Domains lifecycle event projector', () => {
     expect(projector.getActivity(node)).toEqual([])
   })
 
+  it('keeps a separate commitment per controller for the same hash', () => {
+    const projector = createLifecycleEventProjector()
+    const commitment = `0x${'aa'.repeat(32)}`
+    const first = `0x${'bb'.repeat(32)}`
+    const second = `0x${'cc'.repeat(32)}`
+
+    projector.applyController({
+      type: 'registration_committed',
+      commitment,
+      controller: first,
+      createdAt: '2026-06-17T00:00:00.000Z',
+    }, { txId: 'tx-first', blockHeight: 30 })
+    projector.applyController({
+      type: 'registration_committed',
+      commitment,
+      controller: second,
+      createdAt: '2026-06-17T00:01:00.000Z',
+    }, { txId: 'tx-second', blockHeight: 33 })
+
+    expect(projector.getCommitment(commitment, first)).toMatchObject({
+      controller: first,
+      committedTxId: 'tx-first',
+      committedBlockHeight: 30,
+    })
+    expect(projector.getCommitment(commitment, second.slice(2).toUpperCase())).toMatchObject({
+      controller: second,
+      committedTxId: 'tx-second',
+      committedBlockHeight: 33,
+    })
+    expect(projector.getCommitment(commitment, `0x${'dd'.repeat(32)}`)).toBeNull()
+    expect(projector.getCommitment(commitment)).toMatchObject({ controller: second })
+  })
+
   it('indexes revealed commitments even if the commit event arrives later', () => {
     const projector = createLifecycleEventProjector()
     const commitment = `0x${'dd'.repeat(32)}`

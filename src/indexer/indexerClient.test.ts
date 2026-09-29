@@ -174,6 +174,26 @@ describe('Dusk Domains indexer client', () => {
     await expect(client.getCommitment(commitment)).resolves.toEqual(indexedCommitment)
   })
 
+  it("reads a controller's own commitment record", async () => {
+    const commitment = `0x${'ab'.repeat(32)}`
+    const controller = `0x${'cd'.repeat(32)}`
+    const seen: string[] = []
+    const client = createDuskDomainsIndexerClient({
+      baseUrl: 'https://api.example/names',
+      fetch: async (url) => {
+        seen.push(String(url))
+        return Response.json(null)
+      },
+    })
+
+    await expect(client.getCommitment(commitment, controller)).resolves.toBeNull()
+    await expect(client.getCommitment(commitment, '')).resolves.toBeNull()
+    expect(seen).toEqual([
+      `https://api.example/names/commitment?commitment=${commitment}&controller=${controller}`,
+      `https://api.example/names/commitment?commitment=${commitment}`,
+    ])
+  })
+
   it('fetches treasury accounting state', async () => {
     const treasury: IndexedTreasuryState = {
       initialized: true,

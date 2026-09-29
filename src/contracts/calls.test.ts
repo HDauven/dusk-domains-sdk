@@ -255,7 +255,7 @@ function schemaCalls(): DuskDomainCallMetadata[] {
     coreGetNameCall({ node }),
     coreReadRecordCall({ node, key: 'moonlight_address' }),
     coreReadPrimaryNameCall({ endpointType: 'moonlight_address', endpointValue }),
-    corePendingCommitmentCall({ commitment }),
+    corePendingCommitmentCall({ controller: owner, commitment }),
     treasuryInitCall({
       operator: operatorPrincipal(),
       operatorRecipient: recipient,
@@ -458,6 +458,13 @@ describe('Dusk Domains contract call helpers', () => {
       kind: 'write',
       args: unbound,
     })).toThrow('Invalid Dusk Domains core.accept_marketplace_offer_runtime arguments')
+  })
+
+  it('reads a pending commitment under its controller', () => {
+    expect(toDuskDomainWireArgs(corePendingCommitmentCall({ controller: owner, commitment }))).toEqual({
+      controller: Array(32).fill(9),
+      commitment: Array(32).fill(49),
+    })
   })
 
   it('rejects malformed arguments for recognized contract methods before wallet preparation', () => {

@@ -48,7 +48,8 @@ export type LifecycleEventProjector = {
     | null
   applyPool: (event: PoolEvent, meta?: IndexerEventMeta) => IndexedPoolState
   getNameByNode: (node: string) => IndexedLifecycleName | null
-  getCommitment: (commitment: string) => IndexedRegistrationCommitment | null
+  /** With a controller, that controller's record for the hash; without one, the latest record for it. */
+  getCommitment: (commitment: string, controller?: string) => IndexedRegistrationCommitment | null
   getResolverRecords: (node: string) => ResolverRecord[]
   getPrimaryNameByEndpoint: (endpoint: IndexedEndpoint) => IndexedReversePrimaryName | null
   getSubnameByNode: (node: string) => IndexedSubname | null

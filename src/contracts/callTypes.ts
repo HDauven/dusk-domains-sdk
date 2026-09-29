@@ -224,6 +224,8 @@ export type CoreGetNameArgs = {
 }
 
 export type CorePendingCommitmentArgs = {
+  /** The account that submitted the commitment; each account's commitments are kept apart. */
+  controller: string
   commitment: string
 }
 
