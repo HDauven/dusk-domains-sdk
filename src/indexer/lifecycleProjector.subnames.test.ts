@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { createLifecycleEventProjector } from './indexer'
 import { createResolverRecord } from '../core/records'
+import type { SubnameExpiryPolicy } from '../core/subnames'
 
 describe('Dusk Domains lifecycle event projector subnames', () => {
   it('projects subname creation, delegation, and revocation by parent node', () => {
@@ -307,4 +308,196 @@ describe('Dusk Domains lifecycle event projector subnames', () => {
     expect(projector.getResolverRecords(nestedNode)).toEqual([])
     expect(projector.getPrimaryNameByEndpoint(endpoint)).toBeNull()
   })
+
+  it('reports a subname grace end from its parent', () => {
+    const projector = createLifecycleEventProjector()
+    const rootNode = `0x${'50'.repeat(32)}`
+    const childNode = `0x${'51'.repeat(32)}`
+    const nestedNode = `0x${'52'.repeat(32)}`
+
+    projector.apply(rootRegistered(rootNode))
+    projector.applySubname(subnameCreated(rootNode, childNode, 'settlement.acme.dusk', 'fixed_before_parent', '2040-03-01T00:00:00.000Z', 900))
+    projector.applySubname(subnameCreated(childNode, nestedNode, 'desk.settlement.acme.dusk', 'inherits_parent', '2040-03-01T00:00:00.000Z', 900))
+
+    for (const node of [childNode, nestedNode]) {
+      expect(projector.getSubnameByNode(node)).toMatchObject({
+        graceEndsAt: '2040-07-17T00:00:00.000Z',
+        graceEndsAtBlockHeight: 1_300,
+      })
+    }
+  })
+
+  it('renews subnames that inherit their root expiry, down to a fixed subname', () => {
+    const projector = createLifecycleEventProjector()
+    const rootNode = `0x${'53'.repeat(32)}`
+    const childNode = `0x${'54'.repeat(32)}`
+    const grandchildNode = `0x${'55'.repeat(32)}`
+    const fixedNode = `0x${'56'.repeat(32)}`
+    const belowFixedNode = `0x${'57'.repeat(32)}`
+
+    projector.apply(rootRegistered(rootNode))
+    projector.applySubname(subnameCreated(rootNode, childNode, 'settlement.acme.dusk', 'inherits_parent', '2040-06-17T00:00:00.000Z', 1_000))
+    projector.applySubname(subnameCreated(childNode, grandchildNode, 'desk.settlement.acme.dusk', 'inherits_parent', '2040-06-17T00:00:00.000Z', 1_000))
+    projector.applySubname(subnameCreated(rootNode, fixedNode, 'vault.acme.dusk', 'fixed_before_parent', '2040-03-01T00:00:00.000Z', 900))
+    projector.applySubname(subnameCreated(fixedNode, belowFixedNode, 'desk.vault.acme.dusk', 'inherits_parent', '2040-03-01T00:00:00.000Z', 900))
+    projector.apply(rootRenewed(rootNode))
+
+    const unchanged = {
+      expiresAt: '2040-03-01T00:00:00.000Z',
+      graceEndsAt: '2040-07-17T00:00:00.000Z',
+      expiresAtBlockHeight: 900,
+      graceEndsAtBlockHeight: 1_300,
+    }
+    expect(projector.getSubnameByNode(childNode)).toMatchObject(renewed)
+    expect(projector.getSubnameByNode(grandchildNode)).toMatchObject(renewed)
+    expect(projector.getSubnameByNode(fixedNode)).toMatchObject(unchanged)
+    expect(projector.getSubnameByNode(belowFixedNode)).toMatchObject(unchanged)
+  })
+
+  it('renews the name row an authority change gave an inheriting subname', () => {
+    const projector = createLifecycleEventProjector()
+    const rootNode = `0x${'58'.repeat(32)}`
+    const childNode = `0x${'59'.repeat(32)}`
+    const nestedNode = `0x${'5a'.repeat(32)}`
+
+    projector.apply(rootRegistered(rootNode))
+    projector.applySubname(subnameCreated(rootNode, childNode, 'settlement.acme.dusk', 'inherits_parent', '2040-06-17T00:00:00.000Z', 1_000))
+    projector.apply(subnameAuthoritiesChanged(childNode, '2040-06-17T00:00:00.000Z', 1_000))
+    projector.applySubname(subnameCreated(childNode, nestedNode, 'desk.settlement.acme.dusk', 'inherits_parent', '2040-06-17T00:00:00.000Z', 1_000))
+
+    for (const lifecycle of [projector.getNameByNode(childNode), projector.getSubnameByNode(nestedNode)]) {
+      expect(lifecycle).toMatchObject({
+        graceEndsAt: '2040-07-17T00:00:00.000Z',
+        graceEndsAtBlockHeight: 1_300,
+      })
+    }
+
+    projector.apply(rootRenewed(rootNode))
+
+    expect(projector.getNameByNode(childNode)).toMatchObject(renewed)
+    expect(projector.getSubnameByNode(childNode)).toMatchObject(renewed)
+    expect(projector.getSubnameByNode(nestedNode)).toMatchObject(renewed)
+  })
+
+  it('drops a lapsed name\'s subnames when the name is registered again', () => {
+    const projector = createLifecycleEventProjector()
+    const rootNode = `0x${'5b'.repeat(32)}`
+    const childNode = `0x${'5c'.repeat(32)}`
+    const endpoint = {
+      type: 'moonlight_address' as const,
+      value: 'dusk1qz9p7m3ct4un8k6ry4l0vx2wjs5h9t7pa2f3c',
+    }
+    const lapsedRecord = createResolverRecord('dusk_contract', `0x${'5d'.repeat(32)}`, '2020-01-01T00:00:00.000Z')
+    const nextRecord = createResolverRecord('moonlight_address', endpoint.value, '2026-06-17T00:00:00.000Z')
+
+    projector.apply({
+      ...rootRegistered(rootNode),
+      expiresAt: '2020-06-17T00:00:00.000Z',
+      graceEndsAt: '2020-07-17T00:00:00.000Z',
+      expiresAtBlockHeight: 100,
+      graceEndsAtBlockHeight: 130,
+    })
+    projector.applySubname(subnameCreated(rootNode, childNode, 'settlement.acme.dusk', 'inherits_parent', '2020-06-17T00:00:00.000Z', 100))
+    projector.apply(subnameAuthoritiesChanged(childNode, '2020-06-17T00:00:00.000Z', 100))
+    projector.applyResolver({ type: 'record_changed', node: rootNode, controller: owner, record: lapsedRecord })
+    projector.applyResolver({ type: 'record_changed', node: childNode, controller: owner, record: lapsedRecord })
+    projector.applyReverse({
+      type: 'primary_name_changed',
+      endpoint,
+      controller: owner,
+      node: childNode,
+      name: 'settlement.acme.dusk',
+      previousName: null,
+      updatedAt: '2020-01-01T00:00:00.000Z',
+    })
+    // The contract clears the lapsed name without a name_released event, then registers it.
+    projector.apply(rootRegistered(rootNode))
+    projector.applyResolver({ type: 'record_changed', node: rootNode, controller: owner, record: nextRecord })
+    projector.apply(rootRenewed(rootNode))
+
+    expect(projector.getSubnameByNode(childNode)).toBeNull()
+    expect(projector.getSubnamesByParent(rootNode)).toEqual([])
+    expect(projector.getNameByNode(childNode)).toBeNull()
+    expect(projector.getResolverRecords(rootNode)).toEqual([nextRecord])
+    expect(projector.getResolverRecords(childNode)).toEqual([])
+    expect(projector.getPrimaryNameByEndpoint(endpoint)).toBeNull()
+  })
 })
+
+const owner = `0x${'4f'.repeat(32)}`
+const renewed = {
+  expiresAt: '2041-06-17T00:00:00.000Z',
+  graceEndsAt: '2041-07-17T00:00:00.000Z',
+  expiresAtBlockHeight: 2_000,
+  graceEndsAtBlockHeight: 2_300,
+}
+
+function rootRegistered(node: string) {
+  return {
+    type: 'name_registered' as const,
+    node,
+    label: 'acme',
+    actor: owner,
+    owner,
+    expiresAt: '2040-06-17T00:00:00.000Z',
+    graceEndsAt: '2040-07-17T00:00:00.000Z',
+    expiresAtBlockHeight: 1_000,
+    graceEndsAtBlockHeight: 1_300,
+    feeLux: 10_000_000_000,
+  }
+}
+
+function subnameCreated(
+  parentNode: string,
+  node: string,
+  name: string,
+  expiryPolicy: SubnameExpiryPolicy,
+  expiresAt: string,
+  expiresAtBlockHeight: number,
+) {
+  const [label, ...parentLabels] = name.split('.')
+  return {
+    type: 'subname_created' as const,
+    parentNode,
+    node,
+    parentName: parentLabels.join('.'),
+    name,
+    label,
+    actor: owner,
+    owner,
+    manager: owner,
+    resolver: `0x${'4e'.repeat(32)}`,
+    expiresAt,
+    parentExpiresAt: '2040-06-17T00:00:00.000Z',
+    expiresAtBlockHeight,
+    parentExpiresAtBlockHeight: 1_000,
+    expiryPolicy,
+    revocationPolicy: 'parent_revocable' as const,
+    createdAt: '2026-06-17T00:00:00.000Z',
+  }
+}
+
+function rootRenewed(node: string) {
+  return {
+    type: 'name_renewed' as const,
+    node,
+    actor: owner,
+    ...renewed,
+    feeLux: 10_000_000_000,
+  }
+}
+
+// The contract reports a subname's authority change as a name_owner_changed on its node.
+function subnameAuthoritiesChanged(node: string, expiresAt: string, expiresAtBlockHeight: number) {
+  return {
+    type: 'name_owner_changed' as const,
+    node,
+    actor: owner,
+    previousOwner: owner,
+    owner,
+    manager: `0x${'4d'.repeat(32)}`,
+    resolver: `0x${'00'.repeat(32)}`,
+    expiresAt,
+    expiresAtBlockHeight,
+  }
+}

@@ -84,6 +84,8 @@ For transfer history, indexers should read `previous_owner` and `owner`. For res
 
 For subname dashboards, indexers should store subname state keyed by both `parent_node` and `node`. Subname activity should appear in the parent namespace history and in the subname node history. Subname records remain resolver events on the subname `node`; they must not be merged into the parent name records. Parent-scoped subname lists are active namespace views and should be empty once the parent is released or expired beyond grace, while direct subname reads may still expose historical rows.
 
+A subname takes its `expires_at` from `subname_created` and its grace end from its parent at that moment. `name_renewed` on a root name emits nothing for its subnames, but it renews each `inherits_parent` subname whose ancestors up to that root all inherit too: indexers give those subnames the root's new `expires_at` and `grace_ends_at`. A `fixed_before_parent` subname keeps its lifecycle, and so do the subnames below it.
+
 ## Controller Events
 
 | Event | Purpose | Required payload |

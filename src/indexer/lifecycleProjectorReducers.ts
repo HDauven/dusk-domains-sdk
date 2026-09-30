@@ -203,6 +203,7 @@ export function reduceSubname(
   event: SubnameRegistryEvent,
   current: IndexedSubname | undefined,
   meta: IndexerEventMeta,
+  parent?: Pick<IndexedSubname, 'graceEndsAt' | 'graceEndsAtBlockHeight'>,
 ): IndexedSubname {
   if (event.type === 'subname_created') {
     return {
@@ -215,8 +216,10 @@ export function reduceSubname(
       manager: event.manager,
       resolver: event.resolver,
       expiresAt: event.expiresAt,
+      graceEndsAt: parent?.graceEndsAt ?? null,
       parentExpiresAt: event.parentExpiresAt,
       expiresAtBlockHeight: event.expiresAtBlockHeight ?? null,
+      graceEndsAtBlockHeight: parent?.graceEndsAtBlockHeight ?? null,
       parentExpiresAtBlockHeight: event.parentExpiresAtBlockHeight ?? null,
       expiryPolicy: event.expiryPolicy,
       revocationPolicy: event.revocationPolicy,
@@ -239,8 +242,10 @@ export function reduceSubname(
     manager: '',
     resolver: '',
     expiresAt: '',
+    graceEndsAt: null,
     parentExpiresAt: '',
     expiresAtBlockHeight: null,
+    graceEndsAtBlockHeight: null,
     parentExpiresAtBlockHeight: null,
     expiryPolicy: 'inherits_parent' as const,
     revocationPolicy: 'parent_revocable' as const,

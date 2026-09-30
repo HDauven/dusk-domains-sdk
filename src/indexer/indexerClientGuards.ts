@@ -196,8 +196,10 @@ export function isIndexedSubname(value: unknown): value is IndexedSubname {
     typeof value.manager === 'string' &&
     typeof value.resolver === 'string' &&
     typeof value.expiresAt === 'string' &&
+    (value.graceEndsAt === undefined || isNullableString(value.graceEndsAt)) &&
     typeof value.parentExpiresAt === 'string' &&
     isNullableNumber(value.expiresAtBlockHeight) &&
+    isNullableNumber(value.graceEndsAtBlockHeight) &&
     isNullableNumber(value.parentExpiresAtBlockHeight) &&
     (value.expiryPolicy === 'inherits_parent' || value.expiryPolicy === 'fixed_before_parent') &&
     (value.revocationPolicy === 'parent_revocable' || value.revocationPolicy === 'locked') &&

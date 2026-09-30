@@ -307,7 +307,9 @@ GET /subname?node=0x...
 
 `/subnames` returns an array of `IndexedSubname` rows. `/subname` returns one row or `null`.
 
-Each `IndexedSubname` includes parent/name identifiers, owner, manager, resolver, expiry policy, revocation policy, status, creation/revocation timestamps, and transaction/block metadata. Subname records remain resolver records on the subname node and must not be merged into the parent records.
+Each `IndexedSubname` includes parent/name identifiers, owner, manager, resolver, expiry and grace end, expiry policy, revocation policy, status, creation/revocation timestamps, and transaction/block metadata. Subname records remain resolver records on the subname node and must not be merged into the parent records.
+
+A subname's `graceEndsAt` is the grace end its parent had when the subname was created. Renewing a root name also renews each `inherits_parent` subname whose ancestors up to that root all inherit too: those rows take the root's new `expiresAt` and `graceEndsAt`. A `fixed_before_parent` subname keeps its lifecycle, and so do the subnames below it.
 
 `/subnames` is an active namespace list. It excludes revoked subnames and returns an empty list if the parent name is released or expired beyond grace, even if historical subname rows remain inspectable through `/subname`.
 

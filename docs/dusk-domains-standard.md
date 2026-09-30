@@ -129,7 +129,7 @@ MVP rules:
 - Parent owner or parent manager/controller can create subnames.
 - Subname labels follow the same ASCII-only normalization and minimum length policy as other labels.
 - Subnames can use independent managers/controllers, resolvers, and typed public records.
-- Default expiry policy is `inherits_parent`.
+- Default expiry policy is `inherits_parent`: renewing the root name renews the subname.
 - Optional fixed expiry must be capped at the parent expiry.
 - Default revocation policy is `parent_revocable`.
 - `locked` subnames cannot be revoked by the parent after creation, but they still cannot outlive the parent expiry.

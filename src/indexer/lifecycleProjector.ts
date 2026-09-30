@@ -80,7 +80,16 @@ export function createLifecycleEventProjector(): LifecycleEventProjector {
       blockHeight: meta.blockHeight ?? null,
     })
 
-    names.set(event.node, reduceLifecycleName(event, current, canonicalName))
+    // The contract clears a lapsed name it registers again without emitting name_released.
+    if (event.type === 'name_registered' && current) clearNodeTreeDerivedState(event.node)
+    const reduced = reduceLifecycleName(event, current, canonicalName)
+    // An authority change gives a subname a name row, which starts with the subname's grace end.
+    const subname = current ? undefined : subnames.get(event.node)
+    const next = subname
+      ? { ...reduced, graceEndsAt: subname.graceEndsAt ?? null, graceEndsAtBlockHeight: subname.graceEndsAtBlockHeight ?? null }
+      : reduced
+    names.set(event.node, next)
+    if (event.type === 'name_renewed') renewInheritingSubnames(event.node, next)
     if (event.type === 'name_released') clearNodeTreeDerivedState(event.node)
     activity.set(event.node, [entry, ...(activity.get(event.node) ?? [])])
     return entry
@@ -142,7 +151,7 @@ export function createLifecycleEventProjector(): LifecycleEventProjector {
 
   function applySubname(event: SubnameRegistryEvent, meta: IndexerEventMeta = {}) {
     const current = subnames.get(event.node)
-    const next = reduceSubname(event, current, meta)
+    const next = reduceSubname(event, current, meta, subnames.get(event.parentNode) ?? names.get(event.parentNode))
     const entry = createActivityEntry({
       eventType: event.type,
       node: event.node,
@@ -274,10 +283,33 @@ export function createLifecycleEventProjector(): LifecycleEventProjector {
     for (const staleNode of staleNodes) {
       resolverRecords.delete(staleNode)
       subnames.delete(staleNode)
+      if (staleNode !== node) names.delete(staleNode)
     }
 
     for (const [key, primaryName] of primaryNames) {
       if (staleNodes.has(primaryName.node)) primaryNames.delete(key)
+    }
+  }
+
+  // Renewing a root renews each subname that inherits its expiry. A fixed subname keeps its own,
+  // and so do the subnames below it.
+  function renewInheritingSubnames(rootNode: string, root: IndexedLifecycleName) {
+    const parents = new Set([rootNode])
+    for (const parentNode of parents) {
+      for (const subname of subnames.values()) {
+        if (subname.parentNode !== parentNode || subname.expiryPolicy !== 'inherits_parent') continue
+        const lifecycle = {
+          expiresAt: root.expiresAt ?? subname.expiresAt,
+          graceEndsAt: root.graceEndsAt,
+          expiresAtBlockHeight: root.expiresAtBlockHeight,
+          graceEndsAtBlockHeight: root.graceEndsAtBlockHeight,
+        }
+        subnames.set(subname.node, { ...subname, ...lifecycle })
+        // An authority change gives a subname a name row too, which renews with it.
+        const row = names.get(subname.node)
+        if (row) names.set(subname.node, { ...row, ...lifecycle })
+        parents.add(subname.node)
+      }
     }
   }
 
