@@ -124,7 +124,7 @@ export async function trackDuskDomainTransaction(
 
   try {
     unsubscribe = subscribeToHandle(handle, (status) => {
-      const nextStatus = normalizeTxStatus(status) ?? 'executing'
+      const nextStatus = txStatusFrom(status) ?? 'executing'
       latestTxId = txIdFrom(status) ?? latestTxId ?? txIdFrom(handle)
       if (nextStatus === lastStatus) return
       lastStatus = nextStatus
@@ -252,8 +252,13 @@ function normalizeTxStatus(status: unknown): DuskDomainTxStatus | null {
   return null
 }
 
+function txStatusFrom(value: unknown): DuskDomainTxStatus | null {
+  const status = normalizeTxStatus(value)
+  return status === 'executed' && revertedPayloadError(value) ? 'failed' : status
+}
+
 function finalStatusFromWaitResult(result: unknown, lastStatus: DuskDomainTxStatus): DuskDomainTxStatus {
-  const resultStatus = normalizeTxStatus(result)
+  const resultStatus = txStatusFrom(result)
   if (isTerminalTxStatus(resultStatus)) return resultStatus
   if (isTerminalTxStatus(lastStatus)) return lastStatus
   return 'executed'
@@ -273,9 +278,34 @@ function txMessageFrom(value: unknown) {
     const message = record[key]
     if (typeof message === 'string' && message.trim()) return message
   }
+  const reverted = revertedPayloadError(record)
+  if (reverted) return reverted
   const receipt = record.receipt
   if (receipt && typeof receipt === 'object') {
     return txMessageFrom(receipt)
+  }
+  return undefined
+}
+
+// @dusk/connect 0.2.0 decodes an Executed payload only when its Content-Type says JSON. Rusk 1.7 sends
+// none, so a reverted call arrives as an executed receipt carrying raw bytes. Drop this once connect ships its fix.
+function revertedPayloadError(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object') return undefined
+  const record = value as Record<string, unknown>
+  const event = record.event
+  const payload = event && typeof event === 'object' ? (event as Record<string, unknown>).payload : undefined
+  if (!ArrayBuffer.isView(payload)) return revertedPayloadError(record.receipt)
+  let decoded: unknown
+  try {
+    decoded = JSON.parse(new TextDecoder().decode(payload))
+  } catch {
+    return undefined
+  }
+  if (!decoded || typeof decoded !== 'object') return undefined
+  const { err, error } = decoded as Record<string, unknown>
+  for (const failure of [err, error]) {
+    if (typeof failure === 'string' && failure.trim()) return failure
+    if (failure && typeof failure === 'object') return JSON.stringify(failure)
   }
   return undefined
 }

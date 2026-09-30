@@ -349,6 +349,48 @@ describe('Dusk Domains transaction lifecycle helpers', () => {
     expect(updates.map((state) => state.status)).toEqual(['submitted', 'executing', 'failed'])
   })
 
+  it('fails executed receipts whose undecoded execution payload reports an error', async () => {
+    const updates: DuskDomainTxState[] = []
+    const context = { title: 'Register aurora.dusk', description: 'Preview', fields: [] }
+    const payload = new TextEncoder().encode(JSON.stringify({
+      block_height: 42,
+      gas_spent: 1_234,
+      err: 'Panic: DuskDomains: commitment not found',
+    }))
+
+    await expect(
+      trackDuskDomainTransaction(connectReceiptHandle('tx-connect-reverted', payload), context, {
+        onUpdate: (state) => updates.push(state),
+      }),
+    ).resolves.toMatchObject({
+      status: 'failed',
+      txId: 'tx-connect-reverted',
+      message: 'Panic: DuskDomains: commitment not found',
+    })
+
+    expect(updates.map((state) => state.status)).not.toContain('executed')
+  })
+
+  it('keeps executed receipts whose undecoded execution payload has no error', async () => {
+    const context = { title: 'Register aurora.dusk', description: 'Preview', fields: [] }
+    const payload = new TextEncoder().encode(JSON.stringify({ block_height: 42, gas_spent: 1_234, err: null }))
+
+    const state = await trackDuskDomainTransaction(connectReceiptHandle('tx-connect-bytes', payload), context)
+
+    expect(state).toMatchObject({ status: 'executed', txId: 'tx-connect-bytes' })
+    expect(state.message).toBeUndefined()
+  })
+
+  it('keeps executed receipts whose execution payload is already decoded', async () => {
+    const context = { title: 'Register aurora.dusk', description: 'Preview', fields: [] }
+    const payload = { block_height: 42, gas_spent: 1_234, err: null }
+
+    const state = await trackDuskDomainTransaction(connectReceiptHandle('tx-connect-json', payload), context)
+
+    expect(state).toMatchObject({ status: 'executed', txId: 'tx-connect-json' })
+    expect(state.message).toBeUndefined()
+  })
+
   it('uses status-update hashes when a wallet handle does not expose one up front', async () => {
     const updates: DuskDomainTxState[] = []
     const context = { title: 'Register aurora.dusk', description: 'Preview', fields: [] }
@@ -377,3 +419,18 @@ describe('Dusk Domains transaction lifecycle helpers', () => {
     })
   })
 })
+
+// The receipt @dusk/connect 0.2.0 reports when an execution event arrives, success or not.
+function connectReceiptHandle(hash: string, payload: unknown) {
+  const receipt = { hash, status: 'executed', ok: true, event: { headers: {}, payload } }
+  return {
+    hash,
+    status: 'submitted',
+    onStatus(handler: (status: unknown) => void) {
+      handler({ status: 'submitted', hash })
+      handler({ status: 'executing', hash })
+      handler({ status: 'executed', hash, receipt })
+    },
+    waitExecuted: async () => receipt,
+  }
+}
