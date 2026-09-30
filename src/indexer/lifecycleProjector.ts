@@ -239,6 +239,17 @@ export function createLifecycleEventProjector(): LifecycleEventProjector {
 
   function applyPool(event: PoolEvent, meta: IndexerEventMeta = {}) {
     poolState = reducePoolState(event, poolState, meta)
+    // Moved records keep their content; the name now resolves through the resolver holding them.
+    // A subname whose authorities changed has a name row too, and both follow the move.
+    if (event.type === 'records_moved') {
+      const subname = subnames.get(event.node)
+      if (names.has(event.node)) {
+        apply({ type: 'resolver_changed', node: event.node, actor: event.controller, resolver: event.toResolver }, meta)
+      }
+      if (subname) {
+        subnames.set(event.node, { ...subname, resolver: event.toResolver })
+      }
+    }
     // The router starts with a fee config; later changes arrive as fee_config_updated.
     if (event.type === 'router_initialized') {
       feeConfig = reduceFeeConfig(
