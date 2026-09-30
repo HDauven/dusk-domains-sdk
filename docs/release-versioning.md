@@ -34,7 +34,7 @@ Exact package versions are preferred for release bundles. Ranges are acceptable 
 Public integrations should start from `createDuskDomainsClientFromManifest`. The manifest binds the SDK to:
 
 - network and chain ID;
-- core and treasury contract IDs;
+- router, core and treasury contract IDs;
 - data-driver artifact URLs and hashes;
 - method signatures;
 - event schema version;

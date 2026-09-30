@@ -14,10 +14,10 @@ import {
   isCoreInitArgs,
   isCoreMutateRecordsSenderRuntimeArgs,
   isCoreRenewRuntimeArgs,
-  isCoreSetFeeConfigRuntimeArgs,
+  isRouterSetFeeConfigRuntimeArgs,
   isCoreSetPrimaryNameRuntimeArgs,
   isCoreSetRecordSenderRuntimeArgs,
-  isCoreSetReferralConfigRuntimeArgs,
+  isRouterSetReferralConfigRuntimeArgs,
   isCoreUpdateAuthoritiesRuntimeArgs,
   isDuskPrincipal,
   isMarketplaceAuctionNodeArgs,
@@ -30,7 +30,12 @@ import {
   isMarketplaceReadRefundArgs,
   isMarketplaceSetFeeRuntimeArgs,
   isMarketplaceUpdateOperatorRuntimeArgs,
+  isPoolEndpointArgs,
+  isPoolNodeArgs,
   isRecord,
+  isRouterAddPoolMemberArgs,
+  isRouterInitArgs,
+  isRouterSetOperatorRuntimeArgs,
   isTreasuryClaimAllReferralRewardsRuntimeArgs,
   isTreasuryClaimReferralRewardRuntimeArgs,
   isTreasuryClaimRuntimeArgs,
@@ -51,26 +56,45 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
     throw invalidKnownCallArgs(call)
   }
   if (call.contract === 'core' && call.functionName === 'init' && isCoreInitArgs(args)) {
+    return { router: bytes32(args.router, 'router') }
+  }
+  if (call.contract === 'router' && call.functionName === 'init' && isRouterInitArgs(args)) {
     return {
-      treasury_contract: bytes32(args.treasuryContract, 'treasuryContract'),
-      record_source_contract: bytes32(args.recordSourceContract, 'recordSourceContract'),
       operator: principal(args.operator, 'operator'),
+      treasury: bytes32(args.treasury, 'treasury'),
+      marketplace: args.marketplace ? bytes32(args.marketplace, 'marketplace') : Array(32).fill(0),
       referral_reward_bps: args.referralRewardBps,
     }
   }
   if (
-    call.contract === 'core' &&
+    call.contract === 'router' &&
+    (call.functionName === 'add_registry_runtime' || call.functionName === 'add_resolver_runtime') &&
+    isRouterAddPoolMemberArgs(args)
+  ) {
+    return { member: bytes32(args.member, 'member') }
+  }
+  if (call.contract === 'router' && call.functionName === 'set_operator_runtime' && isRouterSetOperatorRuntimeArgs(args)) {
+    return { operator: principal(args.operator, 'operator') }
+  }
+  if (poolNodeCalls.has(callKey) && isPoolNodeArgs(args)) {
+    return { node: bytes32(args.node, 'node') }
+  }
+  if (poolEndpointCalls.has(callKey) && isPoolEndpointArgs(args)) {
+    return { endpoint: endpoint(args.endpointType, args.endpointValue) }
+  }
+  if (
+    call.contract === 'router' &&
     call.functionName === 'set_referral_config_runtime' &&
-    isCoreSetReferralConfigRuntimeArgs(args)
+    isRouterSetReferralConfigRuntimeArgs(args)
   ) {
     return {
       referral_reward_bps: args.referralRewardBps,
     }
   }
   if (
-    call.contract === 'core' &&
+    call.contract === 'router' &&
     call.functionName === 'set_fee_config_runtime' &&
-    isCoreSetFeeConfigRuntimeArgs(args)
+    isRouterSetFeeConfigRuntimeArgs(args)
   ) {
     return {
       three_char_year_lux: args.threeCharYearLux,
@@ -246,6 +270,7 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
       operator: principal(args.operator, 'operator'),
       operator_recipient: moonlightPublicKeyBytes(args.operatorRecipient),
       allowed_fee_sources: args.allowedFeeSources.map((source) => bytes32(source, 'allowedFeeSource')),
+      router: bytes32(args.router, 'router'),
     }
   }
   if (
@@ -284,7 +309,7 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
   }
   if (call.contract === 'marketplace' && call.functionName === 'init' && isMarketplaceInitArgs(args)) {
     return {
-      core_contract: bytes32(args.coreContract, 'coreContract'),
+      router: bytes32(args.router, 'router'),
       treasury_contract: bytes32(args.treasuryContract, 'treasuryContract'),
       marketplace_authority: bytes32(args.marketplaceAuthority, 'marketplaceAuthority'),
       operator: bytes32(args.operator, 'operator'),
@@ -388,8 +413,25 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
   return args
 }
 
+const poolNodeCalls = new Set([
+  'router.locate_name',
+  'core.holds_name',
+  'core.record_slot',
+  'core.move_records_runtime',
+])
+
+const poolEndpointCalls = new Set([
+  'router.locate_primary',
+  'core.holds_primary',
+])
+
 const noArgDuskDomainCalls = new Set([
-  'core.fee_config',
+  'core.router',
+  'core.accepts_new_names',
+  'router.fee_config',
+  'router.config',
+  'router.active_registry',
+  'router.active_resolver',
   'treasury.claim_all_runtime',
   'treasury.read_state',
   'marketplace.read_config',

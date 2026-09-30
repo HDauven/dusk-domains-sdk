@@ -14,10 +14,10 @@ import type {
   CoreReadPrimaryNameArgs,
   CoreReadRecordArgs,
   CoreRenewRuntimeArgs,
-  CoreSetFeeConfigRuntimeArgs,
+  RouterSetFeeConfigRuntimeArgs,
   CoreSetPrimaryNameRuntimeArgs,
   CoreSetRecordSenderRuntimeArgs,
-  CoreSetReferralConfigRuntimeArgs,
+  RouterSetReferralConfigRuntimeArgs,
   CoreUpdateAuthoritiesRuntimeArgs,
   DuskDomainCallMetadata,
   MarketplaceAuctionNodeArgs,
@@ -28,6 +28,12 @@ import type {
   MarketplacePlaceOfferRuntimeArgs,
   MarketplacePlaceBidRuntimeArgs,
   MarketplaceReadRefundArgs,
+  PoolEndpointArgs,
+  PoolNodeArgs,
+  RouterAddPoolMemberArgs,
+  RouterInitArgs,
+  RouterSetOperatorRuntimeArgs,
+  CoreMoveRecordsRuntimeArgs,
   MarketplaceSetFeeRuntimeArgs,
   MarketplaceUpdateOperatorRuntimeArgs,
   TreasuryClaimAllReferralRewardsRuntimeArgs,
@@ -46,22 +52,22 @@ export function coreInitCall(args: CoreInitArgs): DuskDomainCallMetadata<CoreIni
   }
 }
 
-export function coreSetReferralConfigRuntimeCall(
-  args: CoreSetReferralConfigRuntimeArgs,
-): DuskDomainCallMetadata<CoreSetReferralConfigRuntimeArgs> {
+export function routerSetReferralConfigRuntimeCall(
+  args: RouterSetReferralConfigRuntimeArgs,
+): DuskDomainCallMetadata<RouterSetReferralConfigRuntimeArgs> {
   return {
-    contract: 'core',
+    contract: 'router',
     functionName: 'set_referral_config_runtime',
     kind: 'write',
     args,
   }
 }
 
-export function coreSetFeeConfigRuntimeCall(
-  args: CoreSetFeeConfigRuntimeArgs,
-): DuskDomainCallMetadata<CoreSetFeeConfigRuntimeArgs> {
+export function routerSetFeeConfigRuntimeCall(
+  args: RouterSetFeeConfigRuntimeArgs,
+): DuskDomainCallMetadata<RouterSetFeeConfigRuntimeArgs> {
   return {
-    contract: 'core',
+    contract: 'router',
     functionName: 'set_fee_config_runtime',
     kind: 'write',
     args,
@@ -234,10 +240,161 @@ export function corePendingCommitmentCall(
   }
 }
 
-export function coreFeeConfigCall(): DuskDomainCallMetadata<undefined> {
+export function routerInitCall(args: RouterInitArgs): DuskDomainCallMetadata<RouterInitArgs> {
+  return {
+    contract: 'router',
+    functionName: 'init',
+    kind: 'write',
+    args,
+  }
+}
+
+/** Appends a registry. It becomes the only one that creates new root names. */
+export function routerAddRegistryRuntimeCall(
+  args: RouterAddPoolMemberArgs,
+): DuskDomainCallMetadata<RouterAddPoolMemberArgs> {
+  return {
+    contract: 'router',
+    functionName: 'add_registry_runtime',
+    kind: 'write',
+    args,
+  }
+}
+
+/** Appends a resolver. It takes new records once the newest resolver before it is full. */
+export function routerAddResolverRuntimeCall(
+  args: RouterAddPoolMemberArgs,
+): DuskDomainCallMetadata<RouterAddPoolMemberArgs> {
+  return {
+    contract: 'router',
+    functionName: 'add_resolver_runtime',
+    kind: 'write',
+    args,
+  }
+}
+
+export function routerSetOperatorRuntimeCall(
+  args: RouterSetOperatorRuntimeArgs,
+): DuskDomainCallMetadata<RouterSetOperatorRuntimeArgs> {
+  return {
+    contract: 'router',
+    functionName: 'set_operator_runtime',
+    kind: 'write',
+    args,
+  }
+}
+
+export function routerFeeConfigCall(): DuskDomainCallMetadata<undefined> {
+  return {
+    contract: 'router',
+    functionName: 'fee_config',
+    kind: 'read',
+    args: undefined,
+  }
+}
+
+/** The registry that creates new root names. */
+export function routerActiveRegistryCall(): DuskDomainCallMetadata<undefined> {
+  return {
+    contract: 'router',
+    functionName: 'active_registry',
+    kind: 'read',
+    args: undefined,
+  }
+}
+
+/** The pool registry that holds a name, if any does. */
+export function routerLocateNameCall(args: PoolNodeArgs): DuskDomainCallMetadata<PoolNodeArgs> {
+  return {
+    contract: 'router',
+    functionName: 'locate_name',
+    kind: 'read',
+    args,
+  }
+}
+
+/** The registries that hold a primary name for an address. At most one does once writes settle. */
+export function routerLocatePrimaryCall(args: PoolEndpointArgs): DuskDomainCallMetadata<PoolEndpointArgs> {
+  return {
+    contract: 'router',
+    functionName: 'locate_primary',
+    kind: 'read',
+    args,
+  }
+}
+
+/** The resolver that takes new records, if it still has room. */
+export function routerActiveResolverCall(): DuskDomainCallMetadata<undefined> {
+  return {
+    contract: 'router',
+    functionName: 'active_resolver',
+    kind: 'read',
+    args: undefined,
+  }
+}
+
+export function routerConfigCall(): DuskDomainCallMetadata<undefined> {
+  return {
+    contract: 'router',
+    functionName: 'config',
+    kind: 'read',
+    args: undefined,
+  }
+}
+
+export function coreRouterCall(): DuskDomainCallMetadata<undefined> {
   return {
     contract: 'core',
-    functionName: 'fee_config',
+    functionName: 'router',
+    kind: 'read',
+    args: undefined,
+  }
+}
+
+/** Moves a name's records into the resolver that takes new records, so they can grow again. */
+export function coreMoveRecordsRuntimeCall(
+  args: CoreMoveRecordsRuntimeArgs,
+): DuskDomainCallMetadata<CoreMoveRecordsRuntimeArgs> {
+  return {
+    contract: 'core',
+    functionName: 'move_records_runtime',
+    kind: 'write',
+    args,
+  }
+}
+
+export function coreHoldsNameCall(args: PoolNodeArgs): DuskDomainCallMetadata<PoolNodeArgs> {
+  return {
+    contract: 'core',
+    functionName: 'holds_name',
+    kind: 'read',
+    args,
+  }
+}
+
+export function coreHoldsPrimaryCall(args: PoolEndpointArgs): DuskDomainCallMetadata<PoolEndpointArgs> {
+  return {
+    contract: 'core',
+    functionName: 'holds_primary',
+    kind: 'read',
+    args,
+  }
+}
+
+/** Where a name's records live: the resolver and the slot epoch. */
+export function coreRecordSlotCall(args: PoolNodeArgs): DuskDomainCallMetadata<PoolNodeArgs> {
+  return {
+    contract: 'core',
+    functionName: 'record_slot',
+    kind: 'read',
+    args,
+  }
+}
+
+export function coreAcceptsNewNamesCall(): DuskDomainCallMetadata<undefined> {
+  return {
+    contract: 'core',
+    functionName: 'accepts_new_names',
     kind: 'read',
     args: undefined,
   }

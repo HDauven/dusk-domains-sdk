@@ -28,7 +28,7 @@ export function createMarketplaceProjector(options: MarketplaceProjectorOptions)
     if (event.type === 'marketplace_initialized') {
       config = {
         initialized: true,
-        coreContract: event.coreContract,
+        router: event.router,
         treasuryContract: event.treasuryContract,
         marketplaceAuthority: event.marketplaceAuthority,
         operator: event.operator,
@@ -242,7 +242,7 @@ export function marketplaceOfferKey(node: string, buyerAuthority: string) {
 function emptyMarketplaceConfig(): IndexedMarketplaceConfig {
   return {
     initialized: false,
-    coreContract: null,
+    router: null,
     treasuryContract: null,
     marketplaceAuthority: null,
     operator: null,

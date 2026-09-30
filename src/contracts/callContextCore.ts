@@ -10,10 +10,9 @@ import {
   isCoreInitArgs,
   isCoreMutateRecordsSenderRuntimeArgs,
   isCoreRenewRuntimeArgs,
-  isCoreSetFeeConfigRuntimeArgs,
+  isPoolNodeArgs,
   isCoreSetPrimaryNameRuntimeArgs,
   isCoreSetRecordSenderRuntimeArgs,
-  isCoreSetReferralConfigRuntimeArgs,
   isCoreUpdateAuthoritiesRuntimeArgs,
 } from './callArgGuards'
 import {
@@ -29,37 +28,9 @@ export function decodedCoreDuskDomainContext(call: DuskDomainCallMetadata): Dusk
 
   if (call.functionName === 'init' && isCoreInitArgs(call.args)) {
     return {
-      title: 'Initialize Dusk Domains core',
-      description: 'Configure the treasury and record source for the core contract.',
-      fields: [
-        { label: 'Treasury', value: call.args.treasuryContract },
-        { label: 'Record source', value: call.args.recordSourceContract },
-        { label: 'Operator', value: principalSummary(call.args.operator) },
-        { label: 'Referral share', value: `${call.args.referralRewardBps / 100}%` },
-      ],
-    }
-  }
-
-  if (call.functionName === 'set_referral_config_runtime' && isCoreSetReferralConfigRuntimeArgs(call.args)) {
-    return {
-      title: 'Update referral share',
-      description: 'Change the share of future registration fees credited to referrers.',
-      fields: [
-        { label: 'Referral share', value: `${call.args.referralRewardBps / 100}%` },
-      ],
-    }
-  }
-
-  if (call.functionName === 'set_fee_config_runtime' && isCoreSetFeeConfigRuntimeArgs(call.args)) {
-    return {
-      title: 'Update domain pricing',
-      description: 'Change future registration pricing and referral economics.',
-      fields: [
-        { label: '3 characters', value: `${formatLux(call.args.threeCharYearLux)} DUSK / year` },
-        { label: '4 characters', value: `${formatLux(call.args.fourCharYearLux)} DUSK / year` },
-        { label: '5+ characters', value: `${formatLux(call.args.fivePlusYearLux)} DUSK / year` },
-        { label: 'Referral share', value: `${call.args.referralRewardBps / 100}%` },
-      ],
+      title: 'Initialize a Dusk Domains registry',
+      description: 'Connect the registry to its router, which supplies the treasury, marketplace and fees.',
+      fields: [{ label: 'Router', value: call.args.router }],
     }
   }
 
@@ -97,6 +68,16 @@ export function decodedCoreDuskDomainContext(call: DuskDomainCallMetadata): Dusk
         { label: 'Domain reference', value: call.args.node },
         { label: 'Duration', value: formatYears(call.args.durationYears) },
         { label: 'Registration fee', value: `${formatLux(call.args.feeLux)} DUSK` },
+      ],
+    }
+  }
+
+  if (call.functionName === 'move_records_runtime' && isPoolNodeArgs(call.args)) {
+    return {
+      title: 'Move domain records',
+      description: 'Copy the records into the resolver that takes new records, so you can add more. The old copy is cleared.',
+      fields: [
+        { label: 'Domain reference', value: call.args.node },
       ],
     }
   }

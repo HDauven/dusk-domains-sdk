@@ -166,7 +166,7 @@ export type IndexedSubname = {
 
 export type IndexedMarketplaceConfig = {
   initialized: boolean
-  coreContract: string | null
+  router: string | null
   treasuryContract: string | null
   marketplaceAuthority: string | null
   operator: string | null
@@ -236,6 +236,19 @@ export type IndexedMarketplaceRefund = {
   recipient: string | null
   amountLux: number
   lastEventType: MarketplaceEvent['type']
+  txId: string | null
+  blockHeight: number | null
+}
+
+/** The contract pool as the router's events describe it. Members are in the order they joined. */
+export type IndexedPoolState = {
+  initialized: boolean
+  router: string | null
+  operator: DuskPrincipal | null
+  treasury: string | null
+  marketplace: string | null
+  registries: string[]
+  resolvers: string[]
   txId: string | null
   blockHeight: number | null
 }

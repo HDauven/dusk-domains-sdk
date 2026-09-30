@@ -10,21 +10,24 @@ import {
   coreCommitRuntimeCall,
   coreCompleteRegistrationRuntimeCall,
   coreCreateSubnameRuntimeCall,
-  coreFeeConfigCall,
+  coreAcceptsNewNamesCall,
   coreGetNameCall,
+  coreHoldsNameCall,
+  coreHoldsPrimaryCall,
   coreInitCall,
   coreAcceptMarketplaceOfferRuntimeCall,
   coreEscrowAuctionRuntimeCall,
   coreEscrowFixedSaleRuntimeCall,
+  coreMoveRecordsRuntimeCall,
   coreMutateRecordsSenderRuntimeCall,
   corePendingCommitmentCall,
   coreReadPrimaryNameCall,
   coreReadRecordCall,
+  coreRecordSlotCall,
+  coreRouterCall,
   coreRenewRuntimeCall,
-  coreSetFeeConfigRuntimeCall,
   coreUpdateAuthoritiesRuntimeCall,
   coreSetPrimaryNameRuntimeCall,
-  coreSetReferralConfigRuntimeCall,
   coreSetRecordSenderRuntimeCall,
   decodeDuskDomainOutput,
   decodedDuskDomainContext,
@@ -51,6 +54,18 @@ import {
   marketplaceSettleAuctionRuntimeCall,
   marketplaceUpdateOperatorRuntimeCall,
   prepareDuskDomainContractCall,
+  routerActiveRegistryCall,
+  routerActiveResolverCall,
+  routerAddRegistryRuntimeCall,
+  routerAddResolverRuntimeCall,
+  routerConfigCall,
+  routerFeeConfigCall,
+  routerInitCall,
+  routerLocateNameCall,
+  routerLocatePrimaryCall,
+  routerSetFeeConfigRuntimeCall,
+  routerSetOperatorRuntimeCall,
+  routerSetReferralConfigRuntimeCall,
   toDuskDomainWireArgs,
   treasuryClaimAllReferralRewardsRuntimeCall,
   treasuryClaimAllRuntimeCall,
@@ -74,6 +89,7 @@ const secret = `0x${'03'.repeat(32)}`
 const owner = `0x${'09'.repeat(32)}`
 const treasuryContract = `0x${'43'.repeat(32)}`
 const coreContract = `0x${'44'.repeat(32)}`
+const routerContract = `0x${'46'.repeat(32)}`
 const marketplaceContract = `0x${'45'.repeat(32)}`
 const recipient = '244Sywxj7PuMHpcPxemaXLcrY5rPgztra6H9Vz8cU1Ro5v23SxKTfVqr2yS7NXAXE1iq59ndn4aMZmYxuzu3Te3e9fokQKTUkYvFxYg2P2E8EEg1gWUbs3AFL2aNx62HQd7r'
 const endpointValue = recipient
@@ -128,14 +144,30 @@ function registrationCall() {
 
 function schemaCalls(): DuskDomainCallMetadata[] {
   return [
-    coreInitCall({
-      treasuryContract,
-      recordSourceContract: coreContract,
+    routerInitCall({
       operator: operatorPrincipal(),
+      treasury: treasuryContract,
+      marketplace: marketplaceContract,
       referralRewardBps: 1500,
     }),
-    coreSetReferralConfigRuntimeCall({ referralRewardBps: 1000 }),
-    coreSetFeeConfigRuntimeCall({
+    routerAddRegistryRuntimeCall({ member: coreContract }),
+    routerAddResolverRuntimeCall({ member: `0x${'47'.repeat(32)}` }),
+    routerSetOperatorRuntimeCall({ operator: operatorPrincipal() }),
+    routerConfigCall(),
+    routerFeeConfigCall(),
+    routerActiveRegistryCall(),
+    routerActiveResolverCall(),
+    routerLocateNameCall({ node }),
+    routerLocatePrimaryCall({ endpointType: 'moonlight_address', endpointValue }),
+    coreInitCall({ router: routerContract }),
+    coreRouterCall(),
+    coreMoveRecordsRuntimeCall({ node }),
+    coreHoldsNameCall({ node }),
+    coreHoldsPrimaryCall({ endpointType: 'moonlight_address', endpointValue }),
+    coreRecordSlotCall({ node }),
+    coreAcceptsNewNamesCall(),
+    routerSetReferralConfigRuntimeCall({ referralRewardBps: 1000 }),
+    routerSetFeeConfigRuntimeCall({
       threeCharYearLux: 150_000_000_000,
       fourCharYearLux: 50_000_000_000,
       fivePlusYearLux: 10_000_000_000,
@@ -223,11 +255,11 @@ function schemaCalls(): DuskDomainCallMetadata[] {
     coreReadRecordCall({ node, key: 'moonlight_address' }),
     coreReadPrimaryNameCall({ endpointType: 'moonlight_address', endpointValue }),
     corePendingCommitmentCall({ commitment }),
-    coreFeeConfigCall(),
     treasuryInitCall({
       operator: operatorPrincipal(),
       operatorRecipient: recipient,
-      allowedFeeSources: [coreContract],
+      allowedFeeSources: [marketplaceContract],
+      router: routerContract,
     }),
     treasuryUpdateOperatorRuntimeCall({
       operator: operatorPrincipal(),
@@ -239,7 +271,7 @@ function schemaCalls(): DuskDomainCallMetadata[] {
     treasuryClaimAllReferralRewardsRuntimeCall({ recipient }),
     treasuryReadStateCall(),
     marketplaceInitCall({
-      coreContract,
+      router: routerContract,
       treasuryContract,
       marketplaceAuthority: owner,
       operator: owner,
@@ -292,7 +324,7 @@ describe('Dusk Domains contract call helpers', () => {
   })
 
   it('keeps the public contract surface scoped to protocol contracts', () => {
-    expect(Object.keys(DUSK_DOMAINS_CONTRACTS)).toEqual(['core', 'treasury', 'marketplace'])
+    expect(Object.keys(DUSK_DOMAINS_CONTRACTS)).toEqual(['router', 'core', 'treasury', 'marketplace'])
   })
 
   it('allows only configured runtime writes, never reads or unknown runtime names', () => {
@@ -541,6 +573,7 @@ describe('Dusk Domains contract call helpers', () => {
 
   it('encodes configured calls with generated data-driver schemas when artifacts are present', async () => {
     const driverFiles = {
+      router: 'dusk-domains-router.data-driver.wasm',
       core: 'dusk-domains-core.data-driver.wasm',
       treasury: 'dusk-domains-treasury.data-driver.wasm',
       marketplace: 'dusk-domains-marketplace.data-driver.wasm',
@@ -568,6 +601,10 @@ describe('Dusk Domains contract call helpers', () => {
         'open_fixed_sale_from_core',
         'open_auction_from_core',
         'accept_offer_from_core',
+        // Pool members call these on each other; apps never do.
+        'is_pool_member',
+        'registry_context',
+        'drop_primary_from_pool',
         // Commitment pruning is keeper-facing and has no browser SDK builder.
         ...(contract === 'core' ? ['prune_commitments_runtime'] : []),
       ])

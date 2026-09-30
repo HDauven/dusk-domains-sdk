@@ -12,6 +12,7 @@ import type {
   SubnameRegistryEvent,
   TreasuryEvent,
   MarketplaceEvent,
+  PoolEvent,
 } from './events/indexerEventTypes'
 import type {
   IndexedFeeConfig,
@@ -21,6 +22,7 @@ import type {
   IndexedMarketplaceAuction,
   IndexedMarketplaceOffer,
   IndexedMarketplaceRefund,
+  IndexedPoolState,
   IndexedReferralState,
   IndexedRegistrationCommitment,
   IndexedReversePrimaryName,
@@ -44,6 +46,7 @@ export type LifecycleEventProjector = {
     | IndexedMarketplaceOffer
     | IndexedMarketplaceRefund
     | null
+  applyPool: (event: PoolEvent, meta?: IndexerEventMeta) => IndexedPoolState
   getNameByNode: (node: string) => IndexedLifecycleName | null
   getCommitment: (commitment: string) => IndexedRegistrationCommitment | null
   getResolverRecords: (node: string) => ResolverRecord[]
@@ -53,6 +56,7 @@ export type LifecycleEventProjector = {
   getTreasuryState: () => IndexedTreasuryState
   getReferralState: (referrer: string) => IndexedReferralState
   getFeeConfig: () => IndexedFeeConfig
+  getPoolState: () => IndexedPoolState
   getMarketplaceConfig: () => IndexedMarketplaceConfig
   getMarketplaceFixedSaleByNode: (node: string) => IndexedMarketplaceFixedSale | null
   getMarketplaceFixedSales: () => IndexedMarketplaceFixedSale[]

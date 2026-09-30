@@ -74,6 +74,14 @@ export const marketplaceEventTypes = [
   'marketplace_refund_claimed',
 ] as const
 
+/** Event types emitted as the contract pool grows: router setup, new members, records moving. */
+export const poolEventTypes = [
+  'router_initialized',
+  'pool_member_added',
+  'router_operator_changed',
+  'records_moved',
+] as const
+
 /** All event types known to the public Dusk Domains indexer schema. */
 export const duskDomainsIndexedEventTypes = [
   ...controllerEventTypes,
@@ -85,6 +93,7 @@ export const duskDomainsIndexedEventTypes = [
   ...referralEventTypes,
   ...feeConfigEventTypes,
   ...marketplaceEventTypes,
+  ...poolEventTypes,
 ] as const
 
 // Keep the TypeScript and plain-Node catalogs equally immutable.
@@ -98,6 +107,7 @@ for (const eventTypes of [
   referralEventTypes,
   feeConfigEventTypes,
   marketplaceEventTypes,
+  poolEventTypes,
   duskDomainsIndexedEventTypes,
 ]) Object.freeze(eventTypes)
 
@@ -110,6 +120,7 @@ const treasuryEventTypeSet = new Set<string>(treasuryEventTypes)
 const referralEventTypeSet = new Set<string>(referralEventTypes)
 const feeConfigEventTypeSet = new Set<string>(feeConfigEventTypes)
 const marketplaceEventTypeSet = new Set<string>(marketplaceEventTypes)
+const poolEventTypeSet = new Set<string>(poolEventTypes)
 const duskDomainsIndexedEventTypeSet = new Set<string>(duskDomainsIndexedEventTypes)
 
 /** Returns true when a value is any known Dusk Domains indexed event type. */
@@ -160,4 +171,9 @@ export function isFeeConfigEventType(value: string): boolean {
 /** Returns true when a value is a marketplace event type. */
 export function isMarketplaceEventType(value: string): boolean {
   return marketplaceEventTypeSet.has(value)
+}
+
+/** Returns true when a value is a contract pool event type. */
+export function isPoolEventType(value: string): boolean {
+  return poolEventTypeSet.has(value)
 }

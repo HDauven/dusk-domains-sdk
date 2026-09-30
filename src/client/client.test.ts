@@ -210,6 +210,7 @@ describe('Dusk Domains SDK mode packaging', () => {
             deployment: {
               chainId: manifest.chainId,
               contracts: {
+                router: { contractId: manifest.contracts.router.contractId },
                 core: { contractId: manifest.contracts.core.contractId },
                 treasury: { contractId: manifest.contracts.treasury.contractId },
               },

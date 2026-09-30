@@ -214,7 +214,7 @@ export function isIndexedMarketplaceConfig(value: unknown): value is IndexedMark
   return (
     isRecord(value) &&
     typeof value.initialized === 'boolean' &&
-    isNullableString(value.coreContract) &&
+    isNullableString(value.router) &&
     isNullableString(value.treasuryContract) &&
     isNullableString(value.marketplaceAuthority) &&
     isNullableString(value.operator) &&

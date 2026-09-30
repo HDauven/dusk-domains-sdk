@@ -8,11 +8,18 @@ import type {
   DuskDomainContractPreset,
 } from './callTypes'
 import { toDuskDomainWireArgs } from './callWireArgs'
+import { routeDuskDomainCall } from './poolRouting'
 
 export * from './callBuilders'
 export { decodedDuskDomainContext } from './callContext'
 export { DUSK_DOMAINS_CONTRACTS, DUSK_DOMAINS_PLACEHOLDER_CONTRACT_ID } from './callContracts'
 export * from './callTypes'
+export {
+  clearDuskDomainRegistryCache,
+  locateNameRegistry,
+  registrationRegistry,
+  routeDuskDomainCall,
+} from './poolRouting'
 export { isRuntimeBoundDuskDomainWrite, toDuskDomainWireArgs } from './callWireArgs'
 
 export function encodeDuskDomainCall(driver: DuskDataDriverLike, call: DuskDomainCallMetadata): Uint8Array {
@@ -29,8 +36,9 @@ export async function readDuskDomainContract(
   call: DuskDomainCallMetadata,
   contracts: DuskDomainContractMap = DUSK_DOMAINS_CONTRACTS,
 ) : Promise<unknown> {
+  call = await routeDuskDomainCall(app, call, contracts)
   return await app.readContract({
-    contract: requireDuskDomainContract(contracts, call.contract),
+    contract: requireDuskDomainContract(contracts, call.contract, call.contractId),
     functionName: call.functionName,
     args: toDuskDomainWireArgs(call),
     decodedContext: decodedDuskDomainContext(call),
@@ -42,9 +50,10 @@ export async function prepareDuskDomainContractCall(
   call: DuskDomainCallMetadata,
   contracts: DuskDomainContractMap = DUSK_DOMAINS_CONTRACTS,
 ) : Promise<unknown> {
+  call = await routeDuskDomainCall(app, call, contracts)
   const deposit = duskDomainCallDepositLux(call)
   return await app.prepareContractCall({
-    contract: requireDuskDomainContract(contracts, call.contract),
+    contract: requireDuskDomainContract(contracts, call.contract, call.contractId),
     functionName: call.functionName,
     args: toDuskDomainWireArgs(call),
     ...(deposit ? { deposit } : {}),
@@ -58,9 +67,10 @@ export async function writeDuskDomainContract(
   preparedCall?: unknown,
   contracts: DuskDomainContractMap = DUSK_DOMAINS_CONTRACTS,
 ) : Promise<unknown> {
+  call = await routeDuskDomainCall(app, call, contracts)
   const deposit = duskDomainCallDepositLux(call)
   return await app.writeContract({
-    contract: requireDuskDomainContract(contracts, call.contract),
+    contract: requireDuskDomainContract(contracts, call.contract, call.contractId),
     functionName: call.functionName,
     args: toDuskDomainWireArgs(call),
     ...(deposit ? { deposit } : {}),
@@ -72,10 +82,15 @@ export async function writeDuskDomainContract(
 export function requireDuskDomainContract(
   contracts: DuskDomainContractMap,
   key: DuskDomainCallMetadata['contract'],
+  contractId?: string,
 ): DuskDomainContractPreset {
   const contract = contracts[key]
   if (!contract) throw new Error(`Dusk Domains ${key} contract is not configured.`)
-  return contract
+  if (contractId === undefined) return contract
+  if (!/^0x[0-9a-f]{64}$/iu.test(contractId)) {
+    throw new Error(`Dusk Domains ${key} contract override must be a 32-byte hex contract ID.`)
+  }
+  return { ...contract, contractId }
 }
 
 export function duskDomainCallDepositLux(call: DuskDomainCallMetadata): string | undefined {

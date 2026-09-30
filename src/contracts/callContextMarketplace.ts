@@ -22,7 +22,7 @@ export function decodedMarketplaceDuskDomainContext(
       title: 'Initialize marketplace',
       description: 'Configure marketplace contracts, operator and fee.',
       fields: [
-        { label: 'Core contract', value: call.args.coreContract },
+        { label: 'Router', value: call.args.router },
         { label: 'Treasury contract', value: call.args.treasuryContract },
         { label: 'Operator', value: call.args.operator },
         { label: 'Fee', value: String(call.args.feeBps / 100) + '%' },

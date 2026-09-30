@@ -145,6 +145,7 @@ export function indexedNameSummary(overrides: Partial<IndexedNameSummary> = {}):
 }
 
 export function releaseManifest() {
+  const routerId = `0x${'33'.repeat(32)}`
   const coreId = `0x${'11'.repeat(32)}`
   const treasuryId = `0x${'22'.repeat(32)}`
   const hash = 'a'.repeat(64)
@@ -169,6 +170,35 @@ export function releaseManifest() {
       indexer: '@dusk-domains/indexer',
     },
     contracts: {
+      router: {
+        key: 'router',
+        name: 'Dusk Domains Router',
+        crate: 'dusk-domains-router',
+        contractId: routerId,
+        contractWasm: null,
+        dataDriver: {
+          path: 'contracts/dusk-domains-router.data-driver.wasm',
+          bytes: 1,
+          sha256: hash,
+          blake2b256: hash,
+        },
+        methodSigs: {
+          init: 'init(InitRouter)',
+          add_registry_runtime: 'add_registry_runtime(AddPoolMember)',
+          add_resolver_runtime: 'add_resolver_runtime(AddPoolMember)',
+          set_operator_runtime: 'set_operator_runtime(SetRouterOperatorRuntime)',
+          set_fee_config_runtime: 'set_fee_config_runtime(SetFeeConfigRuntime)',
+          set_referral_config_runtime: 'set_referral_config_runtime(SetReferralConfigRuntime)',
+          config: 'config',
+          fee_config: 'fee_config',
+          active_registry: 'active_registry',
+          active_resolver: 'active_resolver',
+          locate_name: 'locate_name(HoldsName)',
+          locate_primary: 'locate_primary(LocatePrimary)',
+        },
+        methods: [],
+        examples: [],
+      },
       core: {
         key: 'core',
         name: 'Dusk Domains Core',
@@ -183,8 +213,7 @@ export function releaseManifest() {
         },
         methodSigs: {
           init: 'init(InitCoreRuntime)',
-          set_referral_config_runtime: 'set_referral_config_runtime(SetReferralConfigRuntime)',
-          set_fee_config_runtime: 'set_fee_config_runtime(SetFeeConfigRuntime)',
+          router: 'router',
           commit_runtime: 'commit_runtime(CommitRegistrationRuntime)',
           complete_registration_runtime: 'complete_registration_runtime(CompleteRegistrationRuntime)',
           renew_runtime: 'renew_runtime(RenewNameRuntime)',
@@ -202,7 +231,11 @@ export function releaseManifest() {
           read_record: 'read_record(ReadRecord)',
           read_primary_name: 'read_primary_name(ReadPrimaryName)',
           pending_commitment: 'pending_commitment(PendingCommitmentQuery)',
-          fee_config: 'fee_config',
+          move_records_runtime: 'move_records_runtime(MoveRecordsRuntime)',
+          holds_name: 'holds_name(HoldsName)',
+          holds_primary: 'holds_primary(LocatePrimary)',
+          record_slot: 'record_slot(HoldsName)',
+          accepts_new_names: 'accepts_new_names',
         },
         methods: [],
         examples: [],

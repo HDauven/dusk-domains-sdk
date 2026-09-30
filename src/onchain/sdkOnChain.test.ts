@@ -330,7 +330,11 @@ describe('Dusk Domains on-chain SDK reads', () => {
         version: 3,
       },
     })
-    expect(calls.map((call) => call.functionName)).toEqual(['pending_commitment', 'fee_config'])
+    // Fees live on the router, which every registry in the pool reads.
+    expect(calls.map((call) => `${call.contract}.${call.functionName}`)).toEqual([
+      'core.pending_commitment',
+      'router.fee_config',
+    ])
   })
 })
 

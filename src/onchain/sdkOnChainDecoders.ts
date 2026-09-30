@@ -174,7 +174,7 @@ export function decodePendingCommitmentResponse(payload: unknown): DuskDomainsRe
 
 export function decodeFeeConfig(payload: unknown): DuskDomainsResult<CoreFeeConfig> {
   const config = objectRecord(payload)
-  if (!config) return failure('contract_read_failed', 'Core fee_config returned a malformed response.')
+  if (!config) return failure('contract_read_failed', 'Router fee_config returned a malformed response.')
 
   const fields = {
     threeCharYearLux: numberField(config.three_char_year_lux),
@@ -188,7 +188,7 @@ export function decodeFeeConfig(payload: unknown): DuskDomainsResult<CoreFeeConf
   }
 
   if (Object.values(fields).some((value) => value == null)) {
-    return failure('contract_read_failed', 'Core fee_config contains malformed numeric fields.')
+    return failure('contract_read_failed', 'Router fee_config contains malformed numeric fields.')
   }
 
   return success(fields as CoreFeeConfig)

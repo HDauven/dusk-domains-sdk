@@ -16,17 +16,24 @@ Architecture decision: [ADR 0001: DuskDS-Native Core Architecture](adr/0001-dusk
 
 ## Core Architecture
 
-The MVP core is implemented as two DuskDS-native contracts:
+A deployment is a contract pool of DuskDS-native contracts. A wasm32 contract can hold at most 4 GiB, so the pool grows by adding contracts instead of growing one contract forever:
 
 ```text
-DuskDomainsCore
+DuskDomainsRouter (the one ID apps configure)
+  Operator, treasury and marketplace
+  Fee configuration and referral policy
+  Append-only lists of registries and resolvers
+
+DuskDomainsCore (a registry; the pool can hold several)
   Canonical name/node lifecycle
   Registration, renewal, commit/reveal, reserved labels
   Owner and manager authorities
-  Typed public records
   Primary-name mappings
   Subnames
-  Fee configuration and referral policy
+  Where each name's records live
+
+DuskDomainsResolver (the pool can hold several)
+  Typed public records, written only by pool registries
 
 DuskDomainTreasury
   Registration and renewal fee custody
@@ -37,7 +44,9 @@ Indexer and API
   Watches events, powers search, history, warnings, and cached reads
 ```
 
-The old registry, registrar, controller, resolver, and reverse-registry split remains useful as a conceptual model, but those pieces are not separate public deployments in the current runtime.
+Only the newest registry creates new root names, and a name stays in the registry that created it. The router's `locate_name` finds it. Registries read and write records through resolvers, so apps read records from the name's registry as before.
+
+The old registrar, controller and reverse-registry split remains useful as a conceptual model, but those pieces are not separate public deployments in the current runtime.
 
 Contract-level resolution requirements are defined in [Contract-Level Resolution Requirements](contract-resolution.md).
 Indexer event payloads are defined in [Indexer Event Schema](indexer-events.md).

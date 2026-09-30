@@ -3,8 +3,8 @@ import type { DuskPrincipal } from '../core/principal'
 import type { ResolverRecord } from '../core/records'
 import type { SubnameRevocationPolicy } from '../core/subnames'
 
-export type DuskDomainContractKey = 'core' | 'treasury' | 'marketplace'
-export type DuskDomainRequiredContractKey = 'core' | 'treasury'
+export type DuskDomainContractKey = 'core' | 'treasury' | 'marketplace' | 'router'
+export type DuskDomainRequiredContractKey = 'core' | 'treasury' | 'router'
 
 export type DuskDomainContractPreset = {
   contractId: string
@@ -24,6 +24,8 @@ export type DuskDomainCallMetadata<TArgs = unknown> = {
   functionName: string
   kind: DuskDomainCallKind
   args: TArgs
+  /** Sends a core call to a specific pool registry. Every registry shares the core driver. */
+  contractId?: string
 }
 
 export type DuskDomainDecodedContext = {
@@ -64,18 +66,47 @@ export type DuskConnectAppLike = {
   }) => Promise<unknown>
 }
 
+/** A pool registry only needs its router; the router supplies treasury, marketplace and fees. */
 export type CoreInitArgs = {
-  treasuryContract: string
-  recordSourceContract: string
+  router: string
+}
+
+export type RouterInitArgs = {
   operator: DuskPrincipal
+  treasury: string
+  /** Null when the deployment runs without a marketplace. */
+  marketplace: string | null
   referralRewardBps: number
 }
 
-export type CoreSetReferralConfigRuntimeArgs = {
+export type RouterAddPoolMemberArgs = {
+  member: string
+}
+
+export type RouterSetOperatorRuntimeArgs = {
+  operator: DuskPrincipal
+}
+
+/** A name the pool is asked about: `router.locate_name`, `core.holds_name`, `core.record_slot`. */
+export type PoolNodeArgs = {
+  node: string
+}
+
+/** An address the pool is asked about: `router.locate_primary`, `core.holds_primary`. */
+export type PoolEndpointArgs = {
+  endpointType: string
+  endpointValue: string
+}
+
+export type CoreMoveRecordsRuntimeArgs = {
+  node: string
+}
+
+export type RouterSetReferralConfigRuntimeArgs = {
   referralRewardBps: number
 }
 
-export type CoreSetFeeConfigRuntimeArgs = Omit<CoreFeeConfig, 'version' | 'updatedAt'>
+export type RouterSetFeeConfigRuntimeArgs = Omit<CoreFeeConfig, 'version' | 'updatedAt'>
 
 export type CoreCommitRuntimeArgs = {
   commitment: string
@@ -208,6 +239,8 @@ export type TreasuryInitArgs = {
   operator: DuskPrincipal
   operatorRecipient: string
   allowedFeeSources: string[]
+  /** Registries in this router's pool may pay fees and accrue referral rewards. */
+  router: string
 }
 
 export type TreasuryUpdateOperatorRuntimeArgs = {
@@ -229,7 +262,7 @@ export type TreasuryClaimAllReferralRewardsRuntimeArgs = {
 }
 
 export type MarketplaceInitArgs = {
-  coreContract: string
+  router: string
   treasuryContract: string
   marketplaceAuthority: string
   operator: string
