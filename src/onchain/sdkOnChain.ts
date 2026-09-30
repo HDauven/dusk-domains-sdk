@@ -308,12 +308,18 @@ export function createDuskDomainsOnChainClient(
   }
 
   async function getPendingCommitment(
+    controller: string,
     commitment: string,
   ): Promise<DuskDomainsResult<DuskDomainsOnChainPendingCommitment>> {
+    const normalizedController = normalizeBytes32Hex(controller, 'controller')
+    if (!normalizedController.ok) return normalizedController
     const normalizedCommitment = normalizeBytes32Hex(commitment, 'commitment')
     if (!normalizedCommitment.ok) return normalizedCommitment
 
-    const response = await readCall<unknown>(corePendingCommitmentCall({ commitment: normalizedCommitment.value }))
+    const response = await readCall<unknown>(corePendingCommitmentCall({
+      controller: normalizedController.value,
+      commitment: normalizedCommitment.value,
+    }))
     if (!response.ok) return response
 
     return decodePendingCommitmentResponse(response.value)

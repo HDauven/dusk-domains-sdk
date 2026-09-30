@@ -162,6 +162,8 @@ export type CoreAcceptMarketplaceOfferRuntimeArgs = {
   node: string
   marketplaceContract: string
   buyerAuthority: string
+  /** The offer's gross amount as shown to the seller; any other offer fails the acceptance. */
+  expectedAmountLux: number
   sellerRecipient: string
 }
 
@@ -222,6 +224,8 @@ export type CoreGetNameArgs = {
 }
 
 export type CorePendingCommitmentArgs = {
+  /** The account that submitted the commitment; each account's commitments are kept apart. */
+  controller: string
   commitment: string
 }
 

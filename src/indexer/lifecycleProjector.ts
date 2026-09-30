@@ -50,7 +50,9 @@ import { emptyPoolState, reducePoolState } from './poolProjectorReducers'
 
 export function createLifecycleEventProjector(): LifecycleEventProjector {
   const names = new Map<string, IndexedLifecycleName>()
+  // Keyed by controller and hash, as the core contract keys pending commitments.
   const commitments = new Map<string, IndexedRegistrationCommitment>()
+  const latestCommitments = new Map<string, IndexedRegistrationCommitment>()
   const resolverRecords = new Map<string, IndexedResolverRecordSet>()
   const primaryNames = new Map<string, IndexedReversePrimaryName>()
   const subnames = new Map<string, IndexedSubname>()
@@ -85,10 +87,11 @@ export function createLifecycleEventProjector(): LifecycleEventProjector {
   }
 
   function applyController(event: RegistrationControllerEvent, meta: IndexerEventMeta = {}) {
-    const current = commitments.get(event.commitment)
-    const next = reduceRegistrationCommitment(event, current, meta)
+    const key = commitmentKey(event.controller, event.commitment)
+    const next = reduceRegistrationCommitment(event, commitments.get(key), meta)
 
-    commitments.set(event.commitment, next)
+    commitments.set(key, next)
+    latestCommitments.set(event.commitment, next)
     return next
   }
 
@@ -194,8 +197,9 @@ export function createLifecycleEventProjector(): LifecycleEventProjector {
     return names.get(node) ?? null
   }
 
-  function getCommitment(commitment: string) {
-    return commitments.get(commitment) ?? null
+  function getCommitment(commitment: string, controller?: string) {
+    if (controller) return commitments.get(commitmentKey(controller, commitment)) ?? null
+    return latestCommitments.get(commitment) ?? null
   }
 
   function getResolverRecords(node: string) {
@@ -339,4 +343,12 @@ function subnameExpiresAfter(expiresAt: string, now: Date) {
   const timestamp = new Date(expiresAt).getTime()
   if (!Number.isFinite(timestamp)) return false
   return timestamp > now.getTime()
+}
+
+function commitmentKey(controller: string, commitment: string) {
+  return `${hexKey(controller)}:${hexKey(commitment)}`
+}
+
+function hexKey(value: string) {
+  return value.trim().toLowerCase().replace(/^0x/, '')
 }

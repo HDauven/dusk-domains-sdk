@@ -204,6 +204,7 @@ function schemaCalls(): DuskDomainCallMetadata[] {
       node,
       marketplaceContract,
       buyerAuthority: owner,
+      expectedAmountLux: 30_000_000_000,
       sellerRecipient: recipient,
     }),
     coreSetRecordSenderRuntimeCall({
@@ -254,7 +255,7 @@ function schemaCalls(): DuskDomainCallMetadata[] {
     coreGetNameCall({ node }),
     coreReadRecordCall({ node, key: 'moonlight_address' }),
     coreReadPrimaryNameCall({ endpointType: 'moonlight_address', endpointValue }),
-    corePendingCommitmentCall({ commitment }),
+    corePendingCommitmentCall({ controller: owner, commitment }),
     treasuryInitCall({
       operator: operatorPrincipal(),
       operatorRecipient: recipient,
@@ -434,6 +435,35 @@ describe('Dusk Domains contract call helpers', () => {
           ttl_seconds: 0,
         },
       ],
+    })
+  })
+
+  it('binds an offer acceptance to the amount the seller saw', () => {
+    const accept = {
+      node,
+      marketplaceContract,
+      buyerAuthority: owner,
+      expectedAmountLux: 30_000_000_000,
+      sellerRecipient: recipient,
+    }
+    expect(toDuskDomainWireArgs(coreAcceptMarketplaceOfferRuntimeCall(accept))).toMatchObject({
+      node: Array(32).fill(7),
+      buyer_authority: Array(32).fill(9),
+      expected_amount_lux: 30_000_000_000,
+    })
+    const { expectedAmountLux: _, ...unbound } = accept
+    expect(() => toDuskDomainWireArgs({
+      contract: 'core',
+      functionName: 'accept_marketplace_offer_runtime',
+      kind: 'write',
+      args: unbound,
+    })).toThrow('Invalid Dusk Domains core.accept_marketplace_offer_runtime arguments')
+  })
+
+  it('reads a pending commitment under its controller', () => {
+    expect(toDuskDomainWireArgs(corePendingCommitmentCall({ controller: owner, commitment }))).toEqual({
+      controller: Array(32).fill(9),
+      commitment: Array(32).fill(49),
     })
   })
 

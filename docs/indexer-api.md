@@ -189,6 +189,7 @@ Direct node and endpoint routes fail fast on malformed route parameters before l
 | `400` | `invalid_node` | A `node` or `parentNode` parameter is not a 32-byte hex node, with or without the `0x` prefix. |
 | `400` | `missing_commitment` | `/commitment` is missing `commitment`. |
 | `400` | `invalid_commitment` | A `commitment` parameter is not a 32-byte hex value, with or without the `0x` prefix. |
+| `400` | `invalid_controller` | A `/commitment` `controller` parameter is not a 32-byte hex value, with or without the `0x` prefix. |
 | `400` | `missing_record_key` | `/record` is missing `key`. |
 | `400` | `invalid_record_key` | `/record` or `/record-history` has a malformed `key`. |
 | `400` | `missing_endpoint` | `/reverse` is missing either `type` or `value`. |
@@ -284,10 +285,12 @@ The local live app uses the controller commitment read model to unlock reveal af
 Request shape:
 
 ```text
-GET /commitment?commitment=0x...
+GET /commitment?commitment=0x...&controller=0x...
 ```
 
 Response is an `IndexedRegistrationCommitment` row or `null`. Committed rows include `committedTxId` and `committedBlockHeight`; revealed rows additionally include `node`, `revealedTxId`, and `revealedBlockHeight`.
+
+Commitments are scoped per controller, as the core contract keys them by `(controller, commitment)`. With `controller`, the route returns that controller's row for the hash or `null`. Without it, the route returns the most recently updated row for the hash, whichever controller wrote it; clients reading their own commitment should pass `controller` (`getCommitment(commitment, controller)`).
 
 Clients should use this route only as a reactive UI/read-model aid. The controller contract remains the source of truth for whether reveal is actually allowed.
 
