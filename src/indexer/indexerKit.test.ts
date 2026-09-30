@@ -67,6 +67,83 @@ describe('Dusk Domains indexer kit', () => {
     expect(projector.getFeeConfig()).toMatchObject({ referralRewardBps: 1_500, operator, blockHeight: 10 })
   })
 
+  it('points a name or subname at the resolver its records moved to', () => {
+    const projector = createDuskDomainsProjector()
+    const [node, subnode, owner, fromResolver, toResolver] = ['12', '13', '14', '21', '22'].map((byte) => `0x${byte.repeat(32)}`)
+    const record = {
+      key: 'moonlight_address',
+      value: 'dusk1public',
+      visibility: 'public' as const,
+      updatedAt: '2026-06-27T00:00:00.000Z',
+      ttlSeconds: 300,
+    }
+    const expiresAt = '2099-06-27T00:00:00.000Z'
+    const events = [
+      { type: 'name_owner_changed', node, actor: owner, owner, manager: owner, resolver: fromResolver, expiresAt },
+      { type: 'record_changed', node, controller: owner, record },
+      {
+        type: 'subname_created',
+        parentNode: node,
+        node: subnode,
+        parentName: 'aurora.dusk',
+        name: 'pay.aurora.dusk',
+        label: 'pay',
+        actor: owner,
+        owner,
+        manager: owner,
+        resolver: fromResolver,
+        expiresAt,
+        parentExpiresAt: expiresAt,
+        expiryPolicy: 'inherits_parent',
+        revocationPolicy: 'parent_revocable',
+        createdAt: '2026-06-27T00:00:00.000Z',
+      },
+      ...[node, subnode].map((moved) => ({ type: 'records_moved', node: moved, controller: owner, fromResolver, toResolver, recordCount: 1 })),
+    ] as const
+    for (const event of events) applyDuskDomainsIndexedEvent(projector, { event, meta: { txId: `tx-${event.type}` } })
+
+    expect(projector.getNameByNode(node)?.resolverId).toBe(toResolver)
+    expect(projector.getResolverRecords(node)).toEqual([record])
+    expect(projector.getActivity(node)[0]).toMatchObject({ eventType: 'resolver_change', target: toResolver })
+    expect(projector.getSubnameByNode(subnode)?.resolver).toBe(toResolver)
+    // A subname is not indexed as a name of its own.
+    expect(projector.getNameByNode(subnode)).toBeNull()
+  })
+
+  it('moves both views of a subname whose authorities changed', () => {
+    const projector = createDuskDomainsProjector()
+    const [node, subnode, owner, manager, fromResolver, toResolver] = ['12', '13', '14', '15', '21', '22'].map((byte) => `0x${byte.repeat(32)}`)
+    const expiresAt = '2099-06-27T00:00:00.000Z'
+    const events = [
+      { type: 'name_owner_changed', node, actor: owner, previousOwner: null, owner, manager: owner, resolver: fromResolver, expiresAt },
+      {
+        type: 'subname_created',
+        parentNode: node,
+        node: subnode,
+        parentName: 'aurora.dusk',
+        name: 'pay.aurora.dusk',
+        label: 'pay',
+        actor: owner,
+        owner,
+        manager: owner,
+        resolver: fromResolver,
+        expiresAt,
+        parentExpiresAt: expiresAt,
+        expiryPolicy: 'inherits_parent',
+        revocationPolicy: 'parent_revocable',
+        createdAt: '2026-06-27T00:00:00.000Z',
+      },
+      // The contract reports a subname's authority change as a name_owner_changed on its node.
+      { type: 'name_owner_changed', node: subnode, actor: owner, previousOwner: owner, owner, manager, resolver: `0x${'00'.repeat(32)}`, expiresAt },
+      { type: 'records_moved', node: subnode, controller: manager, fromResolver, toResolver, recordCount: 1 },
+    ] as const
+    for (const event of events) applyDuskDomainsIndexedEvent(projector, { event, meta: { txId: `tx-${event.type}` } })
+
+    expect(projector.getNameByNode(subnode)?.resolverId).toBe(toResolver)
+    expect(projector.getSubnameByNode(subnode)?.resolver).toBe(toResolver)
+    expect(projector.getSubnamesByParent(node)).toMatchObject([{ node: subnode, resolver: toResolver }])
+  })
+
   it('replays normalized JSON events into projector state', () => {
     const projector = createDuskDomainsProjector()
     const node = `0x${'12'.repeat(32)}`

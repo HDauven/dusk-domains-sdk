@@ -4,11 +4,13 @@ import {
   coreCommitRuntimeCall,
   coreCreateSubnameRuntimeCall,
   coreGetNameCall,
+  corePendingCommitmentCall,
   coreReadPrimaryNameCall,
   DUSK_DOMAINS_CONTRACTS,
   prepareDuskDomainContractCall,
   readDuskDomainContract,
   registrationRegistry,
+  toDuskDomainWireArgs,
   type DuskConnectAppLike,
   type DuskDomainContractMap,
 } from './calls'
@@ -78,6 +80,16 @@ describe('contract pool routing', () => {
     await expect(registrationRegistry(app, contracts, freeNode)).resolves.toBe(newestRegistry)
     // A released name comes back in the registry that still holds it.
     await expect(registrationRegistry(app, contracts, heldNode)).resolves.toBe(olderRegistry)
+  })
+
+  it('reads a pending commitment where its name registers when the name is given', async () => {
+    const { app, targets } = poolApp()
+    const pending = { controller: `0x${'09'.repeat(32)}`, commitment: `0x${'31'.repeat(32)}` }
+    await readDuskDomainContract(app, corePendingCommitmentCall({ ...pending, node: heldNode }), contracts)
+    await readDuskDomainContract(app, corePendingCommitmentCall({ ...pending, node: freeNode }), contracts)
+    await readDuskDomainContract(app, corePendingCommitmentCall(pending), contracts)
+    expect(targets).toEqual([olderRegistry, newestRegistry, newestRegistry])
+    expect(toDuskDomainWireArgs(corePendingCommitmentCall({ ...pending, node: heldNode }))).not.toHaveProperty('node')
   })
 
   it('routes subnames by their parent and primary names by the router', async () => {

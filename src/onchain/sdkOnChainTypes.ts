@@ -94,10 +94,15 @@ export type DuskDomainsOnChainClient = {
     endpoint: DuskEndpoint,
     expectedName?: string,
   ) => Promise<DuskDomainsResult<DuskDomainsOnChainPrimaryNameVerification>>
-  /** Commitments are kept per controller: the same hash from another account is a separate entry. */
+  /**
+   * Commitments are kept per controller: the same hash from another account is a separate entry.
+   * Pass the name to read from the registry that registers it: a released name comes back in the
+   * registry that holds it, not the active one.
+   */
   getPendingCommitment: (
     controller: string,
     commitment: string,
+    name?: string,
   ) => Promise<DuskDomainsResult<DuskDomainsOnChainPendingCommitment>>
   getFeeConfig: () => Promise<DuskDomainsResult<CoreFeeConfig>>
 }

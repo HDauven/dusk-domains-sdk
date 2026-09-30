@@ -335,6 +335,11 @@ describe('Dusk Domains on-chain SDK reads', () => {
       'core.pending_commitment',
       'router.fee_config',
     ])
+
+    // A name lets a pool read the commitment where that name registers.
+    await client.getPendingCommitment(owner, commitment, 'Aurora.dusk')
+    expect(calls.at(-1)?.args).toEqual({ controller: owner, commitment, node })
+    await expect(client.getPendingCommitment(owner, commitment, 'no spaces.dusk')).resolves.toMatchObject({ ok: false })
   })
 })
 

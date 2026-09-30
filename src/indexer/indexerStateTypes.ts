@@ -151,8 +151,10 @@ export type IndexedSubname = {
   manager: string
   resolver: string
   expiresAt: string
+  graceEndsAt?: string | null
   parentExpiresAt: string
   expiresAtBlockHeight?: number | null
+  graceEndsAtBlockHeight?: number | null
   parentExpiresAtBlockHeight?: number | null
   expiryPolicy: SubnameExpiryPolicy
   revocationPolicy: SubnameRevocationPolicy
