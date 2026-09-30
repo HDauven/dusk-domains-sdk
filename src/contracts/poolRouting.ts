@@ -115,6 +115,9 @@ async function readRegistry(
 
 function poolTarget(call: DuskDomainCallMetadata): PoolTarget | null {
   const args = (call.args ?? {}) as Record<string, unknown>
+  if (call.functionName === 'pending_commitment' && typeof args.node === 'string') {
+    return { kind: 'registration', node: args.node }
+  }
   if (call.functionName === 'commit_runtime' || call.functionName === 'pending_commitment') return { kind: 'new_name' }
   if (call.functionName === 'complete_registration_runtime' && typeof args.node === 'string') {
     return { kind: 'registration', node: args.node }

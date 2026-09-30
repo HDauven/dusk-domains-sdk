@@ -227,6 +227,11 @@ export type CorePendingCommitmentArgs = {
   /** The account that submitted the commitment; each account's commitments are kept apart. */
   controller: string
   commitment: string
+  /**
+   * The name the commitment is for. It is not sent: in a contract pool it reads the commitment from
+   * the registry that registers the name, as the commit used. Without it, the active registry.
+   */
+  node?: string
 }
 
 export type CoreReadRecordArgs = {
