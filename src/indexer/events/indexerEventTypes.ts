@@ -11,6 +11,18 @@ export type IndexerEventMeta = {
 
 export type NameLifecycleEvent =
   | {
+      type: 'reserved_name_issued'
+      node: string
+      label: string
+      actor: string
+      owner: string
+      manager: string
+      registry: string
+      operator: DuskPrincipal
+      issuedAt: string
+      issuedAtBlockHeight: number | null
+    }
+  | {
       type: 'name_registered'
       node: string
       label: string

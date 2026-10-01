@@ -82,6 +82,14 @@ export type RouterAddPoolMemberArgs = {
   member: string
 }
 
+export type RouterIssueReservedNameRuntimeArgs = {
+  node: string
+  label: string
+  owner: string
+  manager: string
+  durationYears: number
+}
+
 export type RouterProposeOperatorRuntimeArgs = {
   operator: DuskPrincipal
 }

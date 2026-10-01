@@ -73,6 +73,14 @@ export type IndexedReferralState = {
 }
 
 export type IndexedLifecycleName = {
+  /** Provenance of this registration; retained through renewal and transfer. */
+  issuedAsReserved?: boolean
+  reservedIssuance?: {
+    operator: DuskPrincipal
+    registry: string
+    issuedAt: string
+    issuedAtBlockHeight: number | null
+  } | null
   node: string
   canonicalName: string
   owner: string | null

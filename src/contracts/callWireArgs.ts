@@ -36,6 +36,7 @@ import {
   isRouterAddPoolMemberArgs,
   isRouterInitArgs,
   isRouterProposeOperatorRuntimeArgs,
+  isRouterIssueReservedNameRuntimeArgs,
   isTreasuryClaimAllReferralRewardsRuntimeArgs,
   isTreasuryClaimReferralRewardRuntimeArgs,
   isTreasuryClaimRuntimeArgs,
@@ -72,6 +73,15 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
     isRouterAddPoolMemberArgs(args)
   ) {
     return { member: bytes32(args.member, 'member') }
+  }
+  if (call.contract === 'router' && call.functionName === 'issue_reserved_name_runtime' && isRouterIssueReservedNameRuntimeArgs(args)) {
+    return {
+      node: bytes32(args.node, 'node'),
+      label: args.label,
+      owner: bytes32(args.owner, 'owner'),
+      manager: bytes32(args.manager, 'manager'),
+      duration_years: args.durationYears,
+    }
   }
   if (call.contract === 'router' && call.functionName === 'propose_operator_runtime' && isRouterProposeOperatorRuntimeArgs(args)) {
     return { operator: principal(args.operator, 'operator') }

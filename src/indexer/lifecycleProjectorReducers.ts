@@ -23,7 +23,7 @@ export function canonicalNameFromLifecycleEvent(
 }
 
 export function activityTypeFromLifecycleEvent(event: NameLifecycleEvent): ActivityEntry['eventType'] {
-  if (event.type === 'name_registered') return 'registration'
+  if (event.type === 'name_registered' || event.type === 'reserved_name_issued') return 'registration'
   if (event.type === 'name_renewed') return 'renewal'
   if (event.type === 'name_expired') return 'expiry'
   if (event.type === 'name_released') return 'release'
@@ -33,7 +33,7 @@ export function activityTypeFromLifecycleEvent(event: NameLifecycleEvent): Activ
 }
 
 export function activityTargetFromLifecycleEvent(event: NameLifecycleEvent) {
-  if (event.type === 'name_registered') return event.owner
+  if (event.type === 'name_registered' || event.type === 'reserved_name_issued') return event.owner
   if (event.type === 'name_renewed') return event.expiresAt
   if (event.type === 'name_expired') return event.observedAt
   if (event.type === 'name_released') return event.previousOwner
@@ -61,10 +61,25 @@ export function reduceLifecycleName(
     lastEventType: event.type,
   }
 
+  if (event.type === 'reserved_name_issued') {
+    return {
+      ...base,
+      issuedAsReserved: true,
+      reservedIssuance: {
+        operator: event.operator,
+        registry: event.registry,
+        issuedAt: event.issuedAt,
+        issuedAtBlockHeight: event.issuedAtBlockHeight,
+      },
+      lastEventType: event.type,
+    }
+  }
+
   if (event.type === 'name_registered' || event.type === 'name_renewed' || event.type === 'name_expired') {
     const retained = event.type === 'name_registered' ? null : base
     return {
       ...base,
+      ...(event.type === 'name_registered' ? { issuedAsReserved: false, reservedIssuance: null } : {}),
       ...(event.type === 'name_renewed' ? {} : { canonicalName, owner: event.owner }),
       expiresAt: event.expiresAt,
       graceEndsAt: event.graceEndsAt,

@@ -110,6 +110,12 @@ export function isIndexedLifecycleName(value: unknown): value is IndexedLifecycl
     isRecord(value) &&
     typeof value.node === 'string' &&
     typeof value.canonicalName === 'string' &&
+    (value.issuedAsReserved === undefined || typeof value.issuedAsReserved === 'boolean') &&
+    (value.reservedIssuance == null || (
+      isRecord(value.reservedIssuance) && isDuskPrincipal(value.reservedIssuance.operator) &&
+      typeof value.reservedIssuance.registry === 'string' && typeof value.reservedIssuance.issuedAt === 'string' &&
+      isNullableNumber(value.reservedIssuance.issuedAtBlockHeight)
+    )) &&
     isNullableString(value.owner) &&
     isNullableString(value.manager) &&
     isNullableString(value.resolverId) &&

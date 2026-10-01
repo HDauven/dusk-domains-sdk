@@ -12,6 +12,7 @@ export const controllerEventTypes = [
 /** Event types that describe name lifecycle and ownership changes. */
 export const lifecycleEventTypes = [
     'name_registered',
+    'reserved_name_issued',
     'name_renewed',
     'name_expired',
     'name_released',

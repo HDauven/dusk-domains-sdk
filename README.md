@@ -153,3 +153,9 @@ const encoded = encodeDuskDomainCall(driver, call)
 A BLS module-load failure rejects full input validation. It does not affect
 building or encoding calls. The frontend keeps attribution inactive until full
 validation succeeds. General principal parsing still supports other principal uses.
+
+## Reserved issuance
+
+`routerIssueReservedNameRuntimeCall` (from `@duskdomains/sdk/writes`) takes `node`, `label`, `owner`, `manager` and `durationYears`. Only the current router operator can submit it. It has no deposit, referrer or commitment; labels must be in the target registry's compiled reserved list. Issued names renew and transfer normally.
+
+The `reserved_name_issued` event supplements normal registration/ownership events. Lifecycle projections expose `issuedAsReserved` and `reservedIssuance` (typed operator, registry, issuance time and block height). The SDK's official-profile `saleLocked` flag remains client policy metadata, with no contract-level restriction.

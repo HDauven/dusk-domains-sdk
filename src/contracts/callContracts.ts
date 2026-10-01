@@ -15,6 +15,7 @@ export const DUSK_DOMAINS_CONTRACTS: DuskDomainContractMap = {
       accept_operator_runtime: 'accept_operator_runtime',
       cancel_operator_runtime: 'cancel_operator_runtime',
       set_fee_config_runtime: 'set_fee_config_runtime(SetFeeConfigRuntime)',
+      issue_reserved_name_runtime: 'issue_reserved_name_runtime(IssueReservedNameRuntime)',
       set_referral_config_runtime: 'set_referral_config_runtime(SetReferralConfigRuntime)',
       config: 'config',
       fee_config: 'fee_config',
