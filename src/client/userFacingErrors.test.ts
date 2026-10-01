@@ -8,6 +8,14 @@ import {
 } from './userFacingErrors'
 
 describe('user-facing error copy', () => {
+  it.each([
+    'DuskDomains: Close the marketplace listing before renewing',
+    'Transaction rejected: runtime panic: DuskDomains: Close the marketplace listing before renewing',
+  ])('explains escrow renewal failures: %s', message => {
+    expect(userFacingErrorMessage(new Error(message))).toBe('Close the marketplace listing before renewing this name.')
+    expect(userFacingMessageFromText(message)).toBe('Close the marketplace listing before renewing this name.')
+  })
+
   it('keeps insufficient-balance failures product-facing', () => {
     expect(userFacingMessageFromText('Invalid input: Tx abc not accepted: Value spent larger than account holds')).toBe(
       'This wallet does not have enough DUSK to complete the transaction.',
@@ -56,4 +64,9 @@ describe('user-facing error copy', () => {
   it('preserves already user-facing validation messages', () => {
     expect(userFacingMessageFromText('Choose a valid record target.')).toBe('Choose a valid record target.')
   })
+})
+
+it('explains the reservation cap even inside a runtime rejection', () => {
+  expect(userFacingErrorMessage(new Error('Transaction rejected: runtime panic: DuskDomains: pending commitment limit reached (16)')))
+    .toBe('This wallet has 16 pending reservations. Open My names to finish a reservation, or wait for one to expire before reserving another.')
 })

@@ -217,7 +217,7 @@ export function analyzeName(query: string, feeConfig: CoreFeeConfig = DEFAULT_FE
   const canonical = validation.ok ? validation.name.canonical : validation.canonical
   const label = validation.ok ? validation.name.registrableLabel : apexLabel(canonical)
   let status: NameStatus = validation.ok ? 'available' : 'invalid'
-  const reservedPolicy = validation.ok ? getReservedNamePolicy(label) : undefined
+  const reservedPolicy = validation.ok && validation.name.labels.length === 2 ? getReservedNamePolicy(label) : undefined
   const issues = [...validation.issues]
 
   if (reservedPolicy) {
@@ -234,7 +234,7 @@ export function analyzeName(query: string, feeConfig: CoreFeeConfig = DEFAULT_FE
     status,
     price: annualPrice(label, feeConfig),
     issues,
-    transactionBlocked: status !== 'available',
+    transactionBlocked: status !== 'available' || canonical.split('.').length !== 2,
     reserved: reservedPolicy,
   }
 }

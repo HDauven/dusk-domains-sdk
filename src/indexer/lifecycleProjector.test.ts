@@ -430,3 +430,12 @@ describe('Dusk Domains lifecycle event projector', () => {
   })
 
 })
+
+it('keeps the renewal payer separate from owner and manager', () => {
+  const projector = createLifecycleEventProjector()
+  const node = `0x${'11'.repeat(32)}`
+  projector.apply({ type: 'name_owner_changed', node, actor: 'owner', owner: 'contract-owner', manager: 'manager', resolver: 'resolver', expiresAt: '2027-01-01T00:00:00Z' })
+  projector.apply({ type: 'name_renewed', node, actor: 'payer', expiresAt: '2028-01-01T00:00:00Z', graceEndsAt: '2028-02-01T00:00:00Z', feeLux: 50 })
+  expect(projector.getNameByNode(node)).toMatchObject({ owner: 'contract-owner', manager: 'manager', resolverId: 'resolver', expiresAt: '2028-01-01T00:00:00Z' })
+  expect(projector.getActivity(node)[0]).toMatchObject({ eventType: 'renewal', actor: 'payer' })
+})

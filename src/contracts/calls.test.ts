@@ -560,7 +560,7 @@ describe('Dusk Domains contract call helpers', () => {
   it('provides wallet approval context for core and treasury writes', () => {
     expect(decodedDuskDomainContext(coreRenewRuntimeCall({ node, durationYears: 1, feeLux: 50_000_000_000 }))).toMatchObject({
       title: 'Renew .dusk domain',
-      description: 'Extend the registration of an existing .dusk domain from its current expiry.',
+      description: 'Pay to extend this root name from its current expiry. Anyone can renew; ownership and records stay unchanged.',
     })
     expect(decodedDuskDomainContext(registrationCall())).toMatchObject({
       title: 'Register aurora.dusk',
@@ -754,4 +754,11 @@ describe('Dusk Domains contract call helpers', () => {
       }
     }
   })
+})
+
+it('builds open renewal with an exact deposit and no owner credentials', () => {
+  const call = coreRenewRuntimeCall({ node: `0x${'12'.repeat(32)}`, durationYears: 1, feeLux: 50_000_000_000 })
+  expect(duskDomainCallDepositLux(call)).toBe('50000000000')
+  expect(decodedDuskDomainContext(call)?.description).toContain('Anyone can renew; ownership and records stay unchanged.')
+  expect(call.args).toEqual({ node: `0x${'12'.repeat(32)}`, durationYears: 1, feeLux: 50_000_000_000 })
 })

@@ -106,6 +106,7 @@ export function coreCompleteRegistrationRuntimeCall(
   }
 }
 
+/** Any direct Moonlight payer can renew a root before grace ends, including a contract-owned name outside marketplace escrow. */
 export function coreRenewRuntimeCall(
   args: CoreRenewRuntimeArgs,
 ): DuskDomainCallMetadata<CoreRenewRuntimeArgs> {
