@@ -83,7 +83,7 @@ export type RouterAddPoolMemberArgs = {
   member: string
 }
 
-export type RouterSetOperatorRuntimeArgs = {
+export type RouterProposeOperatorRuntimeArgs = {
   operator: DuskPrincipal
 }
 
@@ -252,7 +252,7 @@ export type TreasuryInitArgs = {
   router: string
 }
 
-export type TreasuryUpdateOperatorRuntimeArgs = {
+export type TreasuryProposeOperatorRuntimeArgs = {
   operator: DuskPrincipal
   operatorRecipient: string
 }
@@ -282,7 +282,7 @@ export type MarketplaceSetFeeRuntimeArgs = {
   feeBps: number
 }
 
-export type MarketplaceUpdateOperatorRuntimeArgs = {
+export type MarketplaceProposeOperatorRuntimeArgs = {
   operator: string
 }
 

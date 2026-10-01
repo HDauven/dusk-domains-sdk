@@ -220,6 +220,7 @@ export function isIndexedMarketplaceConfig(value: unknown): value is IndexedMark
     isNullableString(value.treasuryContract) &&
     isNullableString(value.marketplaceAuthority) &&
     isNullableString(value.operator) &&
+    (value.pendingOperator === undefined || isNullableString(value.pendingOperator)) &&
     isNonNegativeInteger(value.feeBps) &&
     isNullableNumber(value.updatedAtBlockHeight) &&
     isNullableString(value.txId) &&
@@ -313,6 +314,8 @@ export function isIndexedTreasuryState(value: unknown): value is IndexedTreasury
     isRecord(value) &&
     typeof value.initialized === 'boolean' &&
     (value.operator === null || value.operator === undefined || isDuskPrincipal(value.operator)) &&
+    (value.pendingOperator == null || isDuskPrincipal(value.pendingOperator)) &&
+    (value.pendingOperatorRecipient === undefined || isNullableString(value.pendingOperatorRecipient)) &&
     isNullableString(value.operatorAuthority) &&
     isNullableString(value.operatorRecipient) &&
     Array.isArray(value.allowedFeeSources) &&
@@ -331,6 +334,8 @@ export function isIndexedTreasuryState(value: unknown): value is IndexedTreasury
     (
       value.lastEventType === 'treasury_initialized' ||
       value.lastEventType === 'treasury_operator_changed' ||
+      value.lastEventType === 'treasury_operator_proposed' ||
+      value.lastEventType === 'treasury_operator_cancelled' ||
       value.lastEventType === 'treasury_fee_received' ||
       value.lastEventType === 'treasury_claimed' ||
       value.lastEventType === null

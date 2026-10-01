@@ -2,7 +2,7 @@ import {
   isRouterAddPoolMemberArgs,
   isRouterInitArgs,
   isRouterSetFeeConfigRuntimeArgs,
-  isRouterSetOperatorRuntimeArgs,
+  isRouterProposeOperatorRuntimeArgs,
   isRouterSetReferralConfigRuntimeArgs,
 } from './callArgGuards'
 import { formatLux, principalSummary } from './callContextFormat'
@@ -40,10 +40,25 @@ export function decodedRouterDuskDomainContext(call: DuskDomainCallMetadata): Du
     }
   }
 
-  if (call.functionName === 'set_operator_runtime' && isRouterSetOperatorRuntimeArgs(call.args)) {
+  if (call.functionName === 'accept_operator_runtime') {
     return {
-      title: 'Hand over the router operator role',
-      description: 'The new operator sets fees and adds pool members. You lose both rights.',
+      title: 'Accept router operator role',
+      description: 'Accept the pending proposal using the proposed operator account.',
+      fields: [],
+    }
+  }
+  if (call.functionName === 'cancel_operator_runtime') {
+    return {
+      title: 'Cancel router operator proposal',
+      description: 'Keep the current operator and discard the pending proposal.',
+      fields: [],
+    }
+  }
+
+  if (call.functionName === 'propose_operator_runtime' && isRouterProposeOperatorRuntimeArgs(call.args)) {
+    return {
+      title: 'Propose router operator',
+      description: 'The proposed operator must accept before gaining control of fees and pool members.',
       fields: [{ label: 'New operator', value: principalSummary(call.args.operator) }],
     }
   }

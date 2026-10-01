@@ -32,7 +32,20 @@ export function createMarketplaceProjector(options: MarketplaceProjectorOptions)
         treasuryContract: event.treasuryContract,
         marketplaceAuthority: event.marketplaceAuthority,
         operator: event.operator,
+        pendingOperator: null,
         feeBps: event.feeBps,
+        updatedAtBlockHeight: meta.blockHeight ?? null,
+        txId: meta.txId ?? null,
+        blockHeight: meta.blockHeight ?? null,
+      }
+      return { ...config }
+    }
+
+    if (event.type === 'marketplace_operator_proposed' || event.type === 'marketplace_operator_cancelled' || event.type === 'marketplace_operator_changed') {
+      config = {
+        ...config,
+        operator: event.type === 'marketplace_operator_changed' ? event.operator : config.operator,
+        pendingOperator: event.type === 'marketplace_operator_proposed' ? event.pendingOperator : null,
         updatedAtBlockHeight: meta.blockHeight ?? null,
         txId: meta.txId ?? null,
         blockHeight: meta.blockHeight ?? null,
@@ -246,6 +259,7 @@ function emptyMarketplaceConfig(): IndexedMarketplaceConfig {
     treasuryContract: null,
     marketplaceAuthority: null,
     operator: null,
+    pendingOperator: null,
     feeBps: 0,
     updatedAtBlockHeight: null,
     txId: null,
@@ -300,13 +314,13 @@ function numericField(key: string) {
   return /(?:Lux|Bps|At|Block|Blocks|Height|Count|Seconds|Years)$/u.test(key)
 }
 
-function marketplaceActor(event: Exclude<MarketplaceEvent, { type: 'marketplace_initialized' | 'marketplace_config_updated' | 'marketplace_refund_claimed' }>) {
+function marketplaceActor(event: Exclude<MarketplaceEvent, { type: 'marketplace_initialized' | 'marketplace_config_updated' | 'marketplace_refund_claimed' | 'marketplace_operator_proposed' | 'marketplace_operator_cancelled' | 'marketplace_operator_changed' }>) {
   if (event.type === 'domain_bid_placed') return event.bidderAuthority
   if (event.type === 'domain_offer_placed' || event.type === 'domain_offer_closed') return event.buyerAuthority
   return event.sellerAuthority
 }
 
-function marketplaceTarget(event: Exclude<MarketplaceEvent, { type: 'marketplace_initialized' | 'marketplace_config_updated' | 'marketplace_refund_claimed' }>) {
+function marketplaceTarget(event: Exclude<MarketplaceEvent, { type: 'marketplace_initialized' | 'marketplace_config_updated' | 'marketplace_refund_claimed' | 'marketplace_operator_proposed' | 'marketplace_operator_cancelled' | 'marketplace_operator_changed' }>) {
   if (event.type === 'domain_fixed_sale_opened') return `${event.priceLux}`
   if (event.type === 'domain_fixed_sale_filled') return `${event.grossAmountLux}`
   if (event.type === 'domain_auction_created') return `${event.reservePriceLux}`

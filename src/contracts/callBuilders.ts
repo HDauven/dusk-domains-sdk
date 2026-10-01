@@ -32,15 +32,15 @@ import type {
   PoolNodeArgs,
   RouterAddPoolMemberArgs,
   RouterInitArgs,
-  RouterSetOperatorRuntimeArgs,
+  RouterProposeOperatorRuntimeArgs,
   CoreMoveRecordsRuntimeArgs,
   MarketplaceSetFeeRuntimeArgs,
-  MarketplaceUpdateOperatorRuntimeArgs,
+  MarketplaceProposeOperatorRuntimeArgs,
   TreasuryClaimAllReferralRewardsRuntimeArgs,
   TreasuryClaimReferralRewardRuntimeArgs,
   TreasuryClaimRuntimeArgs,
   TreasuryInitArgs,
-  TreasuryUpdateOperatorRuntimeArgs,
+  TreasuryProposeOperatorRuntimeArgs,
 } from './callTypes'
 
 export function coreInitCall(args: CoreInitArgs): DuskDomainCallMetadata<CoreInitArgs> {
@@ -273,15 +273,23 @@ export function routerAddResolverRuntimeCall(
   }
 }
 
-export function routerSetOperatorRuntimeCall(
-  args: RouterSetOperatorRuntimeArgs,
-): DuskDomainCallMetadata<RouterSetOperatorRuntimeArgs> {
+export function routerProposeOperatorRuntimeCall(
+  args: RouterProposeOperatorRuntimeArgs,
+): DuskDomainCallMetadata<RouterProposeOperatorRuntimeArgs> {
   return {
     contract: 'router',
-    functionName: 'set_operator_runtime',
+    functionName: 'propose_operator_runtime',
     kind: 'write',
     args,
   }
+}
+
+export function routerAcceptOperatorRuntimeCall(): DuskDomainCallMetadata<undefined> {
+  return { contract: 'router', functionName: 'accept_operator_runtime', kind: 'write', args: undefined }
+}
+
+export function routerCancelOperatorRuntimeCall(): DuskDomainCallMetadata<undefined> {
+  return { contract: 'router', functionName: 'cancel_operator_runtime', kind: 'write', args: undefined }
 }
 
 export function routerFeeConfigCall(): DuskDomainCallMetadata<undefined> {
@@ -409,15 +417,23 @@ export function treasuryInitCall(args: TreasuryInitArgs): DuskDomainCallMetadata
   }
 }
 
-export function treasuryUpdateOperatorRuntimeCall(
-  args: TreasuryUpdateOperatorRuntimeArgs,
-): DuskDomainCallMetadata<TreasuryUpdateOperatorRuntimeArgs> {
+export function treasuryProposeOperatorRuntimeCall(
+  args: TreasuryProposeOperatorRuntimeArgs,
+): DuskDomainCallMetadata<TreasuryProposeOperatorRuntimeArgs> {
   return {
     contract: 'treasury',
-    functionName: 'update_operator_runtime',
+    functionName: 'propose_operator_runtime',
     kind: 'write',
     args,
   }
+}
+
+export function treasuryAcceptOperatorRuntimeCall(): DuskDomainCallMetadata<undefined> {
+  return { contract: 'treasury', functionName: 'accept_operator_runtime', kind: 'write', args: undefined }
+}
+
+export function treasuryCancelOperatorRuntimeCall(): DuskDomainCallMetadata<undefined> {
+  return { contract: 'treasury', functionName: 'cancel_operator_runtime', kind: 'write', args: undefined }
 }
 
 export function treasuryClaimRuntimeCall(
@@ -477,10 +493,18 @@ export function marketplaceSetFeeRuntimeCall(
   return { contract: 'marketplace', functionName: 'set_fee_runtime', kind: 'write', args }
 }
 
-export function marketplaceUpdateOperatorRuntimeCall(
-  args: MarketplaceUpdateOperatorRuntimeArgs,
-): DuskDomainCallMetadata<MarketplaceUpdateOperatorRuntimeArgs> {
-  return { contract: 'marketplace', functionName: 'update_operator_runtime', kind: 'write', args }
+export function marketplaceProposeOperatorRuntimeCall(
+  args: MarketplaceProposeOperatorRuntimeArgs,
+): DuskDomainCallMetadata<MarketplaceProposeOperatorRuntimeArgs> {
+  return { contract: 'marketplace', functionName: 'propose_operator_runtime', kind: 'write', args }
+}
+
+export function marketplaceAcceptOperatorRuntimeCall(): DuskDomainCallMetadata<undefined> {
+  return { contract: 'marketplace', functionName: 'accept_operator_runtime', kind: 'write', args: undefined }
+}
+
+export function marketplaceCancelOperatorRuntimeCall(): DuskDomainCallMetadata<undefined> {
+  return { contract: 'marketplace', functionName: 'cancel_operator_runtime', kind: 'write', args: undefined }
 }
 
 export function marketplaceBuyFixedSaleRuntimeCall(
