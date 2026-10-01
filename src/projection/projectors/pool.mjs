@@ -1,6 +1,8 @@
-import type { IndexedPoolState, IndexerEventMeta, PoolEvent } from './indexerTypes'
+import { normalizeNode } from '../keys.mjs'
 
-export function emptyPoolState(): IndexedPoolState {
+// The contract pool (ADR 0002 in dusk-domains-protocol): one router, and registries and resolvers
+// in the order they joined. The newest registry creates new names; names never move.
+export function emptyPoolState() {
   return {
     registrationsPaused: false,
     initialized: false,
@@ -16,12 +18,9 @@ export function emptyPoolState(): IndexedPoolState {
   }
 }
 
-export function reducePoolState(
-  event: PoolEvent,
-  current: IndexedPoolState,
-  meta: IndexerEventMeta,
-): IndexedPoolState {
-  // Records keep their content when they move, so the pool itself does not change.
+export function reducePoolEvent(event, current, meta = {}) {
+  // Records keep their content when they move, so the pool itself does not change. The name's
+  // resolver does: see applyRecordsMoved.
   if (event.type === 'records_moved') return current
 
   const stamped = {
@@ -29,26 +28,28 @@ export function reducePoolState(
     blockHeight: meta.blockHeight ?? current.blockHeight,
   }
   if (event.type === 'router_initialized') {
+    const marketplace = normalizeNode(event.marketplace)
     return {
       ...current,
       ...stamped,
       registrationsPaused: false,
       initialized: true,
-      router: meta.contractId ?? current.router,
-      operator: event.operator,
+      router: meta.contractId ? normalizeNode(meta.contractId) : current.router,
+      operator: event.operator ?? null,
       pendingOperator: null,
-      treasury: event.treasury,
-      marketplace: isZeroContract(event.marketplace) ? null : event.marketplace,
+      treasury: normalizeNode(event.treasury),
+      marketplace: /^0x0+$/u.test(marketplace) ? null : marketplace,
     }
   }
   if (event.type === 'pool_member_added') {
     const list = event.kind === 'registry' ? 'registries' : 'resolvers'
-    if (current[list].includes(event.member)) return current
+    const member = normalizeNode(event.member)
+    if (current[list].includes(member)) return current
     return {
       ...current,
       ...stamped,
-      operator: event.operator,
-      [list]: [...current[list], event.member],
+      operator: event.operator ?? current.operator,
+      [list]: [...current[list], member],
     }
   }
   if (event.type === 'registrations_paused_changed') {
@@ -60,9 +61,8 @@ export function reducePoolState(
   if (event.type === 'router_operator_cancelled') {
     return { ...current, ...stamped, pendingOperator: null }
   }
-  return { ...current, ...stamped, operator: event.operator, pendingOperator: null }
-}
-
-function isZeroContract(value: string) {
-  return /^(0x)?0+$/i.test(value)
+  if (event.type === 'router_operator_changed') {
+    return { ...current, ...stamped, operator: event.operator ?? current.operator, pendingOperator: null }
+  }
+  return current
 }

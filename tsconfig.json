@@ -14,8 +14,9 @@
     "sourceMap": true,
     "outDir": "dist",
     "rootDir": "src",
-    "types": ["node"]
+    "types": ["node"],
+    "allowJs": true
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts", "src/client.test-fixtures.ts"]
+  "include": ["src/**/*.ts", "src/**/*.mjs"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.mjs", "src/client.test-fixtures.ts"]
 }

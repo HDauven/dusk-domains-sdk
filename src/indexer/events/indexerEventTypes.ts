@@ -4,7 +4,14 @@ import type { ResolverRecord, ResolverRecordKey } from '../../core/records'
 import type { SubnameExpiryPolicy } from '../../core/subnames'
 
 export type IndexerEventMeta = {
-  txId?: string
+  eventId?: string
+  observedAt?: string
+  eventIndex?: number
+  observedBlockHeight?: number | null
+  source?: string
+  contractKey?: string
+  timeSource?: string
+  txId?: string | null
   blockHeight?: number | null
   contractId?: string | null
 }

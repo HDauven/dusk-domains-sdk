@@ -34,6 +34,10 @@
     "./event-catalog": {
       "types": "./src/indexer/events/indexerEventCatalog.d.mts",
       "import": "./src/indexer/events/indexerEventCatalog.mjs"
+    },
+    "./projection": {
+      "types": "./src/projection.d.mts",
+      "import": "./src/projection.mjs"
     }
   },
   "files": [

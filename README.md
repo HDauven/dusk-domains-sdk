@@ -86,7 +86,8 @@ old records, primary name, and descendants and reuses its capacity slot.
 
 - `@duskdomains/sdk`: public client, records, namehashing, principals and release manifests.
 - `@duskdomains/sdk/marketplace`: marketplace constants, call builders and indexed models.
-- `@duskdomains/sdk/event-catalog`: event names for independent indexer implementations.
+- `@duskdomains/sdk/event-catalog`: event families and data-driver topics grouped by contract.
+- `@duskdomains/sdk/projection`: shared projectors, reserved-name policy and decoded-event normalization for plain Node and TypeScript.
 
 `@duskdomains/sdk/connect-app` exports `createDuskDomainsConnectApp` and its transport types. It adapts direct contract methods or the request fallback, preserving prepared transaction payloads and wallet display context, without a runtime dependency on a wallet library.
 
@@ -100,7 +101,8 @@ src/
   contracts/    contract call builders, wire args and wallet display context
   core/         name policy, namehashing, records, principals and domain helpers
   dev/          local development wallet utilities
-  indexer/      event types, projectors, indexer client and read-model helpers
+  indexer/      event types, indexer client and read-model helpers
+  projection/   shared event projection and decoder implementation
   onchain/      direct contract read client and decoders
   proof/        browser write proof capture
   runtime/      runtime config and release manifests

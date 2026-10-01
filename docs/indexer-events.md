@@ -6,9 +6,9 @@ Dusk Domains indexers should treat DuskDS contract events as the source for sear
 
 Implementation references:
 
-- `scripts/indexer-operator/event-decoder.mjs` normalizes decoded W3sper/data-driver contract event payloads into stable JSON event envelopes.
-- `src/names/indexerEventCatalog.mjs` is the runtime-safe event type catalog shared by the public SDK and Node indexer router.
-- `src/names/indexerKit.ts` and `src/names/lifecycleProjector.ts` define the shared SDK/operator projector semantics for those envelopes.
+- `normalizeObservedEvent` from `@duskdomains/sdk/projection` normalizes decoded W3sper/data-driver contract event payloads into stable JSON event envelopes.
+- `@duskdomains/sdk/event-catalog` is the runtime-safe event type catalog shared by the public SDK and Node indexer router.
+- `@duskdomains/sdk/projection` defines the shared SDK/operator projector semantics for those envelopes.
 - `server/local-indexer/*` owns persistence, HTTP routes, health, SQLite/WAL import, and checkpointing around the shared event semantics.
 
 ## Shared Rules
@@ -55,7 +55,7 @@ Indexer operators should project normalized JSON envelopes, not raw data-driver 
 
 `event` is the stable schema consumed by SDK and server projectors. `meta` is transport/provenance data and should preserve the strongest chain envelope available from the node. The current live collector uses W3sper decoded event payloads plus best available block-height observations; production archive replay should add raw tx/block/event-index metadata when available.
 
-The public SDK exports `duskDomainsIndexedEventTypes`, `isDuskDomainsIndexedEventType`, `normalizeDuskDomainsIndexedEventEnvelope`, `createDuskDomainsProjector`, and `applyDuskDomainsIndexedEvent` from `indexerKit`. Third-party indexers may use those helpers as the semantic boundary after decoding data-driver/RKYV events to JSON. The Node indexer uses the same event type catalog for router dispatch, so adding a new event family should update one catalog and then the SDK/server parity tests.
+The public SDK exports `duskDomainsIndexedEventTypes`, `isDuskDomainsIndexedEventType`, `normalizeDuskDomainsIndexedEventEnvelope`, `createDuskDomainsProjector`, and `applyDuskDomainsIndexedEvent` from `indexerKit`. Third-party indexers may use those helpers as the semantic boundary after decoding data-driver/RKYV events to JSON. The Node indexer imports projection and decoding from `@duskdomains/sdk/projection` and contract topic lists from `@duskdomains/sdk/event-catalog`.
 
 ## Registrar Events
 

@@ -116,7 +116,7 @@ function createRecentWarning(
   }
 }
 
-function isHighRiskRecordTarget(target: string | undefined) {
+function isHighRiskRecordTarget(target: string | null | undefined) {
   if (!target) return false
   if (target.startsWith('service_endpoint.')) return true
   return HIGH_RISK_RECORD_KEYS.includes(target as (typeof HIGH_RISK_RECORD_KEYS)[number])
