@@ -1,98 +1,50 @@
-# Integration Trust Model
+# Integration trust model
 
-Status: public beta integration guidance
-Owner issue: [#127 Public integration release boundary and artifact strategy](https://github.com/HDauven/dusk-domains/issues/127)
+Contracts are canonical for ownership, lifecycle, records, orders and funds.
+The indexer provides discovery, history and derived warnings.
 
-Dusk Domains exposes two read paths. They are intentionally different.
+## Client behavior
 
-## Read Paths
+`createDuskDomainsClient({ onChain, indexer })` combines the sources:
 
-| Path | Use | Trust level |
-| --- | --- | --- |
-| Direct on-chain reads | Known-name checks, ownership, records, primary-domain verification, fee config, treasury/referral preflight. | Canonical contract state. |
-| Indexer reads | Search, My Domains, subdomain lists, activity, record history, recent-change warnings, dashboards. | Derived read model. |
+- `resolveName` tries the on-chain client first. A contract-read or missing-height
+  failure can fall back to indexed resolution. Inspect `result.value.source.kind`;
+  indexed fallback is not canonical proof.
+- `getName`, `getNameOwner`, `getRecord`, `getPrimaryNameOnChain` and
+  `verifyPrimaryNameOnChain` require the on-chain client.
+- Search, lists, activity and dashboards require the indexer. Array-returning list
+  methods read one page; use the indexer's page methods or scoped complete-set
+  helpers for further results.
+- `checkIndexer` checks health, API/event schema, routes, deployment binding,
+  SQLite schema when present, lag and history. A degraded/partial-history status
+  is distinct from full compatibility even when `ok` is true.
 
-The indexer exists so wallets, explorers, and apps can build useful product surfaces without scanning contract events themselves. It is not the source of ownership, record authority, payment routing, referral claimability, or treasury claimability.
+The direct client needs `currentBlockHeight` for active routing and primary-name
+verification. Stored ownership can survive expiry; an owner lookup alone does not
+prove the name is active. For signing, check the exact current contract state and
+height. Display a primary only after typed forward/reverse verification.
 
-## Value-Bearing Rule
+## Manifests
 
-Before a flow asks a user to sign or treats a mutation as final:
+`createDuskDomainsClientFromManifest` accepts a manifest or manifest URL, optional
+Dusk Connect `app`/read transport, indexer URL and `currentBlockHeight` reader.
+Validation requires router, core and treasury metadata, contract IDs, artifact
+descriptor shapes and required method names. It does not fetch and hash driver
+bytes, verify deployed bytecode or perform the indexer compatibility check for you.
+The generated contract map contains router, core and treasury; marketplace setup
+uses its own configured preset.
 
-1. Check the configured indexer health when using indexed state.
-2. Direct-read the relevant contract state when the read is about ownership, a record value, a primary domain, a fee, or a claimable balance.
-3. Prefer the direct read if it disagrees with the indexer.
-4. Fail closed if the direct read is unavailable and the action depends on value-bearing state.
+Call `checkIndexer()` explicitly for indexed confirmation. Validate deployment
+provenance and driver bytes through your release process. The lower-level clients
+can be used without a manifest; they do not reject startup merely because it is absent.
 
-Examples:
+## Shared projection
 
-- Search may use the indexer for availability, but purchase preflight should direct-read the registration state and fee config.
-- My Domains may use `GET /names?owner=...`, but record edits should direct-read the selected name owner/manager before preparing the transaction.
-- Referral and treasury pages may show indexed balances, but claim flows should direct-read claimable state before signing.
-- Primary-domain display must verify reverse lookup plus typed forward record equality before showing the name as trusted.
+`@duskdomains/sdk/projection` normalizes decoded event payloads and applies them
+to in-memory state. The operator supplies finalized order, deduplication,
+provenance, persistence and HTTP serving. Raw data-driver/RKYV decoding precedes
+normalization. An indexed warning or balance is not authorization to mutate or claim.
 
-## Public Package Boundary
-
-Public beta integrations should start from the release manifest, not copied env files:
-
-```text
-manifest.json
-method-manifest.json
-call-examples.json
-package-manifest.json
-contracts/*.datadriver.wasm
-```
-
-The manifest binds:
-
-- network and chain ID;
-- core and treasury contract IDs;
-- data-driver hashes;
-- method signatures;
-- event schema version;
-- SDK version;
-- source commit.
-
-The public SDK can use that manifest to create:
-
-- an on-chain read client for canonical known-name checks;
-- an indexer client for discovery and dashboards;
-- a combined client that chooses the safer path per method.
-
-## Third-Party Indexers
-
-A third-party indexer can be correct without running the official hosted service if it:
-
-1. Starts from the same release manifest and data-driver WASM hashes.
-2. Decodes DuskDS contract events into the documented event envelopes.
-3. Stores an append-only event ledger with block, transaction, and event ordering metadata.
-4. Replays from the deployment height or a retained archive-node snapshot window.
-5. Exposes the documented `/health` contract and route manifest.
-6. Marks reads unsafe when replay, cursor, checkpoint, lag, or schema evidence is missing.
-
-The project indexer is the reference implementation for public beta, not a privileged source of truth.
-
-## SDK Behavior
-
-Recommended client behavior:
-
-- `resolveName(name, key)`: direct-read when an on-chain transport is configured; otherwise return indexed data with lower confidence.
-- `getNameOwner(name)`: direct-read by default.
-- `verifyPrimaryName(endpoint)`: direct-read reverse and forward records when possible.
-- `listNames({ owner })`: indexer-backed discovery.
-- `getActivity(name)`, `getRecordHistory(name, key)`, `getSubnames(name)`: indexer-backed history/discovery.
-- `checkIndexer()`: required before using indexed state for final UI confirmation.
-
-If only the indexer is available, the SDK must make that confidence level visible to the caller. It should not silently present indexed state as canonical.
-
-## Failure Handling
-
-| Condition | Expected behavior |
-| --- | --- |
-| Indexer unhealthy | Keep browsing possible if useful, but hide final value-bearing success states. |
-| Indexer and contract disagree | Prefer contract state and report stale indexed state. |
-| Direct read unavailable | Block signing for flows that need ownership, fee, record, primary, treasury, or referral proof. |
-| Missing release manifest | Refuse public integration startup. |
-| Mismatched data-driver hash | Refuse contract calls and event decoding. |
-| Missing archive/replay evidence | Allow discovery only with degraded confidence; do not use indexed state as final proof. |
-
-This split keeps Dusk Domains usable for product UX while preserving the contract as the canonical protocol state.
+See [examples](examples/direct-onchain-reads.md), [events](indexer-events.md),
+[HTTP contract](https://github.com/HDauven/dusk-domains-indexer/blob/main/docs/indexer-api.md) and
+[artifact tooling](https://github.com/HDauven/dusk-domains-protocol/blob/main/docs/public-integration-release.md).
