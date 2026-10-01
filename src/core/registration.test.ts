@@ -17,18 +17,23 @@ describe('Dusk Domains registration lifecycle helpers', () => {
     })
   })
 
-  it('renews from the later of current expiry or current time', () => {
+  it('renews from the old expiry before expiry and during grace', () => {
     expect(renewRegistrationLifecycle({
       currentExpiresAt: now + REGISTRATION_YEAR_BLOCKS,
       now: now + 10,
       years: 1,
     }).expiresAt).toBe(now + 2 * REGISTRATION_YEAR_BLOCKS)
 
-    expect(renewRegistrationLifecycle({
-      currentExpiresAt: now - 10,
-      now,
-      years: 1,
-    }).expiresAt).toBe(now + REGISTRATION_YEAR_BLOCKS)
+    for (const elapsed of [0, 1, DEFAULT_GRACE_PERIOD_BLOCKS - 1]) {
+      expect(renewRegistrationLifecycle({
+        currentExpiresAt: now,
+        now: now + elapsed,
+        years: 1,
+      })).toEqual({
+        expiresAt: now + REGISTRATION_YEAR_BLOCKS,
+        graceEndsAt: now + REGISTRATION_YEAR_BLOCKS + DEFAULT_GRACE_PERIOD_BLOCKS,
+      })
+    }
   })
 
   it('reports active grace and expired states deterministically', () => {

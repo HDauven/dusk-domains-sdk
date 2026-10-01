@@ -37,12 +37,13 @@ export function createRegistrationLifecycle(options: {
 
 export function renewRegistrationLifecycle(options: {
   currentExpiresAt: number
+  // Retained for callers; renewal always extends from currentExpiresAt, including in grace.
   now: number
   years: number
   gracePeriodBlocks?: number
 }): RegistrationLifecycle {
   return createRegistrationLifecycle({
-    startsAt: Math.max(options.currentExpiresAt, options.now),
+    startsAt: options.currentExpiresAt,
     years: options.years,
     gracePeriodBlocks: options.gracePeriodBlocks,
   })

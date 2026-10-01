@@ -142,11 +142,11 @@ Policy reference: [Subname Policy](subnames.md).
 
 - Annual rentals for second-level `.dusk` names.
 - One-year minimum.
-- Grace period after expiry.
+- Owners and managers can renew before the end of the 259,200-block grace period (30 days at the target block time). Renewal extends from the old expiry, including during grace; after grace anyone can register the name.
 - Marketplace auctions are an optional extension, not part of the core naming MVP.
 - Fees in DUSK for mainnet beta, framed primarily as anti-squatting.
 
-Implementation reference: `src/names/registration.ts` defines deterministic annual lifecycle helpers for registration, renewal, grace-period calculation, and active/grace/expired status.
+Implementation reference: `src/core/registration.ts` defines deterministic annual lifecycle helpers for registration, renewal, grace-period calculation, and active/grace/expired status.
 
 ## Reserved Names
 
