@@ -242,7 +242,6 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
       manager: bytes32(args.manager, 'manager'),
       expires_at: args.expiresAt,
       expiry_policy: subnameExpiryPolicy(args.expiryPolicy),
-      revocation_policy: subnameRevocationPolicy(args.revocationPolicy),
     }
   }
   if (call.contract === 'core' && call.functionName === 'get_name' && isRecord(args)) {
@@ -420,6 +419,7 @@ const poolNodeCalls = new Set([
   'core.holds_name',
   'core.record_slot',
   'core.move_records_runtime',
+  'core.prune_subname_runtime',
 ])
 
 const poolEndpointCalls = new Set([
@@ -551,12 +551,6 @@ function subnameExpiryPolicy(value: string) {
   if (value === 'inherits_parent' || value === 'InheritsParent') return 'InheritsParent'
   if (value === 'fixed_before_parent' || value === 'FixedBeforeParent') return 'FixedBeforeParent'
   throw new Error(`Unsupported subname expiry policy: ${value}`)
-}
-
-function subnameRevocationPolicy(value: string) {
-  if (value === 'parent_revocable' || value === 'ParentRevocable') return 'ParentRevocable'
-  if (value === 'locked' || value === 'Locked') return 'Locked'
-  throw new Error(`Unsupported subname revocation policy: ${value}`)
 }
 
 function unixSecondsFromIso(value: string) {

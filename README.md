@@ -75,6 +75,13 @@ JavaScript write builders reject Lux amounts above `Number.MAX_SAFE_INTEGER`
 (about 9,007,199 DUSK) instead of risking JSON precision loss. Canonical reads
 retain the full contract `u64` as `bigint`.
 
+Subname creation takes an expiry policy; v1 has no revocation policy. Inheriting
+subnames follow root renewal, while fixed subnames retain their expiry. To reclaim
+capacity for an expired subtree, its active parent owner or manager can submit
+`corePruneSubnameRuntimeCall({ node })` from `@duskdomains/sdk/writes`. The call routes
+to the registry holding the subname. Recreating the same expired name also clears its
+old records, primary name, and descendants and reuses its capacity slot.
+
 ## Entrypoints
 
 - `@duskdomains/sdk`: public client, records, namehashing, principals and release manifests.

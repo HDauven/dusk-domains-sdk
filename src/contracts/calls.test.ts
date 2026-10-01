@@ -10,6 +10,7 @@ import {
   coreCommitRuntimeCall,
   coreCompleteRegistrationRuntimeCall,
   coreCreateSubnameRuntimeCall,
+  corePruneSubnameRuntimeCall,
   coreAcceptsNewNamesCall,
   coreGetNameCall,
   coreHoldsNameCall,
@@ -174,6 +175,7 @@ function schemaCalls(): DuskDomainCallMetadata[] {
     coreInitCall({ router: routerContract }),
     coreRouterCall(),
     coreMoveRecordsRuntimeCall({ node }),
+    corePruneSubnameRuntimeCall({ node }),
     coreHoldsNameCall({ node }),
     coreHoldsPrimaryCall({ endpointType: 'moonlight_address', endpointValue }),
     coreRecordSlotCall({ node }),
@@ -262,7 +264,6 @@ function schemaCalls(): DuskDomainCallMetadata[] {
       manager: owner,
       expiresAt: 1_820_000_000,
       expiryPolicy: 'inherits_parent',
-      revocationPolicy: 'parent_revocable',
     }),
     coreGetNameCall({ node }),
     coreReadRecordCall({ node, key: 'moonlight_address' }),
@@ -638,6 +639,24 @@ describe('Dusk Domains contract call helpers', () => {
       expect(DUSK_DOMAINS_CONTRACTS[contract].methodSigs).not.toHaveProperty('set_operator_runtime')
       expect(DUSK_DOMAINS_CONTRACTS[contract].methodSigs).not.toHaveProperty('update_operator_runtime')
     }
+  })
+
+  it('encodes v1 subname creation and bounded expiry cleanup', () => {
+    const create = coreCreateSubnameRuntimeCall({
+      parentNode: node, node, parentName: 'aurora.dusk', name: 'pay.aurora.dusk',
+      label: 'pay', owner, manager: owner, expiresAt: 1000, expiryPolicy: 'inherits_parent',
+    })
+    expect(toDuskDomainWireArgs(create)).toEqual({
+      parent_node: Array(32).fill(7), node: Array(32).fill(7),
+      parent_name: 'aurora.dusk', name: 'pay.aurora.dusk', label: 'pay',
+      owner: Array(32).fill(9), manager: Array(32).fill(9),
+      expires_at: 1000, expiry_policy: 'InheritsParent',
+    })
+    const prune = corePruneSubnameRuntimeCall({ node })
+    expect(toDuskDomainWireArgs(prune)).toEqual({ node: Array(32).fill(7) })
+    expect(isRuntimeBoundDuskDomainWrite(prune)).toBe(true)
+    expect(decodedDuskDomainContext(prune)?.title).toBe('Prune expired subdomain')
+    expect(() => toDuskDomainWireArgs({ ...prune, args: { node: 'bad' } })).toThrow()
   })
 
   it('covers every configured method with a fixture', () => {

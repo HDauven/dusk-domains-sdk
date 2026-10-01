@@ -154,6 +154,7 @@ function releaseManifest(): DuskDomainsReleaseManifest {
           set_primary_name_runtime: 'set_primary_name_runtime(SetPrimaryNameRuntime)',
           clear_primary_name_runtime: 'clear_primary_name_runtime(ClearPrimaryNameRuntime)',
           create_subname_runtime: 'create_subname_runtime(CreateSubnameRuntime)',
+          prune_subname_runtime: 'prune_subname_runtime(PruneSubnameRuntime)',
           get_name: 'get_name(GetName)',
           read_record: 'read_record(ReadRecord)',
           read_primary_name: 'read_primary_name(ReadPrimaryName)',

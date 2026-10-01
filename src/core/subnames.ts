@@ -2,8 +2,7 @@ import { namehashHex } from './namehash'
 import { validateName } from './namePolicy'
 
 export type SubnameExpiryPolicy = 'inherits_parent' | 'fixed_before_parent'
-export type SubnameRevocationPolicy = 'parent_revocable' | 'locked'
-export type SubnameStatus = 'active' | 'revoked' | 'expired'
+export type SubnameStatus = 'active' | 'expired'
 
 export type SubnameState = {
   parentName: string
@@ -17,10 +16,8 @@ export type SubnameState = {
   expiresAt: number
   parentExpiresAt: number
   expiryPolicy: SubnameExpiryPolicy
-  revocationPolicy: SubnameRevocationPolicy
   createdAt: number
   status: SubnameStatus
-  revokedAt: number | null
 }
 
 export type CreateSubnameOptions = {
@@ -31,7 +28,6 @@ export type CreateSubnameOptions = {
   resolver: string
   parentExpiresAt: number
   requestedExpiresAt?: number | null
-  revocationPolicy?: SubnameRevocationPolicy
   createdAt?: number
 }
 
@@ -67,10 +63,8 @@ export function createSubnameState(options: CreateSubnameOptions): SubnameState 
     expiresAt,
     parentExpiresAt: options.parentExpiresAt,
     expiryPolicy: options.requestedExpiresAt ? 'fixed_before_parent' : 'inherits_parent',
-    revocationPolicy: options.revocationPolicy ?? 'parent_revocable',
     createdAt: options.createdAt ?? Math.floor(Date.now() / 1000),
     status: 'active',
-    revokedAt: null,
   }
 }
 
@@ -90,28 +84,7 @@ export function resolveSubnameExpiresAt(options: {
   return Math.min(requested, options.parentExpiresAt)
 }
 
-export function canParentRevokeSubname(subname: Pick<SubnameState, 'revocationPolicy' | 'status'>): boolean {
-  return subname.revocationPolicy === 'parent_revocable' && subname.status === 'active'
-}
-
-export function revokeSubname(subname: SubnameState, revokedAt: number): SubnameState {
-  if (!canParentRevokeSubname(subname)) {
-    throw new Error('This subname is locked against parent revocation.')
-  }
-
-  return {
-    ...subname,
-    status: 'revoked',
-    revokedAt,
-  }
-}
-
 export function subnameExpiryDescription(policy: SubnameExpiryPolicy): string {
   if (policy === 'inherits_parent') return 'Inherits parent expiry'
   return 'Fixed and capped by parent expiry'
-}
-
-export function subnameRevocationDescription(policy: SubnameRevocationPolicy): string {
-  if (policy === 'parent_revocable') return 'Parent can revoke'
-  return 'Locked after creation'
 }

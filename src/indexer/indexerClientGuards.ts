@@ -202,10 +202,8 @@ export function isIndexedSubname(value: unknown): value is IndexedSubname {
     isNullableNumber(value.graceEndsAtBlockHeight) &&
     isNullableNumber(value.parentExpiresAtBlockHeight) &&
     (value.expiryPolicy === 'inherits_parent' || value.expiryPolicy === 'fixed_before_parent') &&
-    (value.revocationPolicy === 'parent_revocable' || value.revocationPolicy === 'locked') &&
-    (value.status === 'active' || value.status === 'revoked' || value.status === 'expired') &&
+    (value.status === 'active' || value.status === 'expired') &&
     typeof value.createdAt === 'string' &&
-    isNullableString(value.revokedAt) &&
     typeof value.lastEventType === 'string' &&
     isNullableString(value.txId) &&
     (isNonNegativeInteger(value.blockHeight) || value.blockHeight === null)

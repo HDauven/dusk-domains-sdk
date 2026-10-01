@@ -26,6 +26,7 @@ const nameCalls = new Set([
   'mutate_records_sender_runtime',
   'set_primary_name_runtime',
   'move_records_runtime',
+  'prune_subname_runtime',
   'get_name',
   'read_record',
   'record_slot',

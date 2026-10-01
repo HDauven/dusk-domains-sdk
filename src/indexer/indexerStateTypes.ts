@@ -1,7 +1,7 @@
 import type { CoreFeeConfig } from '../core/namePolicy'
 import type { DuskPrincipal } from '../core/principal'
 import type { ResolverRecord } from '../core/records'
-import type { SubnameExpiryPolicy, SubnameRevocationPolicy, SubnameStatus } from '../core/subnames'
+import type { SubnameExpiryPolicy, SubnameStatus } from '../core/subnames'
 import type {
   IndexedEndpoint,
   NameLifecycleEvent,
@@ -159,10 +159,8 @@ export type IndexedSubname = {
   graceEndsAtBlockHeight?: number | null
   parentExpiresAtBlockHeight?: number | null
   expiryPolicy: SubnameExpiryPolicy
-  revocationPolicy: SubnameRevocationPolicy
   status: SubnameStatus
   createdAt: string
-  revokedAt: string | null
   lastEventType: SubnameRegistryEvent['type']
   txId: string | null
   blockHeight: number | null

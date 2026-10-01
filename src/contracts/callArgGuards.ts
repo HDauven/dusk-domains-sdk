@@ -121,8 +121,7 @@ export function isCoreCreateSubnameRuntimeArgs(value: unknown): value is CoreCre
     typeof value.owner === 'string' &&
     typeof value.manager === 'string' &&
     isNonNegativeSafeInteger(value.expiresAt) &&
-    typeof value.expiryPolicy === 'string' &&
-    typeof value.revocationPolicy === 'string'
+    typeof value.expiryPolicy === 'string'
   )
 }
 

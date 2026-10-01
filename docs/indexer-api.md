@@ -263,7 +263,7 @@ Each row includes the `IndexedLifecycleName` fields plus:
 | `records` | Current resolver records indexed for the name. |
 | `primaryName` | Reverse primary name for the indexed Moonlight address, when one is known. `null` when missing or no Moonlight address is set. |
 | `primaryStatus` | `verified`, `missing`, `mismatch`, or `no_address`. `verified` means the indexed Moonlight address reverse-resolves to this same name and the reverse row points to the same node. |
-| `subnameCount` | Count of active indexed subnames under this parent name. Revoked subnames remain inspectable through `/subname` but do not count here. |
+| `subnameCount` | Count of active indexed subnames under this parent name. Expired subnames are excluded. Contract capacity is reclaimed only by recreation, explicit pruning, or root re-registration. |
 | `activityCount` | Count of indexed activity items for this name. |
 
 ## Activity
@@ -307,11 +307,11 @@ GET /subname?node=0x...
 
 `/subnames` returns an array of `IndexedSubname` rows. `/subname` returns one row or `null`.
 
-Each `IndexedSubname` includes parent/name identifiers, owner, manager, resolver, expiry and grace end, expiry policy, revocation policy, status, creation/revocation timestamps, and transaction/block metadata. Subname records remain resolver records on the subname node and must not be merged into the parent records.
+Each `IndexedSubname` includes parent/name identifiers, owner, manager, resolver, expiry and grace end, expiry policy, status, creation timestamp, and transaction/block metadata. Subname records remain resolver records on the subname node and must not be merged into the parent records.
 
 A subname's `graceEndsAt` is the grace end its parent had when the subname was created. Renewing a root name also renews each `inherits_parent` subname whose ancestors up to that root all inherit too: those rows take the root's new `expiresAt` and `graceEndsAt`. A `fixed_before_parent` subname keeps its lifecycle, and so do the subnames below it.
 
-`/subnames` is an active namespace list. It excludes revoked subnames and returns an empty list if the parent name is released or expired beyond grace, even if historical subname rows remain inspectable through `/subname`.
+`/subnames` is an active namespace list. It excludes expired or pruned subnames and returns an empty list if the parent name is released or expired beyond grace. `/subname` also returns null for inactive subnames.
 
 ## Typed Reverse Lookup
 

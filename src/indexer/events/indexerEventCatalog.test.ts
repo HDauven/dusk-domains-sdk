@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import * as source from './indexerEventCatalog'
+import * as source from './indexerEventCatalog.ts'
 import * as generated from './indexerEventCatalog.mjs'
 
 describe('generated plain-Node event catalog', () => {
@@ -19,4 +19,8 @@ describe('generated plain-Node event catalog', () => {
       }
     }
   })
+})
+
+it('limits v1 subname events to creation and expiry cleanup', () => {
+  expect(generated.subnameEventTypes).toEqual(['subname_created', 'subname_pruned'])
 })

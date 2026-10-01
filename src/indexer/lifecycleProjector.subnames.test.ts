@@ -1,16 +1,38 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createLifecycleEventProjector } from './indexer'
 import { createResolverRecord } from '../core/records'
 import type { SubnameExpiryPolicy } from '../core/subnames'
 
 describe('Dusk Domains lifecycle event projector subnames', () => {
-  it('projects subname creation, delegation, and revocation by parent node', () => {
+  it('replays fresh children with linear map work and no cleanup', () => {
+    const replay = (parents: number) => {
+      const projector = createLifecycleEventProjector()
+      const work = measureMapWork(() => {
+        for (let p = 0; p < parents; p++) {
+          const root = `root${p}`
+          projector.apply(rootRegistered(root))
+          for (let c = 0; c < 64; c++) {
+            projector.applySubname(subnameCreated(root, `${root}-child${c}`, `child${c}.acme.dusk`,
+              'inherits_parent', '2040-06-17T00:00:00.000Z', 1000))
+          }
+        }
+      })
+      expect(projector.getSubnamesByParent(`root${parents - 1}`)).toHaveLength(64)
+      return work
+    }
+    const small = replay(100)
+    const large = replay(200)
+    expect(large.scanned).toBe(0)
+    expect(large.deleted).toBe(0)
+    expect(large.lookups).toBeLessThanOrEqual(small.lookups * 2.1)
+  }, 60_000)
+
+  it('projects subname creation and expired subtree pruning by parent node', () => {
     const projector = createLifecycleEventProjector()
     const parentNode = `0x${'18'.repeat(32)}`
     const node = `0x${'19'.repeat(32)}`
     const owner = `0x${'20'.repeat(32)}`
     const manager = `0x${'21'.repeat(32)}`
-    const nextManager = `0x${'22'.repeat(32)}`
 
     projector.apply({
       type: 'name_registered',
@@ -33,10 +55,9 @@ describe('Dusk Domains lifecycle event projector subnames', () => {
       owner,
       manager,
       resolver: `0x${'23'.repeat(32)}`,
-      expiresAt: '2027-06-17T00:00:00.000Z',
+      expiresAt: '2027-05-17T00:00:00.000Z',
       parentExpiresAt: '2027-06-17T00:00:00.000Z',
-      expiryPolicy: 'inherits_parent',
-      revocationPolicy: 'parent_revocable',
+      expiryPolicy: 'fixed_before_parent',
       createdAt: '2026-06-17T00:00:00.000Z',
     }, { txId: 'tx-subname', blockHeight: 70 })
 
@@ -55,34 +76,23 @@ describe('Dusk Domains lifecycle event projector subnames', () => {
     })
 
     projector.applySubname({
-      type: 'subname_delegated',
+      type: 'subname_pruned',
       parentNode,
       node,
       name: 'settlement.acme.dusk',
       actor: owner,
-      manager: nextManager,
-      delegatedAt: '2026-06-17T00:10:00.000Z',
-    }, { txId: 'tx-delegate', blockHeight: 71 })
-    projector.applySubname({
-      type: 'subname_revoked',
-      parentNode,
-      node,
-      name: 'settlement.acme.dusk',
-      actor: owner,
-      revokedAt: '2026-06-17T00:20:00.000Z',
-    }, { txId: 'tx-revoke', blockHeight: 72 })
+      prunedAt: '2027-05-17T00:00:00.000Z',
+    }, { txId: 'tx-prune', blockHeight: 72 })
 
     expect(projector.getSubnameByNode(node)).toBeNull()
     expect(projector.getSubnamesByParent(parentNode)).toEqual([])
     expect(projector.getActivity(parentNode).map((entry) => [entry.eventType, entry.name])).toEqual([
-      ['subname_revoked', 'settlement.acme.dusk'],
-      ['subname_delegated', 'settlement.acme.dusk'],
+      ['subname_pruned', 'settlement.acme.dusk'],
       ['subname_created', 'settlement.acme.dusk'],
       ['registration', 'acme.dusk'],
     ])
     expect(projector.getActivity(node).map((entry) => entry.eventType)).toEqual([
-      'subname_revoked',
-      'subname_delegated',
+      'subname_pruned',
       'subname_created',
     ])
 
@@ -140,7 +150,6 @@ describe('Dusk Domains lifecycle event projector subnames', () => {
       expiresAt: '2027-06-17T00:00:00.000Z',
       parentExpiresAt: '2027-06-17T00:00:00.000Z',
       expiryPolicy: 'inherits_parent',
-      revocationPolicy: 'parent_revocable',
       createdAt: '2026-06-17T00:00:30.000Z',
     })
     projector.applyResolver({
@@ -199,7 +208,6 @@ describe('Dusk Domains lifecycle event projector subnames', () => {
       expiresAt: '2025-06-17T00:00:00.000Z',
       parentExpiresAt: '2027-06-17T00:00:00.000Z',
       expiryPolicy: 'fixed_before_parent',
-      revocationPolicy: 'parent_revocable',
       createdAt: '2025-05-17T00:00:00.000Z',
     })
 
@@ -247,7 +255,6 @@ describe('Dusk Domains lifecycle event projector subnames', () => {
       expiresAt: '2027-06-17T00:00:00.000Z',
       parentExpiresAt: '2027-06-17T00:00:00.000Z',
       expiryPolicy: 'inherits_parent',
-      revocationPolicy: 'parent_revocable',
       createdAt: '2026-06-17T00:00:30.000Z',
     })
     projector.applySubname({
@@ -264,7 +271,6 @@ describe('Dusk Domains lifecycle event projector subnames', () => {
       expiresAt: '2027-06-17T00:00:00.000Z',
       parentExpiresAt: '2027-06-17T00:00:00.000Z',
       expiryPolicy: 'inherits_parent',
-      revocationPolicy: 'parent_revocable',
       createdAt: '2026-06-17T00:01:30.000Z',
     })
     projector.applyResolver({
@@ -352,6 +358,12 @@ describe('Dusk Domains lifecycle event projector subnames', () => {
     expect(projector.getSubnameByNode(grandchildNode)).toMatchObject(renewed)
     expect(projector.getSubnameByNode(fixedNode)).toMatchObject(unchanged)
     expect(projector.getSubnameByNode(belowFixedNode)).toMatchObject(unchanged)
+    for (const node of [childNode, grandchildNode, fixedNode]) {
+      expect(projector.getSubnameByNode(node)).toMatchObject({
+        parentExpiresAt: renewed.expiresAt, parentExpiresAtBlockHeight: renewed.expiresAtBlockHeight,
+      })
+    }
+    expect(projector.getSubnameByNode(belowFixedNode)?.parentExpiresAt).not.toBe(renewed.expiresAt)
   })
 
   it('renews the name row an authority change gave an inheriting subname', () => {
@@ -377,6 +389,95 @@ describe('Dusk Domains lifecycle event projector subnames', () => {
     expect(projector.getNameByNode(childNode)).toMatchObject(renewed)
     expect(projector.getSubnameByNode(childNode)).toMatchObject(renewed)
     expect(projector.getSubnameByNode(nestedNode)).toMatchObject(renewed)
+  })
+
+  it.each(['recreate', 'prune'])('clears old subname records, authorities, descendants and primary names on %s', (action) => {
+    const projector = createLifecycleEventProjector()
+    const root = 'root'
+    const child = 'child'
+    const leaf = 'leaf'
+    const oldExpiry = '2020-06-17T00:00:00.000Z'
+    projector.apply(rootRegistered(root))
+    const created = subnameCreated(root, child, 'pay.acme.dusk', 'fixed_before_parent', oldExpiry, 100)
+    projector.applySubname(created)
+    projector.applySubname(subnameCreated(child, leaf, 'tip.pay.acme.dusk', 'inherits_parent', oldExpiry, 100))
+    const endpoint = { type: 'moonlight_address' as const, value: 'old-account' }
+    for (const node of [child, leaf]) {
+      projector.apply(subnameAuthoritiesChanged(node, oldExpiry, 100))
+      projector.applyResolver({ type: 'record_changed', node, controller: owner,
+        record: createResolverRecord('website', 'https://old.example', '2020-01-01T00:00:00.000Z') })
+      projector.applyReverse({ type: 'primary_name_changed', node, endpoint: { ...endpoint, value: node },
+        controller: owner, name: node, previousName: null, updatedAt: oldExpiry })
+    }
+    if (action === 'recreate') {
+      projector.applySubname({ ...created, owner: 'new-owner', manager: 'new-manager',
+        expiresAt: '2040-06-17T00:00:00.000Z', expiresAtBlockHeight: 1000 })
+      expect(projector.getSubnameByNode(child)).toMatchObject({ owner: 'new-owner', manager: 'new-manager' })
+    } else {
+      expect(projector.applySubname({ type: 'subname_pruned', parentNode: root, node: child,
+        name: created.name, actor: owner, prunedAt: oldExpiry })).toBeNull()
+      expect(projector.getSubnameByNode(child)).toBeNull()
+    }
+    projector.apply(rootRenewed(root))
+    expect(projector.getSubnameByNode(leaf)).toBeNull()
+    for (const node of [child, leaf]) {
+      expect(projector.getNameByNode(node)).toBeNull()
+      expect(projector.getResolverRecords(node)).toEqual([])
+      expect(projector.getPrimaryNameByEndpoint({ ...endpoint, value: node })).toBeNull()
+    }
+  })
+
+  it.each(['recreate', 'prune', 'reregister', 'release'])('cleans only indexed descendants and primary names on %s', (action) => {
+    const projector = createLifecycleEventProjector()
+    const root = 'root'
+    const child = 'child'
+    const leaf = 'leaf'
+    const sibling = 'sibling'
+    const expiry = '2040-06-17T00:00:00.000Z'
+    const createChild = () => projector.applySubname(subnameCreated(root, child, 'pay.acme.dusk', 'inherits_parent', expiry, 1000))
+    const createLeaf = () => projector.applySubname(subnameCreated(child, leaf, 'tip.pay.acme.dusk', 'inherits_parent', expiry, 1000))
+    const primary = (node: string, value: string, name: string | null = node) => projector.applyReverse({
+      type: 'primary_name_changed', node, endpoint: { type: 'moonlight_address', value },
+      controller: owner, name, previousName: null, updatedAt: expiry,
+    })
+    const getPrimary = (value: string) => projector.getPrimaryNameByEndpoint({ type: 'moonlight_address', value })
+    projector.apply(rootRegistered(root))
+    projector.apply(rootRegistered(sibling))
+    createChild()
+    createLeaf()
+    for (const node of [root, child, leaf, sibling]) primary(node, node)
+    primary(child, 'moved')
+    primary(sibling, 'moved')
+    primary(leaf, 'cleared')
+    // Clears identify the endpoint; their node need not be the previous node.
+    primary(sibling, 'cleared', null)
+    const work = measureMapWork(() => {
+      if (action === 'recreate') createChild()
+      else if (action === 'prune') projector.applySubname({ type: 'subname_pruned', parentNode: root,
+        node: child, name: 'pay.acme.dusk', actor: owner, prunedAt: expiry })
+      else if (action === 'reregister') projector.apply(rootRegistered(root))
+      else projector.apply({ type: 'name_released', node: root, label: 'acme', actor: owner,
+        previousOwner: owner, releasedAt: expiry })
+    })
+    expect(work.scanned).toBe(0)
+    expect(getPrimary('child')).toBeNull()
+    expect(getPrimary('leaf')).toBeNull()
+    expect(getPrimary('cleared')).toBeNull()
+    expect(getPrimary('moved')?.node).toBe(sibling)
+    expect(getPrimary('sibling')?.node).toBe(sibling)
+    expect(getPrimary('root')?.node ?? null).toBe(['recreate', 'prune'].includes(action) ? root : null)
+    expect(projector.getSubnamesByParent(child)).toEqual([])
+    expect(projector.getSubnamesByParent(root).map((subname) => subname.node)).toEqual(action === 'recreate' ? [child] : [])
+    if (action === 'release') projector.apply(rootRegistered(root))
+    createChild()
+    createLeaf()
+    primary(leaf, 'again')
+    projector.apply(rootRegistered(root))
+    expect(projector.getSubnamesByParent(root)).toEqual([])
+    expect(projector.getSubnamesByParent(child)).toEqual([])
+    expect(getPrimary('again')).toBeNull()
+    projector.apply(rootRegistered(sibling))
+    expect(getPrimary('moved')).toBeNull()
   })
 
   it('drops a lapsed name\'s subnames when the name is registered again', () => {
@@ -472,7 +573,6 @@ function subnameCreated(
     expiresAtBlockHeight,
     parentExpiresAtBlockHeight: 1_000,
     expiryPolicy,
-    revocationPolicy: 'parent_revocable' as const,
     createdAt: '2026-06-17T00:00:00.000Z',
   }
 }
@@ -500,4 +600,31 @@ function subnameAuthoritiesChanged(node: string, expiresAt: string, expiresAtBlo
     expiresAt,
     expiresAtBlockHeight,
   }
+}
+
+// Count map work instead of asserting a machine-dependent wall-clock threshold.
+function measureMapWork(action: () => void) {
+  const work = { scanned: 0, deleted: 0, lookups: 0 }
+  const values = Map.prototype.values
+  const entries = Map.prototype[Symbol.iterator]
+  const get = Map.prototype.get
+  const remove = Map.prototype.delete
+  const spies = [
+    vi.spyOn(Map.prototype, 'values').mockImplementation(function* (this: Map<unknown, unknown>) {
+      for (const value of values.call(this)) { work.scanned++; yield value }
+    }),
+    vi.spyOn(Map.prototype, Symbol.iterator).mockImplementation(function* (this: Map<unknown, unknown>) {
+      for (const entry of entries.call(this)) { work.scanned++; yield entry }
+    }),
+    vi.spyOn(Map.prototype, 'get').mockImplementation(function (this: Map<unknown, unknown>, key: unknown) {
+      work.lookups++
+      return get.call(this, key)
+    }),
+    vi.spyOn(Map.prototype, 'delete').mockImplementation(function (this: Map<unknown, unknown>, key: unknown) {
+      work.deleted++
+      return remove.call(this, key)
+    }),
+  ]
+  try { action() } finally { for (const spy of spies) spy.mockRestore() }
+  return work
 }
