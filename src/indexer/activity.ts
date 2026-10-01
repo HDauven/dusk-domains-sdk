@@ -32,7 +32,7 @@ export type ActivityEntry = {
   timestamp: string
   blockHeight: number | null
   txId?: string
-  target?: string
+  target?: string | null
 }
 
 export type CreateActivityEntryArgs = {
@@ -43,7 +43,7 @@ export type CreateActivityEntryArgs = {
   timestamp?: string
   blockHeight?: number | null
   txId?: string
-  target?: string
+  target?: string | null
 }
 
 export function createActivityEntry(args: CreateActivityEntryArgs): ActivityEntry {

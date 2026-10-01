@@ -1,3 +1,6 @@
+import { DEFAULT_FEE_CONFIG, LUX_PER_DUSK, getReservedNamePolicy } from './namePolicyData.mjs'
+export { DEFAULT_FEE_CONFIG, RESERVED_NAME_POLICIES, RESERVED_LABELS, getReservedNamePolicy } from './namePolicyData.mjs'
+
 export type NameStatus = 'available' | 'registered' | 'reserved' | 'invalid'
 
 export type SearchIssue = {
@@ -26,18 +29,6 @@ export type CoreFeeConfig = {
   premiumReferralRewardBps: number
   version: number
   updatedAt: number
-}
-
-const LUX_PER_DUSK = 1_000_000_000
-export const DEFAULT_FEE_CONFIG: CoreFeeConfig = {
-  threeCharYearLux: 150 * LUX_PER_DUSK,
-  fourCharYearLux: 50 * LUX_PER_DUSK,
-  fivePlusYearLux: 10 * LUX_PER_DUSK,
-  referralRewardBps: 2_000,
-  renewalReferralRewardBps: 1_000,
-  premiumReferralRewardBps: 0,
-  version: 1,
-  updatedAt: 0,
 }
 
 export type ReservedNameCategory =
@@ -88,28 +79,6 @@ export type NameValidationResult =
       labels: string[]
       issues: SearchIssue[]
     }
-
-export const RESERVED_NAME_POLICIES: readonly ReservedNamePolicy[] = [
-  reserved('dusk', 'protocol', 'Protocol root name reserved for Dusk-controlled infrastructure.'),
-  reserved('rusk', 'protocol', 'Protocol implementation name reserved to prevent impersonation.'),
-  reserved('wallet', 'ecosystem', 'Official wallet namespace reserved before public registration.'),
-  reserved('webwallet', 'ecosystem', 'Official web wallet namespace reserved before public registration.'),
-  reserved('bridge', 'ecosystem', 'Official bridge namespace reserved before public registration.'),
-  reserved('explorer', 'ecosystem', 'Official explorer namespace reserved before public registration.'),
-  reserved('docs', 'ecosystem', 'Official documentation namespace reserved before public registration.'),
-  reserved('staking', 'ecosystem', 'Staking namespace reserved for official ecosystem use.'),
-  reserved('faucet', 'ecosystem', 'Faucet namespace reserved for official ecosystem use.'),
-  reserved('grants', 'ecosystem', 'Grants namespace reserved for official ecosystem use.'),
-  reserved('citadel', 'ecosystem', 'Citadel namespace reserved for future official identity-related use.'),
-  reserved('foundation', 'partner', 'Foundation namespace reserved to prevent false affiliation.'),
-  reserved('npex', 'partner', 'Known partner/venue namespace reserved pending verification policy.'),
-  reserved('trade', 'partner', 'Market infrastructure namespace reserved pending verification policy.'),
-  reserved('exchange', 'exchange', 'Exchange-related namespace reserved to reduce user confusion.'),
-  reserved('support', 'support', 'Support namespace reserved to reduce phishing and fake helpdesk risk.'),
-  reserved('security', 'security', 'Security namespace reserved to reduce phishing and incident-response impersonation.'),
-] as const satisfies readonly ReservedNamePolicy[]
-
-export const RESERVED_LABELS: ReadonlySet<string> = new Set(RESERVED_NAME_POLICIES.map((policy) => policy.label))
 
 export const OFFICIAL_NAME_PROFILES: readonly OfficialNameProfile[] = [
   official('bridge', 'ecosystem', [
@@ -216,10 +185,6 @@ export function validateName(value: string): NameValidationResult {
   }
 }
 
-export function getReservedNamePolicy(label: string): ReservedNamePolicy | undefined {
-  return RESERVED_NAME_POLICIES.find((policy) => policy.label === label)
-}
-
 export function annualFeeLux(label: string, feeConfig: CoreFeeConfig = DEFAULT_FEE_CONFIG): number {
   if (label.length <= 2) return 0
   if (label.length === 3) return feeConfig.threeCharYearLux
@@ -275,10 +240,6 @@ export function analyzeName(query: string, feeConfig: CoreFeeConfig = DEFAULT_FE
 }
 
 export const searchName = analyzeName
-
-function reserved(label: string, category: ReservedNameCategory, reason: string): ReservedNamePolicy {
-  return { label, category, reason }
-}
 
 function official(
   label: OfficialNameProfile['label'],

@@ -15,6 +15,8 @@ export const feeConfigEventTypes: readonly string[]
 export const marketplaceEventTypes: readonly string[]
 export const poolEventTypes: readonly string[]
 export const duskDomainsIndexedEventTypes: readonly string[]
+export const duskDomainsContractEventTopics: Readonly<Record<'router' | 'core' | 'treasury' | 'marketplace', readonly string[]>>
+export const duskDomainsRetiredContractEventTopics: Readonly<Record<'router' | 'core' | 'treasury' | 'marketplace', readonly string[]>>
 
 export function isDuskDomainsIndexedEventType(value: string): boolean
 export function isControllerEventType(value: string): boolean

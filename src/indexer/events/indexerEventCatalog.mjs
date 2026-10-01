@@ -94,6 +94,36 @@ export const duskDomainsIndexedEventTypes = [
     ...marketplaceEventTypes,
     ...poolEventTypes,
 ];
+/** Data-driver topics emitted by each deployed contract, excluding legacy synthetic lifecycle events. */
+export const duskDomainsContractEventTopics = Object.freeze({
+    router: Object.freeze([
+        ...poolEventTypes.filter((type) => type !== 'records_moved'),
+        ...lifecycleEventTypes.filter((type) => type === 'reserved_name_issued'),
+        ...feeConfigEventTypes,
+    ]),
+    core: Object.freeze([
+        ...controllerEventTypes,
+        ...lifecycleEventTypes.filter((type) => type === 'name_registered' || type === 'name_renewed' || type === 'name_owner_changed'),
+        ...resolverEventTypes,
+        ...reverseEventTypes,
+        ...subnameEventTypes,
+        ...poolEventTypes.filter((type) => type === 'records_moved'),
+    ]),
+    treasury: Object.freeze([...treasuryEventTypes, ...referralEventTypes]),
+    marketplace: marketplaceEventTypes,
+});
+/** Historical topics collectors may skip, scoped to the contract that stopped emitting them. */
+export const duskDomainsRetiredContractEventTopics = Object.freeze({
+    router: Object.freeze([]),
+    core: Object.freeze([
+        'core_referral_config_changed',
+        'fee_config_updated', // Fee configuration moved to the router with contract pools.
+        'subname_delegated',
+        'subname_revoked',
+    ]),
+    treasury: Object.freeze([]),
+    marketplace: Object.freeze([]),
+});
 // Keep the TypeScript and plain-Node catalogs equally immutable.
 for (const eventTypes of [
     controllerEventTypes,

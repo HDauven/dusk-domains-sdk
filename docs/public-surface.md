@@ -49,6 +49,35 @@ import {
 
 Use this entrypoint when plain Node must route decoded Dusk Domains events without compiling TypeScript source. Keep the catalog additive unless a contract redeploy intentionally changes the event schema.
 
+## Projection Entry Point
+
+`@duskdomains/sdk/projection` is a plain JavaScript entrypoint with TypeScript types:
+
+```js
+import {
+  createProjectionState,
+  applyProjectionEvent,
+  createLifecycleEventProjector,
+  normalizeObservedEvent,
+  RESERVED_NAME_POLICIES,
+} from '@duskdomains/sdk/projection'
+```
+
+`normalizeObservedEvent` converts data-driver decoded payloads into camelCase event
+envelopes. `createProjectionState` and `applyProjectionEvent` maintain the maps used
+by persistent indexers, including record history and derived-state indexes.
+Callers provide event ordering, deduplication, journal identity (`meta.eventId`) and
+observation time (`meta.observedAt`). Activity uses that time or a timestamp in the
+event, and leaves it empty when neither is known; replay time is never substituted.
+Transport, storage and HTTP routing stay with
+the caller. `createLifecycleEventProjector` provides the existing SDK getter API
+on the same state engine. Its subname getters use wall-clock expiry; a server may
+derive a read view at a confirmed chain height from the mutable projection state.
+
+Reserved labels and reasons derive from `RESERVED_NAME_POLICIES`.
+`duskDomainsContractEventTopics` from `@duskdomains/sdk/event-catalog` supplies the
+collector's router, core, treasury and marketplace topic lists.
+
 ## Internal Entry Point
 
 The internal entrypoint is for first-party Dusk Domains app read models, indexer operators and deployment scripts that need lower-level helpers before they are promoted to a stable public API.

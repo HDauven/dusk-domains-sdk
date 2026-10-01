@@ -305,13 +305,13 @@ Third-party indexer operators should keep the decode, projection, and serving bo
 
 ```text
 raw DuskDS/W3sper data-driver event
-  -> scripts/indexer-operator/event-decoder.mjs
+  -> @duskdomains/sdk/projection: normalizeObservedEvent
   -> normalized JSON event envelope
   -> shared SDK/operator projector semantics
   -> server persistence, HTTP routes, health, and checkpoints
 ```
 
-`scripts/indexer-operator/event-decoder.mjs` is the beta reference decoder for W3sper/data-driver decoded contract event payloads. It emits stable camelCase JSON envelopes. Public packages should expose this boundary rather than forcing operators to copy logic out of `scripts/local-event-collector.mjs`.
+`normalizeObservedEvent` from `@duskdomains/sdk/projection` normalizes W3sper/data-driver decoded contract payloads into stable camelCase JSON envelopes. The indexer collector and SDK share this implementation.
 
 Third-party indexer operators can use the public projector kit once they have normalized DuskDS contract events with the matching data-driver:
 
