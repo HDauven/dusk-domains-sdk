@@ -1,3 +1,4 @@
+import { hasClaimableReferrerShape } from '../core/principal'
 import type {
   CoreClearPrimaryNameRuntimeArgs,
   CoreClearRecordSenderRuntimeArgs,
@@ -92,7 +93,7 @@ export function coreCompleteRegistrationRuntimeCall(
     contract: 'core',
     functionName: 'complete_registration_runtime',
     kind: 'write',
-    args,
+    args: { ...args, referrer: hasClaimableReferrerShape(args.referrer) ? args.referrer : null },
   }
 }
 

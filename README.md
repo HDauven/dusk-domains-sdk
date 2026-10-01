@@ -126,3 +126,30 @@ raw GitHub archive installs; the public `.d.mts` declarations remain unchanged.
 ## License
 
 MIT
+
+## Referrers
+
+Two exported predicates serve different boundaries:
+
+- `hasClaimableReferrerShape(principal): boolean` is the cheap, synchronous check
+  used by registration call builders and wire encoding. It mirrors the contract:
+  a nonzero 32-byte contract ID, or exactly 96 Moonlight bytes with compression
+  set, infinity clear and both coordinates below the BLS12-381 modulus. Phoenix,
+  raw 193-byte keys and malformed encodings are dropped without changing the fee.
+  This check accepts structurally valid off-curve and out-of-subgroup points.
+- `isClaimableReferrer(principal): Promise<boolean>` belongs at referral input,
+  before making attribution active. It also validates the Moonlight curve,
+  subgroup and non-identity point. Noble loads lazily only for structurally valid
+  Moonlight referrals; empty referrals, contracts and Phoenix skip the import.
+
+Call builders, `toDuskDomainWireArgs` and `encodeDuskDomainCall` remain synchronous:
+
+```ts
+const referrer = await isClaimableReferrer(inputPrincipal) ? inputPrincipal : null
+const call = coreCompleteRegistrationRuntimeCall({ ...registrationArgs, referrer })
+const encoded = encodeDuskDomainCall(driver, call)
+```
+
+A BLS module-load failure rejects full input validation. It does not affect
+building or encoding calls. The frontend keeps attribution inactive until full
+validation succeeds. General principal parsing still supports other principal uses.

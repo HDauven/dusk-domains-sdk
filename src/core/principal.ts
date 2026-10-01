@@ -4,6 +4,12 @@ import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 const PUBLIC_SENDER_KEY_BYTES = 96
 const BLS_PUBLIC_KEY_BYTES = 193
+// Big-endian BLS12-381 modulus, matching dusk-domains-types/src/principals.rs.
+const BLS_BASE_FIELD_MODULUS = [
+  0x1a, 0x01, 0x11, 0xea, 0x39, 0x7f, 0xe6, 0x9a, 0x4b, 0x1b, 0xa7, 0xb6, 0x43, 0x4b, 0xac, 0xd7,
+  0x64, 0x77, 0x4b, 0x84, 0xf3, 0x85, 0x12, 0xbf, 0x67, 0x30, 0xd2, 0xa0, 0xf6, 0xb0, 0xf6, 0x24,
+  0x1e, 0xab, 0xff, 0xfe, 0xb1, 0x53, 0xff, 0xff, 0xb9, 0xfe, 0xff, 0xff, 0xff, 0xff, 0xaa, 0xab,
+]
 const RUNTIME_AUTHORITY_DOMAIN = utf8ToBytes('dusk-domains:runtime-authority:v1')
 
 export type DuskPrincipalKind = 'Moonlight' | 'Phoenix' | 'Contract'
@@ -11,6 +17,42 @@ export type DuskPrincipalKind = 'Moonlight' | 'Phoenix' | 'Contract'
 export type DuskPrincipal = {
   kind: DuskPrincipalKind
   bytes: number[]
+}
+
+/** Cheap contract-equivalent encoding check; does not validate the curve or subgroup. */
+export function hasClaimableReferrerShape(principal: DuskPrincipal | null | undefined): boolean {
+  if (!principal) return false
+  for (const byte of principal.bytes) {
+    if (!Number.isInteger(byte) || byte < 0 || byte > 255) return false
+  }
+  if (principal.kind === 'Contract') {
+    return principal.bytes.length === 32 && principal.bytes.some((byte) => byte !== 0)
+  }
+  if (principal.kind !== 'Moonlight' || principal.bytes.length !== PUBLIC_SENDER_KEY_BYTES) return false
+  if ((principal.bytes[0] & 0xc0) !== 0x80) return false
+  return coordinateBelowModulus(principal.bytes, 0) && coordinateBelowModulus(principal.bytes, 48)
+}
+
+function coordinateBelowModulus(bytes: number[], offset: number): boolean {
+  for (let index = 0; index < BLS_BASE_FIELD_MODULUS.length; index += 1) {
+    const byte = offset === 0 && index === 0 ? bytes[0] & 0x1f : bytes[offset + index]
+    if (byte !== BLS_BASE_FIELD_MODULUS[index]) return byte < BLS_BASE_FIELD_MODULUS[index]
+  }
+  return false
+}
+
+/** Fully validates runtime callers, loading BLS only for Moonlight referrals. */
+export async function isClaimableReferrer(principal: DuskPrincipal | null | undefined): Promise<boolean> {
+  if (!principal || !hasClaimableReferrerShape(principal)) return false
+  if (principal.kind === 'Contract') return true
+  const { bls12_381 } = await import('@noble/curves/bls12-381.js')
+  try {
+    const point = bls12_381.G2.Point.fromBytes(Uint8Array.from(principal.bytes))
+    point.assertValidity()
+    return !point.is0() && point.toBytes().every((byte, index) => byte === principal.bytes[index])
+  } catch {
+    return false
+  }
 }
 
 export type ContractPrincipalResult =
