@@ -325,3 +325,11 @@ export type MarketplaceClaimRefundRuntimeArgs = Record<string, never>
 export type MarketplaceReadRefundArgs = {
   authority: string
 }
+
+/** Operator-only pause switches; repeated values are authorized no-ops. */
+export type RouterSetRegistrationsPausedRuntimeArgs = { paused: boolean }
+export type MarketplaceSetTradingPausedRuntimeArgs = { paused: boolean }
+
+/** Pause fields returned by the router config and marketplace read_config entrypoints. */
+export type RouterPauseResponse = { registrations_paused: boolean }
+export type MarketplacePauseResponse = { config: { trading_paused: boolean } }

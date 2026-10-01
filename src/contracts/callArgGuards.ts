@@ -407,3 +407,7 @@ export function isRouterAddPoolMemberArgs(value: unknown): value is RouterAddPoo
 export function isRouterProposeOperatorRuntimeArgs(value: unknown): value is RouterProposeOperatorRuntimeArgs {
   return isRecord(value) && isDuskPrincipal(value.operator)
 }
+
+export function isPauseRuntimeArgs(value: unknown): value is { paused: boolean } {
+  return isRecord(value) && typeof value.paused === 'boolean'
+}

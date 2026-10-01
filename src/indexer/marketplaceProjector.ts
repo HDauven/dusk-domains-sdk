@@ -27,6 +27,7 @@ export function createMarketplaceProjector(options: MarketplaceProjectorOptions)
     assertSafeNumericTree(meta, 'marketplace event metadata')
     if (event.type === 'marketplace_initialized') {
       config = {
+        tradingPaused: false,
         initialized: true,
         router: event.router,
         treasuryContract: event.treasuryContract,
@@ -47,6 +48,17 @@ export function createMarketplaceProjector(options: MarketplaceProjectorOptions)
         operator: event.type === 'marketplace_operator_changed' ? event.operator : config.operator,
         pendingOperator: event.type === 'marketplace_operator_proposed' ? event.pendingOperator : null,
         updatedAtBlockHeight: meta.blockHeight ?? null,
+        txId: meta.txId ?? null,
+        blockHeight: meta.blockHeight ?? null,
+      }
+      return { ...config }
+    }
+
+    if (event.type === 'trading_paused_changed') {
+      config = {
+        ...config,
+        tradingPaused: event.paused,
+        updatedAtBlockHeight: event.updatedAtBlockHeight,
         txId: meta.txId ?? null,
         blockHeight: meta.blockHeight ?? null,
       }
@@ -254,6 +266,7 @@ export function marketplaceOfferKey(node: string, buyerAuthority: string) {
 
 function emptyMarketplaceConfig(): IndexedMarketplaceConfig {
   return {
+    tradingPaused: false,
     initialized: false,
     router: null,
     treasuryContract: null,
@@ -314,13 +327,13 @@ function numericField(key: string) {
   return /(?:Lux|Bps|At|Block|Blocks|Height|Count|Seconds|Years)$/u.test(key)
 }
 
-function marketplaceActor(event: Exclude<MarketplaceEvent, { type: 'marketplace_initialized' | 'marketplace_config_updated' | 'marketplace_refund_claimed' | 'marketplace_operator_proposed' | 'marketplace_operator_cancelled' | 'marketplace_operator_changed' }>) {
+function marketplaceActor(event: Exclude<MarketplaceEvent, { type: 'trading_paused_changed' | 'marketplace_initialized' | 'marketplace_config_updated' | 'marketplace_refund_claimed' | 'marketplace_operator_proposed' | 'marketplace_operator_cancelled' | 'marketplace_operator_changed' }>) {
   if (event.type === 'domain_bid_placed') return event.bidderAuthority
   if (event.type === 'domain_offer_placed' || event.type === 'domain_offer_closed') return event.buyerAuthority
   return event.sellerAuthority
 }
 
-function marketplaceTarget(event: Exclude<MarketplaceEvent, { type: 'marketplace_initialized' | 'marketplace_config_updated' | 'marketplace_refund_claimed' | 'marketplace_operator_proposed' | 'marketplace_operator_cancelled' | 'marketplace_operator_changed' }>) {
+function marketplaceTarget(event: Exclude<MarketplaceEvent, { type: 'trading_paused_changed' | 'marketplace_initialized' | 'marketplace_config_updated' | 'marketplace_refund_claimed' | 'marketplace_operator_proposed' | 'marketplace_operator_cancelled' | 'marketplace_operator_changed' }>) {
   if (event.type === 'domain_fixed_sale_opened') return `${event.priceLux}`
   if (event.type === 'domain_fixed_sale_filled') return `${event.grossAmountLux}`
   if (event.type === 'domain_auction_created') return `${event.reservePriceLux}`

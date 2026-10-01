@@ -175,6 +175,7 @@ export type IndexedSubname = {
 }
 
 export type IndexedMarketplaceConfig = {
+  tradingPaused: boolean
   pendingOperator: string | null
   initialized: boolean
   router: string | null
@@ -253,6 +254,7 @@ export type IndexedMarketplaceRefund = {
 
 /** The contract pool as the router's events describe it. Members are in the order they joined. */
 export type IndexedPoolState = {
+  registrationsPaused: boolean
   pendingOperator: DuskPrincipal | null
   initialized: boolean
   router: string | null

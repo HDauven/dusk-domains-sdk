@@ -190,6 +190,7 @@ export function releaseManifest() {
           propose_operator_runtime: 'propose_operator_runtime(ProposeRouterOperatorRuntime)',
           accept_operator_runtime: 'accept_operator_runtime',
           cancel_operator_runtime: 'cancel_operator_runtime',
+          set_registrations_paused_runtime: 'set_registrations_paused_runtime(SetRegistrationsPausedRuntime)',
           set_fee_config_runtime: 'set_fee_config_runtime(SetFeeConfigRuntime)',
           issue_reserved_name_runtime: 'issue_reserved_name_runtime(IssueReservedNameRuntime)',
           set_referral_config_runtime: 'set_referral_config_runtime(SetReferralConfigRuntime)',

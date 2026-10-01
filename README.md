@@ -169,3 +169,16 @@ bare arrays over 200 items remain accepted; complete-set caps still apply. `getA
 and `getAllSubnames(parentNode, maxItems)` traverse scoped collections, throw on
 incomplete/cyclic responses, and enforce a 10,000-item hard cap. See
 [the API contract](docs/indexer-api.md) for every route and deployment settings.
+
+## Operator pauses
+
+Operator pauses use `routerSetRegistrationsPausedRuntimeCall({ paused })` and
+`marketplaceSetTradingPausedRuntimeCall({ paused })`. Router `config` exposes
+`registrations_paused` (`RouterPauseResponse`); marketplace `read_config` exposes
+`config.trading_paused` (`MarketplacePauseResponse`). The event catalog includes
+`registrations_paused_changed` and `trading_paused_changed`, with the operator,
+new value and block height. Indexed pool/marketplace reads expose
+`registrationsPaused` / `tradingPaused`, and health optionally includes
+`pause: { registrationsPaused, tradingPaused }` for compatible older indexers.
+Repeated setter values are authorized no-ops. Pauses do not block claims, refunds,
+ended-auction settlement, custody cleanup or ordinary name management.

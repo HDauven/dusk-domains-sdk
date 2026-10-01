@@ -1,4 +1,5 @@
 import {
+  isPauseRuntimeArgs,
   isMarketplaceAuctionNodeArgs,
   isMarketplaceBuyFixedSaleRuntimeArgs,
   isMarketplaceClaimRefundRuntimeArgs,
@@ -16,6 +17,13 @@ export function decodedMarketplaceDuskDomainContext(
   call: DuskDomainCallMetadata,
 ): DuskDomainDecodedContext | null {
   if (call.contract !== 'marketplace') return null
+  if (call.functionName === 'set_trading_paused_runtime' && isPauseRuntimeArgs(call.args)) {
+    return {
+      title: call.args.paused ? 'Pause marketplace trading' : 'Resume marketplace trading',
+      description: 'Claims, refunds, settlement and custody release remain available.',
+      fields: [{ label: 'Paused', value: String(call.args.paused) }],
+    }
+  }
 
   if (call.functionName === 'init' && isMarketplaceInitArgs(call.args)) {
     return {

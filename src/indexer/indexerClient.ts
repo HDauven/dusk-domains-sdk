@@ -90,6 +90,7 @@ export type DuskDomainsIndexerClient = DuskDomainsReadTransport & {
 }
 
 export type DuskDomainsIndexerHealth = {
+  pause?: { registrationsPaused: boolean; tradingPaused: boolean }
   ok: boolean
   nextCursor?: string | null
   apiVersion?: string
