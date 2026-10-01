@@ -46,9 +46,12 @@ Retired revocation/delegation topics are not current subname operations.
 ## Projection semantics
 
 - Commitments are keyed by `(controller, commitment)` and reveal no label/node
-  until `registration_revealed`. Physical commitment pruning emits no event.
+  until `registration_revealed`. Physical commitment pruning and automatic same-controller expiry cleanup on commit
+  emit no event. Commitment projections retain history; use age and the registry
+  read to determine usability.
 - `name_registered` resets stale name state; the following ownership/record events
-  establish the new registration. `name_renewed` extends inheriting subname chains;
+  establish the new registration. `name_renewed.actor` is the payer and never changes ownership or manager rights.
+  Renewal extends inheriting subname chains;
   fixed-expiry branches retain their dates. No separate renewal event is emitted
   for each subname.
 - `subname_created` also means recreation: clear old records, primary mapping and

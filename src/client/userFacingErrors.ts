@@ -7,6 +7,8 @@ export function userFacingErrorMessage(error: unknown, fallback: string = defaul
 export function userFacingMessageFromText(message: string | undefined, fallback: string = defaultErrorMessage): string {
   const trimmed = String(message ?? '').trim()
   if (!trimmed) return ''
+  if (/close the marketplace listing before renewing/i.test(trimmed)) return 'Close the marketplace listing before renewing this name.'
+  if (isPendingCommitmentLimitMessage(trimmed)) return 'This wallet has 16 pending reservations. Open My names to finish a reservation, or wait for one to expire before reserving another.'
   if (isReadOnlyWalletMessage(trimmed)) return 'This wallet can preview domains but cannot submit transactions.'
   if (isInsufficientBalanceMessage(trimmed)) return 'This wallet does not have enough DUSK to complete the transaction.'
   if (isWalletLockedMessage(trimmed)) return 'Connect or unlock your wallet to continue.'
@@ -43,4 +45,8 @@ export function isRejectedWalletMessage(message: string | undefined): boolean {
 
 function isNameDataUnavailableMessage(message: string): boolean {
   return /indexer|failed to fetch|networkerror|connection refused|econnrefused|http 5\d\d|http 404/i.test(message)
+}
+
+export function isPendingCommitmentLimitMessage(message: string | undefined): boolean {
+  return /pending commitment limit reached/i.test(String(message ?? ''))
 }

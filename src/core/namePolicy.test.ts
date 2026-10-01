@@ -88,3 +88,12 @@ describe('Dusk Domains official ecosystem policy', () => {
     })).toBe(175_000_000_000)
   })
 })
+
+it('reserves only root names, including beneath operator-issued parents', () => {
+  for (const label of ['docs', 'wallet', 'support']) {
+    expect(analyzeName(`${label}.dusk`).status).toBe('reserved')
+    for (const parent of ['alice', 'docs', 'wallet']) {
+      expect(analyzeName(`${label}.${parent}.dusk`)).toMatchObject({ status: 'available', transactionBlocked: true, reserved: undefined })
+    }
+  }
+})

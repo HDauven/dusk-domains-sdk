@@ -63,7 +63,7 @@ export function decodedCoreDuskDomainContext(call: DuskDomainCallMetadata): Dusk
   if (call.functionName === 'renew_runtime' && isCoreRenewRuntimeArgs(call.args)) {
     return {
       title: 'Renew .dusk domain',
-      description: 'Extend the registration of an existing .dusk domain from its current expiry.',
+      description: 'Pay to extend this root name from its current expiry. Anyone can renew; ownership and records stay unchanged.',
       fields: [
         { label: 'Domain reference', value: call.args.node },
         { label: 'Duration', value: formatYears(call.args.durationYears) },

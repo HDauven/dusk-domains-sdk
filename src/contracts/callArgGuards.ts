@@ -99,6 +99,7 @@ export function isCoreCompleteRegistrationRuntimeArgs(
   )
 }
 
+// Renewal authenticates the payer at runtime; owner/manager credentials are not arguments.
 export function isCoreRenewRuntimeArgs(value: unknown): value is CoreRenewRuntimeArgs {
   return (
     isRecord(value) &&

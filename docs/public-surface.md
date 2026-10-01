@@ -29,6 +29,20 @@ Write builders produce call metadata; the configured wallet/transport signs and
 submits it. Paid builders derive exact deposits and reject Lux values above
 `Number.MAX_SAFE_INTEGER`. Canonical marketplace reads retain `u64` as `bigint`.
 
+`coreRenewRuntimeCall({ node, durationYears, feeLux })` accepts any direct Moonlight
+payer; no owner or manager credential is required. It extends a root before grace
+ends, including during grace and for contract-owned names. It preserves ownership,
+records and primary names, and extends inheriting subnames. Subnames cannot renew
+independently. The event actor is the payer, and the stored referrer retains the
+usual renewal share. Names owned or managed by the pool marketplace must leave escrow
+before renewal; `userFacingErrorMessage` explains that the listing must close first.
+
+Each registry permits 16 pending reservations per controller. A commit removes
+that controller's expired commitments first; the reveal window includes age 8,640
+blocks. `userFacingErrorMessage` explains the cap and points users to My names.
+Reserved labels apply only to root names; subname preflight permits reserved words
+under ordinary, transferred and operator-issued parents.
+
 The call surface includes `corePruneSubnameRuntimeCall({ node })` for expired
 subtrees, `routerIssueReservedNameRuntimeCall({ node, label, owner, manager,
 durationYears })` for router-operator issuance, and the two pause setters

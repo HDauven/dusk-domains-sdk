@@ -78,3 +78,12 @@ describe('Dusk Domains subname policy', () => {
     expect(subnameExpiryDescription('fixed_before_parent')).toBe('Fixed and capped by parent expiry')
   })
 })
+
+it('allows reserved labels beneath ordinary and operator-issued names', () => {
+  for (const parentName of ['alice.dusk', 'wallet.dusk']) {
+    for (const label of ['docs', 'wallet', 'support']) {
+      expect(createSubnameState({ parentName, label, owner: 'current-owner', manager: 'manager', resolver: 'resolver', parentExpiresAt: 1000 }))
+        .toMatchObject({ name: `${label}.${parentName}`, owner: 'current-owner' })
+    }
+  }
+})
