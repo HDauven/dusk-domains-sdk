@@ -5,6 +5,7 @@ export function emptyPoolState(): IndexedPoolState {
     initialized: false,
     router: null,
     operator: null,
+    pendingOperator: null,
     treasury: null,
     marketplace: null,
     registries: [],
@@ -33,6 +34,7 @@ export function reducePoolState(
       initialized: true,
       router: meta.contractId ?? current.router,
       operator: event.operator,
+      pendingOperator: null,
       treasury: event.treasury,
       marketplace: isZeroContract(event.marketplace) ? null : event.marketplace,
     }
@@ -47,7 +49,13 @@ export function reducePoolState(
       [list]: [...current[list], event.member],
     }
   }
-  return { ...current, ...stamped, operator: event.operator }
+  if (event.type === 'router_operator_proposed') {
+    return { ...current, ...stamped, pendingOperator: event.pendingOperator }
+  }
+  if (event.type === 'router_operator_cancelled') {
+    return { ...current, ...stamped, pendingOperator: null }
+  }
+  return { ...current, ...stamped, operator: event.operator, pendingOperator: null }
 }
 
 function isZeroContract(value: string) {

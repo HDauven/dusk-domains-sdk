@@ -16,7 +16,7 @@ import type {
   PoolNodeArgs,
   RouterAddPoolMemberArgs,
   RouterInitArgs,
-  RouterSetOperatorRuntimeArgs,
+  RouterProposeOperatorRuntimeArgs,
   CoreSetRecordSenderRuntimeArgs,
   RouterSetReferralConfigRuntimeArgs,
   CoreUpdateAuthoritiesRuntimeArgs,
@@ -29,12 +29,12 @@ import type {
   MarketplacePlaceBidRuntimeArgs,
   MarketplaceReadRefundArgs,
   MarketplaceSetFeeRuntimeArgs,
-  MarketplaceUpdateOperatorRuntimeArgs,
+  MarketplaceProposeOperatorRuntimeArgs,
   TreasuryClaimAllReferralRewardsRuntimeArgs,
   TreasuryClaimReferralRewardRuntimeArgs,
   TreasuryClaimRuntimeArgs,
   TreasuryInitArgs,
-  TreasuryUpdateOperatorRuntimeArgs,
+  TreasuryProposeOperatorRuntimeArgs,
 } from './callTypes'
 import type { DuskPrincipal } from '../core/principal'
 
@@ -236,7 +236,7 @@ export function isCoreAcceptMarketplaceOfferRuntimeArgs(
   )
 }
 
-export function isTreasuryUpdateOperatorRuntimeArgs(value: unknown): value is TreasuryUpdateOperatorRuntimeArgs {
+export function isTreasuryProposeOperatorRuntimeArgs(value: unknown): value is TreasuryProposeOperatorRuntimeArgs {
   return (
     isRecord(value) &&
     isDuskPrincipal(value.operator) &&
@@ -285,9 +285,9 @@ export function isMarketplaceSetFeeRuntimeArgs(value: unknown): value is Marketp
   return isRecord(value) && isNonNegativeSafeInteger(value.feeBps)
 }
 
-export function isMarketplaceUpdateOperatorRuntimeArgs(
+export function isMarketplaceProposeOperatorRuntimeArgs(
   value: unknown,
-): value is MarketplaceUpdateOperatorRuntimeArgs {
+): value is MarketplaceProposeOperatorRuntimeArgs {
   return isRecord(value) && typeof value.operator === 'string'
 }
 
@@ -398,6 +398,6 @@ export function isRouterAddPoolMemberArgs(value: unknown): value is RouterAddPoo
   return isRecord(value) && typeof value.member === 'string'
 }
 
-export function isRouterSetOperatorRuntimeArgs(value: unknown): value is RouterSetOperatorRuntimeArgs {
+export function isRouterProposeOperatorRuntimeArgs(value: unknown): value is RouterProposeOperatorRuntimeArgs {
   return isRecord(value) && isDuskPrincipal(value.operator)
 }

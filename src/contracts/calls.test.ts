@@ -52,7 +52,9 @@ import {
   marketplaceReadRefundCall,
   marketplaceSetFeeRuntimeCall,
   marketplaceSettleAuctionRuntimeCall,
-  marketplaceUpdateOperatorRuntimeCall,
+  marketplaceProposeOperatorRuntimeCall,
+  marketplaceAcceptOperatorRuntimeCall,
+  marketplaceCancelOperatorRuntimeCall,
   prepareDuskDomainContractCall,
   routerActiveRegistryCall,
   routerActiveResolverCall,
@@ -64,7 +66,9 @@ import {
   routerLocateNameCall,
   routerLocatePrimaryCall,
   routerSetFeeConfigRuntimeCall,
-  routerSetOperatorRuntimeCall,
+  routerProposeOperatorRuntimeCall,
+  routerAcceptOperatorRuntimeCall,
+  routerCancelOperatorRuntimeCall,
   routerSetReferralConfigRuntimeCall,
   toDuskDomainWireArgs,
   treasuryClaimAllReferralRewardsRuntimeCall,
@@ -73,7 +77,9 @@ import {
   treasuryClaimRuntimeCall,
   treasuryInitCall,
   treasuryReadStateCall,
-  treasuryUpdateOperatorRuntimeCall,
+  treasuryProposeOperatorRuntimeCall,
+  treasuryAcceptOperatorRuntimeCall,
+  treasuryCancelOperatorRuntimeCall,
   type DuskConnectAppLike,
   type DuskDataDriverLike,
   type DuskDomainCallMetadata,
@@ -144,6 +150,12 @@ function registrationCall() {
 
 function schemaCalls(): DuskDomainCallMetadata[] {
   return [
+    routerAcceptOperatorRuntimeCall(),
+    routerCancelOperatorRuntimeCall(),
+    treasuryAcceptOperatorRuntimeCall(),
+    treasuryCancelOperatorRuntimeCall(),
+    marketplaceAcceptOperatorRuntimeCall(),
+    marketplaceCancelOperatorRuntimeCall(),
     routerInitCall({
       operator: operatorPrincipal(),
       treasury: treasuryContract,
@@ -152,7 +164,7 @@ function schemaCalls(): DuskDomainCallMetadata[] {
     }),
     routerAddRegistryRuntimeCall({ member: coreContract }),
     routerAddResolverRuntimeCall({ member: `0x${'47'.repeat(32)}` }),
-    routerSetOperatorRuntimeCall({ operator: operatorPrincipal() }),
+    routerProposeOperatorRuntimeCall({ operator: operatorPrincipal() }),
     routerConfigCall(),
     routerFeeConfigCall(),
     routerActiveRegistryCall(),
@@ -262,7 +274,7 @@ function schemaCalls(): DuskDomainCallMetadata[] {
       allowedFeeSources: [marketplaceContract],
       router: routerContract,
     }),
-    treasuryUpdateOperatorRuntimeCall({
+    treasuryProposeOperatorRuntimeCall({
       operator: operatorPrincipal(),
       operatorRecipient: recipient,
     }),
@@ -279,7 +291,7 @@ function schemaCalls(): DuskDomainCallMetadata[] {
       feeBps: 250,
     }),
     marketplaceSetFeeRuntimeCall({ feeBps: 300 }),
-    marketplaceUpdateOperatorRuntimeCall({ operator: owner }),
+    marketplaceProposeOperatorRuntimeCall({ operator: owner }),
     marketplaceBuyFixedSaleRuntimeCall({ node, priceLux: 25_000_000_000, buyerManager: owner }),
     marketplaceCancelFixedSaleRuntimeCall({ node }),
     marketplaceExpireFixedSaleRuntimeCall({ node }),
@@ -540,11 +552,11 @@ describe('Dusk Domains contract call helpers', () => {
     )).toMatchObject({
       title: 'Claim all collected fees',
     })
-    expect(decodedDuskDomainContext(treasuryUpdateOperatorRuntimeCall({
+    expect(decodedDuskDomainContext(treasuryProposeOperatorRuntimeCall({
       operator: operatorPrincipal(),
       operatorRecipient: recipient,
     }))).toMatchObject({
-      title: 'Update treasury operator',
+      title: 'Propose treasury operator',
       fields: expect.arrayContaining([
         { label: 'Operator', value: recipient },
         { label: 'Claim recipient', value: recipient },
@@ -591,6 +603,39 @@ describe('Dusk Domains contract call helpers', () => {
     })
   })
 
+  it('encodes proposals and caller-bound acceptance and cancellation for every operator', () => {
+    for (const call of [
+      routerProposeOperatorRuntimeCall({ operator: operatorPrincipal() }),
+      treasuryProposeOperatorRuntimeCall({ operator: operatorPrincipal(), operatorRecipient: recipient }),
+      marketplaceProposeOperatorRuntimeCall({ operator: owner }),
+    ]) {
+      expect(call.functionName).toBe('propose_operator_runtime')
+      expect(isRuntimeBoundDuskDomainWrite(call)).toBe(true)
+      expect(toDuskDomainWireArgs(call)).toEqual({
+        operator: call.contract === 'marketplace' ? Array(32).fill(0x09) : operatorPrincipal(),
+        ...(call.contract === 'treasury' ? { operator_recipient: endpointBytes } : {}),
+      })
+      expect(decodedDuskDomainContext(call)?.description).toMatch(/accept/)
+    }
+    for (const call of [
+      routerAcceptOperatorRuntimeCall(), routerCancelOperatorRuntimeCall(),
+      treasuryAcceptOperatorRuntimeCall(), treasuryCancelOperatorRuntimeCall(),
+      marketplaceAcceptOperatorRuntimeCall(), marketplaceCancelOperatorRuntimeCall(),
+    ]) {
+      expect(isRuntimeBoundDuskDomainWrite(call)).toBe(true)
+      expect(toDuskDomainWireArgs(call)).toBeUndefined()
+      expect(JSON.parse(new TextDecoder().decode(encodeDuskDomainCall(fakeDriver(), call)))).toEqual({
+        fnName: call.functionName, json: null,
+      })
+      expect(decodedDuskDomainContext(call)?.title).toMatch(/^(Accept|Cancel)/)
+      expect(() => toDuskDomainWireArgs({ ...call, args: { actor: owner } })).toThrow('Invalid Dusk Domains')
+    }
+    for (const contract of ['router', 'treasury', 'marketplace'] as const) {
+      expect(DUSK_DOMAINS_CONTRACTS[contract].methodSigs).not.toHaveProperty('set_operator_runtime')
+      expect(DUSK_DOMAINS_CONTRACTS[contract].methodSigs).not.toHaveProperty('update_operator_runtime')
+    }
+  })
+
   it('covers every configured method with a fixture', () => {
     const expectedMethods = Object.entries(DUSK_DOMAINS_CONTRACTS)
       .flatMap(([contract, preset]) => Object.keys(preset.methodSigs).map((functionName) => `${contract}.${functionName}`))
@@ -620,10 +665,10 @@ describe('Dusk Domains contract call helpers', () => {
     const drivers = Object.fromEntries(await Promise.all(Object.entries(driverFiles).map(async ([key, file]) => {
       const driver = await dataDrivers.load(await readFile(resolve(publicContractsDir, file)))
       driver.init?.()
-      return [key, driver as DuskDataDriverLike & { getSchema?: () => { functions?: Array<{ name: string }> } }]
-    }))) as Record<keyof typeof driverFiles, DuskDataDriverLike & { getSchema?: () => { functions?: Array<{ name: string }> } }>
+      return [key, driver as DuskDataDriverLike & { getSchema?: () => { functions?: Array<{ name: string }>; events?: Array<{ topics: string[] }> } }]
+    }))) as Record<keyof typeof driverFiles, DuskDataDriverLike & { getSchema?: () => { functions?: Array<{ name: string }>; events?: Array<{ topics: string[] }> } }>
 
-    for (const [contract, driver] of Object.entries(drivers) as Array<[keyof typeof driverFiles, DuskDataDriverLike & { getSchema?: () => { functions?: Array<{ name: string }> } }]>) {
+    for (const [contract, driver] of Object.entries(drivers) as Array<[keyof typeof driverFiles, DuskDataDriverLike & { getSchema?: () => { functions?: Array<{ name: string }>; events?: Array<{ topics: string[] }> } }]>) {
       const nonSdkContractFunctions = new Set([
         'receive_fee',
         'accrue_referral_reward',
@@ -643,6 +688,12 @@ describe('Dusk Domains contract call helpers', () => {
       )).sort() ?? []
       const configuredFunctions = Object.keys(DUSK_DOMAINS_CONTRACTS[contract].methodSigs).sort()
       expect(schemaFunctions).toEqual(configuredFunctions)
+      if (contract !== 'core') {
+        const eventNames = driver.getSchema?.().events?.flatMap((event) => event.topics)
+        expect(eventNames).toEqual(expect.arrayContaining([
+          `${contract}_operator_proposed`, `${contract}_operator_cancelled`, `${contract}_operator_changed`,
+        ]))
+      }
     }
 
     for (const call of schemaCalls().filter((call) => call.contract in drivers)) {

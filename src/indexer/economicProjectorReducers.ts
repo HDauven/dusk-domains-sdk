@@ -15,6 +15,8 @@ export function emptyTreasuryState(): IndexedTreasuryState {
   return {
     initialized: false,
     operator: null,
+    pendingOperator: null,
+    pendingOperatorRecipient: null,
     operatorAuthority: null,
     operatorRecipient: null,
     allowedFeeSources: [],
@@ -49,7 +51,20 @@ export function reduceTreasuryState(
       operator,
       operatorAuthority: event.operatorAuthority ?? principalKey(operator),
       operatorRecipient: event.operatorRecipient,
+      pendingOperator: null,
+      pendingOperatorRecipient: null,
       allowedFeeSources: [...event.allowedFeeSources],
+      lastEventType: event.type,
+      txId: meta.txId ?? current.txId,
+      blockHeight: meta.blockHeight ?? current.blockHeight,
+    }
+  }
+
+  if (event.type === 'treasury_operator_proposed' || event.type === 'treasury_operator_cancelled') {
+    return {
+      ...current,
+      pendingOperator: event.type === 'treasury_operator_proposed' ? event.pendingOperator : null,
+      pendingOperatorRecipient: event.type === 'treasury_operator_proposed' ? event.pendingOperatorRecipient : null,
       lastEventType: event.type,
       txId: meta.txId ?? current.txId,
       blockHeight: meta.blockHeight ?? current.blockHeight,
@@ -63,6 +78,8 @@ export function reduceTreasuryState(
       operator,
       operatorAuthority: event.operatorAuthority ?? principalKey(operator),
       operatorRecipient: event.operatorRecipient,
+      pendingOperator: null,
+      pendingOperatorRecipient: null,
       lastEventType: event.type,
       txId: meta.txId ?? current.txId,
       blockHeight: meta.blockHeight ?? current.blockHeight,

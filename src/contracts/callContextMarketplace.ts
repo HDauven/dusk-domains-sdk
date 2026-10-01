@@ -7,7 +7,7 @@ import {
   isMarketplacePlaceBidRuntimeArgs,
   isMarketplacePlaceOfferRuntimeArgs,
   isMarketplaceSetFeeRuntimeArgs,
-  isMarketplaceUpdateOperatorRuntimeArgs,
+  isMarketplaceProposeOperatorRuntimeArgs,
 } from './callArgGuards'
 import { formatLux } from './callContextFormat'
 import type { DuskDomainCallMetadata, DuskDomainDecodedContext } from './callTypes'
@@ -36,10 +36,25 @@ export function decodedMarketplaceDuskDomainContext(
       fields: [{ label: 'Fee', value: String(call.args.feeBps / 100) + '%' }],
     }
   }
-  if (call.functionName === 'update_operator_runtime' && isMarketplaceUpdateOperatorRuntimeArgs(call.args)) {
+  if (call.functionName === 'accept_operator_runtime') {
     return {
-      title: 'Update marketplace operator',
-      description: 'Transfer marketplace configuration authority.',
+      title: 'Accept marketplace operator role',
+      description: 'Accept the pending proposal using the proposed operator account.',
+      fields: [],
+    }
+  }
+  if (call.functionName === 'cancel_operator_runtime') {
+    return {
+      title: 'Cancel marketplace operator proposal',
+      description: 'Keep the current operator and discard the pending proposal.',
+      fields: [],
+    }
+  }
+
+  if (call.functionName === 'propose_operator_runtime' && isMarketplaceProposeOperatorRuntimeArgs(call.args)) {
+    return {
+      title: 'Propose marketplace operator',
+      description: 'The proposed operator must accept before gaining marketplace configuration authority.',
       fields: [{ label: 'New operator', value: call.args.operator }],
     }
   }

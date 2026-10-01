@@ -137,7 +137,7 @@ Registry events carry the emitting registry in the envelope's `meta.contractId`.
 | Event | Purpose | Required payload |
 | --- | --- | --- |
 | `treasury_initialized` | The protocol fee treasury operator settings were configured. Registries in the router's pool may pay fees in addition to the listed sources. | `operator`, `operator_recipient`, `allowed_fee_sources`, `router`. |
-| `treasury_operator_changed` | The current operator rotated the treasury operator principal and Moonlight recipient. | `previous_operator`, `operator`, `operator_recipient`. |
+| `treasury_operator_changed` | The proposed operator accepted the treasury role and Moonlight recipient. | `previous_operator`, `operator`, `operator_recipient`. |
 | `treasury_fee_received` | A controller or registrar forwarded a claimed protocol fee deposit into treasury custody. | `source_contract`, `reason`, `node`, `amount_lux`, `total_received_lux`, `available_lux`, `registration_received_lux`, `renewal_received_lux`, `other_received_lux`. |
 | `treasury_claimed` | The configured operator principal claimed available fees to the configured Moonlight recipient. | `operator`, `operator_recipient`, `amount_lux`, `remaining_lux`. |
 
@@ -153,3 +153,20 @@ Treasury events are protocol accounting metadata. They should not be attached to
 | `referral_reward_claimed` | A referrer claimed available referral rewards. | `referrer`, `amount_lux`, `remaining_lux`, `claimed_lux`, `referral_count`. |
 
 Referral events are per-referrer accounting metadata. `referrer` and `buyer` should be typed principals in new events and are normalized by the indexer into stable principal keys. The contract state remains canonical for claim authorization and payment safety.
+
+## Operator Handovers
+
+For router, treasury and marketplace, `<contract>_operator_proposed` carries the current
+`operator` and `pending_operator`. Treasury also includes `pending_operator_recipient`.
+`<contract>_operator_cancelled` carries the current `operator`. Neither event changes the
+active operator or treasury payout key. A second proposal replaces the pending values.
+
+Acceptance emits `<contract>_operator_changed` with `previous_operator` and `operator`.
+Treasury retains `operator_recipient`; marketplace also emits its existing
+`marketplace_config_updated` so older consumers see the completed change.
+
+Normalized fields are `pendingOperator` and `pendingOperatorRecipient`. Pool state,
+treasury state and marketplace config expose the pending operator, clearing it on
+cancellation and acceptance. Claims and fee updates leave pending proposals intact.
+
+See [Operator handover calls](operator-handover.md) for the write API and principal types.

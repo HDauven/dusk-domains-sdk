@@ -3,7 +3,7 @@ import {
   isTreasuryClaimReferralRewardRuntimeArgs,
   isTreasuryClaimRuntimeArgs,
   isTreasuryInitArgs,
-  isTreasuryUpdateOperatorRuntimeArgs,
+  isTreasuryProposeOperatorRuntimeArgs,
 } from './callArgGuards'
 import { formatLux, principalSummary } from './callContextFormat'
 import type { DuskDomainCallMetadata, DuskDomainDecodedContext } from './callTypes'
@@ -24,10 +24,25 @@ export function decodedTreasuryDuskDomainContext(call: DuskDomainCallMetadata): 
     }
   }
 
-  if (call.functionName === 'update_operator_runtime' && isTreasuryUpdateOperatorRuntimeArgs(call.args)) {
+  if (call.functionName === 'accept_operator_runtime') {
     return {
-      title: 'Update treasury operator',
-      description: 'Rotate who can claim fees and where claims are paid.',
+      title: 'Accept treasury operator role',
+      description: 'Accept the pending proposal using the proposed operator account. The proposed claim recipient takes effect at the same time.',
+      fields: [],
+    }
+  }
+  if (call.functionName === 'cancel_operator_runtime') {
+    return {
+      title: 'Cancel treasury operator proposal',
+      description: 'Keep the current operator and discard the pending proposal.',
+      fields: [],
+    }
+  }
+
+  if (call.functionName === 'propose_operator_runtime' && isTreasuryProposeOperatorRuntimeArgs(call.args)) {
+    return {
+      title: 'Propose treasury operator',
+      description: 'Propose who can claim fees and where claims are paid. Both change only when the proposed operator accepts.',
       fields: [
         { label: 'Operator', value: treasuryOperatorSummary(call.args.operator, call.args.operatorRecipient) },
         { label: 'Claim recipient', value: call.args.operatorRecipient },

@@ -153,6 +153,16 @@ export type SubnameRegistryEvent =
 
 export type TreasuryEvent =
   | {
+      type: 'treasury_operator_proposed'
+      operator: DuskPrincipal
+      pendingOperator: DuskPrincipal
+      pendingOperatorRecipient: string
+    }
+  | {
+      type: 'treasury_operator_cancelled'
+      operator: DuskPrincipal
+    }
+  | {
       type: 'treasury_initialized'
       operator?: DuskPrincipal
       operatorAuthority?: string
@@ -219,6 +229,20 @@ export type FeeConfigEvent = {
 }
 
 export type MarketplaceEvent =
+  | {
+      type: 'marketplace_operator_proposed'
+      operator: string
+      pendingOperator: string
+    }
+  | {
+      type: 'marketplace_operator_cancelled'
+      operator: string
+    }
+  | {
+      type: 'marketplace_operator_changed'
+      operator: string
+      previousOperator: string
+    }
   | {
       type: 'marketplace_initialized'
       router: string
@@ -348,6 +372,15 @@ export type MarketplaceEvent =
 export type PoolMemberKind = 'registry' | 'resolver'
 
 export type PoolEvent =
+  | {
+      type: 'router_operator_proposed'
+      operator: DuskPrincipal
+      pendingOperator: DuskPrincipal
+    }
+  | {
+      type: 'router_operator_cancelled'
+      operator: DuskPrincipal
+    }
   | {
       type: 'router_initialized'
       operator: DuskPrincipal

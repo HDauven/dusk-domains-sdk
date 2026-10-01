@@ -31,6 +31,8 @@ export type IndexedTreasuryClaim = {
 }
 
 export type IndexedTreasuryState = {
+  pendingOperator: DuskPrincipal | null
+  pendingOperatorRecipient: string | null
   initialized: boolean
   operator: DuskPrincipal | null
   operatorAuthority: string | null
@@ -167,6 +169,7 @@ export type IndexedSubname = {
 }
 
 export type IndexedMarketplaceConfig = {
+  pendingOperator: string | null
   initialized: boolean
   router: string | null
   treasuryContract: string | null
@@ -244,6 +247,7 @@ export type IndexedMarketplaceRefund = {
 
 /** The contract pool as the router's events describe it. Members are in the order they joined. */
 export type IndexedPoolState = {
+  pendingOperator: DuskPrincipal | null
   initialized: boolean
   router: string | null
   operator: DuskPrincipal | null

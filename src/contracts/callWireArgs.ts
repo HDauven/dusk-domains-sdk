@@ -29,18 +29,18 @@ import {
   isMarketplacePlaceBidRuntimeArgs,
   isMarketplaceReadRefundArgs,
   isMarketplaceSetFeeRuntimeArgs,
-  isMarketplaceUpdateOperatorRuntimeArgs,
+  isMarketplaceProposeOperatorRuntimeArgs,
   isPoolEndpointArgs,
   isPoolNodeArgs,
   isRecord,
   isRouterAddPoolMemberArgs,
   isRouterInitArgs,
-  isRouterSetOperatorRuntimeArgs,
+  isRouterProposeOperatorRuntimeArgs,
   isTreasuryClaimAllReferralRewardsRuntimeArgs,
   isTreasuryClaimReferralRewardRuntimeArgs,
   isTreasuryClaimRuntimeArgs,
   isTreasuryInitArgs,
-  isTreasuryUpdateOperatorRuntimeArgs,
+  isTreasuryProposeOperatorRuntimeArgs,
 } from './callArgGuards'
 import type {
   CoreRecordMutationInput,
@@ -73,7 +73,7 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
   ) {
     return { member: bytes32(args.member, 'member') }
   }
-  if (call.contract === 'router' && call.functionName === 'set_operator_runtime' && isRouterSetOperatorRuntimeArgs(args)) {
+  if (call.contract === 'router' && call.functionName === 'propose_operator_runtime' && isRouterProposeOperatorRuntimeArgs(args)) {
     return { operator: principal(args.operator, 'operator') }
   }
   if (poolNodeCalls.has(callKey) && isPoolNodeArgs(args)) {
@@ -277,8 +277,8 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
   }
   if (
     call.contract === 'treasury' &&
-    call.functionName === 'update_operator_runtime' &&
-    isTreasuryUpdateOperatorRuntimeArgs(args)
+    call.functionName === 'propose_operator_runtime' &&
+    isTreasuryProposeOperatorRuntimeArgs(args)
   ) {
     return {
       operator: principal(args.operator, 'operator'),
@@ -327,8 +327,8 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
   }
   if (
     call.contract === 'marketplace' &&
-    call.functionName === 'update_operator_runtime' &&
-    isMarketplaceUpdateOperatorRuntimeArgs(args)
+    call.functionName === 'propose_operator_runtime' &&
+    isMarketplaceProposeOperatorRuntimeArgs(args)
   ) {
     return { operator: bytes32(args.operator, 'operator') }
   }
@@ -428,6 +428,12 @@ const poolEndpointCalls = new Set([
 ])
 
 const noArgDuskDomainCalls = new Set([
+  'router.accept_operator_runtime',
+  'router.cancel_operator_runtime',
+  'treasury.accept_operator_runtime',
+  'treasury.cancel_operator_runtime',
+  'marketplace.accept_operator_runtime',
+  'marketplace.cancel_operator_runtime',
   'core.router',
   'core.accepts_new_names',
   'router.fee_config',
