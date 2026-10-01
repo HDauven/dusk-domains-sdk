@@ -45,7 +45,7 @@ export function lifecycleTimestamp(event) {
 
 export function subnameTimestamp(event) {
   if (event.type === 'subname_created') return event.createdAt
-  return event.prunedAt
+  return event.removedAt ?? event.prunedAt
 }
 
 export function eventTimestamp(event, meta = {}) {
@@ -54,6 +54,7 @@ export function eventTimestamp(event, meta = {}) {
     ?? event?.createdAt
     ?? event?.releasedAt
     ?? event?.observedAt
+    ?? event?.removedAt
     ?? event?.prunedAt
     ?? event?.record?.updatedAt
     ?? null

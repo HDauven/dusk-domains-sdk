@@ -11,6 +11,8 @@ import {
   coreCompleteRegistrationRuntimeCall,
   coreCreateSubnameRuntimeCall,
   corePruneSubnameRuntimeCall,
+  coreRemoveSubnameRuntimeCall,
+  coreTakeBackSubnamesRuntimeCall,
   coreAcceptsNewNamesCall,
   coreGetNameCall,
   coreHoldsNameCall,
@@ -181,6 +183,8 @@ function schemaCalls(): DuskDomainCallMetadata[] {
     coreRouterCall(),
     coreMoveRecordsRuntimeCall({ node }),
     corePruneSubnameRuntimeCall({ node }),
+    coreRemoveSubnameRuntimeCall({ node }),
+    coreTakeBackSubnamesRuntimeCall({ node, nodes: [node], owner: node, manager: node }),
     coreHoldsNameCall({ node }),
     coreHoldsPrimaryCall({ endpointType: 'moonlight_address', endpointValue }),
     coreRecordSlotCall({ node }),
@@ -404,6 +408,7 @@ describe('Dusk Domains contract call helpers', () => {
       node: Array(32).fill(7),
       owner: Array(32).fill(9),
       manager: Array(32).fill(16),
+      clear_records: false,
     })
 
     expect(toDuskDomainWireArgs(coreSetRecordSenderRuntimeCall({

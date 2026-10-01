@@ -97,3 +97,7 @@ export type {
 } from './client/sdkTypes'
 
 export { INDEXER_COMPLETE_SET_CAP, type IndexerPage, type IndexerPageParams } from './indexer/indexerClient'
+
+export type { NamespaceSummary, NamespaceAncestor, IndexedNamespace } from './indexer/indexerStateTypes'
+
+export { MAX_TAKE_BACK_SUBNAMES } from './core/subnames'

@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import {
   clearDuskDomainRegistryCache,
   coreCommitRuntimeCall,
+  coreClearPrimaryNameRuntimeCall,
   coreCreateSubnameRuntimeCall,
   corePruneSubnameRuntimeCall,
+  coreRemoveSubnameRuntimeCall,
+  coreTakeBackSubnamesRuntimeCall,
   coreGetNameCall,
   corePendingCommitmentCall,
   coreReadPrimaryNameCall,
@@ -110,6 +113,15 @@ describe('contract pool routing', () => {
     expect(targets).toEqual([olderRegistry, olderRegistry])
   })
 
+  it('prepares primary clearing using only the endpoint, without reading name authority', async () => {
+    const { app, targets, reads } = poolApp()
+    const call = coreClearPrimaryNameRuntimeCall({ endpointType: 'moonlight_address', endpointValue })
+    expect(Object.keys(toDuskDomainWireArgs(call))).toEqual(['endpoint'])
+    await prepareDuskDomainContractCall(app, call, contracts)
+    expect(targets).toEqual([olderRegistry])
+    expect(reads).toEqual(['router.locate_primary'])
+  })
+
   it('routes expired subname cleanup to the registry holding the subname', async () => {
     const { app, targets, reads } = poolApp()
     await prepareDuskDomainContractCall(app, corePruneSubnameRuntimeCall({ node: heldNode }), {
@@ -117,6 +129,13 @@ describe('contract pool routing', () => {
     })
     expect(targets).toEqual([olderRegistry])
     expect(reads).toContain('router.locate_name')
+  })
+
+  it('routes removal and batch take-back to the ancestor registry', async () => {
+    const { app, targets } = poolApp()
+    await prepareDuskDomainContractCall(app, coreRemoveSubnameRuntimeCall({ node: heldNode }), { ...contracts, core: { ...contracts.core, contractId: newestRegistry } })
+    await prepareDuskDomainContractCall(app, coreTakeBackSubnamesRuntimeCall({ node: heldNode, nodes: [freeNode], owner: heldNode, manager: heldNode }), { ...contracts, core: { ...contracts.core, contractId: newestRegistry } })
+    expect(targets).toEqual([olderRegistry, olderRegistry])
   })
 
   it('leaves explicit targets, other contracts and deployments without a router alone', async () => {

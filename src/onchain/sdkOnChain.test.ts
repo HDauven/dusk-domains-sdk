@@ -417,3 +417,21 @@ function hexBytes(value: string) {
   const hex = value.slice(2)
   return Array.from({ length: hex.length / 2 }, (_, index) => Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16))
 }
+
+it('reads the stored primary mapping for cleanup after grace without lifecycle or forward reads', async () => {
+  const { client, calls } = onChainClient(call => {
+    expect(call.functionName).toBe('read_primary_name')
+    return primaryNameResponse(endpointValue)
+  }, 20_000)
+  await expect(client.readPrimaryName({ type: 'moonlight_address', value: endpointValue })).resolves.toMatchObject({
+    ok: true, value: { name: 'aurora.dusk', node, endpoint: { type: 'moonlight_address', value: endpointValue } },
+  })
+  expect(calls).toHaveLength(1)
+})
+
+it('returns a missing stored primary and validates endpoints before cleanup reads', async () => {
+  const { client, calls } = onChainClient(() => ({ ...primaryNameResponse(endpointValue), record: null }))
+  await expect(client.readPrimaryName({ type: 'moonlight_address', value: endpointValue })).resolves.toEqual({ ok: true, value: null })
+  await expect(client.readPrimaryName({ type: 'moonlight_address', value: 'invalid' })).resolves.toMatchObject({ ok: false })
+  expect(calls).toHaveLength(1)
+})

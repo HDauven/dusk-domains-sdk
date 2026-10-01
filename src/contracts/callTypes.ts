@@ -140,10 +140,19 @@ export type CoreRenewRuntimeArgs = {
   feeLux: number
 }
 
+export type CoreTakeBackSubnamesRuntimeArgs = {
+  node: string
+  nodes: string[]
+  owner: string
+  manager: string
+}
+
 export type CoreUpdateAuthoritiesRuntimeArgs = {
   node: string
   owner: string
   manager: string
+  /** Clear this name's records and primary name; defaults to false. Descendants are untouched. */
+  clearRecords?: boolean
 }
 
 export type CoreEscrowFixedSaleRuntimeArgs = {

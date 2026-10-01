@@ -109,6 +109,8 @@ export function isIndexedRegistrationCommitment(value: unknown): value is Indexe
 export function isIndexedLifecycleName(value: unknown): value is IndexedLifecycleName {
   return (
     isRecord(value) &&
+    (value.namespace === undefined || isIndexedNamespace(value.namespace)) &&
+    (value.namespacePurchase == null || (isRecord(value.namespacePurchase) && typeof value.namespacePurchase.seller === 'string' && typeof value.namespacePurchase.buyer === 'string')) &&
     typeof value.node === 'string' &&
     typeof value.canonicalName === 'string' &&
     (value.issuedAsReserved === undefined || typeof value.issuedAsReserved === 'boolean') &&
@@ -237,6 +239,7 @@ export function isIndexedMarketplaceConfig(value: unknown): value is IndexedMark
 export function isIndexedMarketplaceFixedSale(value: unknown): value is IndexedMarketplaceFixedSale {
   return (
     isRecord(value) &&
+    (value.namespace === undefined || isNamespaceSummary(value.namespace)) &&
     typeof value.node === 'string' &&
     typeof value.name === 'string' &&
     typeof value.sellerAuthority === 'string' &&
@@ -256,6 +259,7 @@ export function isIndexedMarketplaceFixedSale(value: unknown): value is IndexedM
 export function isIndexedMarketplaceAuction(value: unknown): value is IndexedMarketplaceAuction {
   return (
     isRecord(value) &&
+    (value.namespace === undefined || isNamespaceSummary(value.namespace)) &&
     typeof value.node === 'string' &&
     typeof value.name === 'string' &&
     typeof value.sellerAuthority === 'string' &&
@@ -438,4 +442,17 @@ function isNullableString(value: unknown): value is string | null {
 
 function isNullableNumber(value: unknown): value is number | null | undefined {
   return isNonNegativeInteger(value) || value === null || value === undefined
+}
+
+export function isNamespaceSummary(value: unknown): value is import('./indexerStateTypes').NamespaceSummary {
+  return isRecord(value) && typeof value.descendantCount === 'number' && typeof value.heldByOthersCount === 'number' && isNonNegativeInteger(value.descendantCount) && value.descendantCount <= 256
+    && isNonNegativeInteger(value.heldByOthersCount) && value.heldByOthersCount <= value.descendantCount
+}
+
+export function isIndexedNamespace(value: unknown): value is import('./indexerStateTypes').IndexedNamespace {
+  return isRecord(value) && isNamespaceSummary(value) && 'subnames' in value && 'ancestors' in value
+    && Array.isArray(value.subnames) && value.subnames.length === value.descendantCount && value.subnames.every(isIndexedSubname)
+    && Array.isArray(value.ancestors) && value.ancestors.length <= 3
+    && value.ancestors.every(ancestor => isRecord(ancestor) && ['node', 'name', 'owner', 'manager'].every(key => typeof ancestor[key] === 'string')
+      && (ancestor.expiresAtBlockHeight === null || isNonNegativeInteger(ancestor.expiresAtBlockHeight)))
 }

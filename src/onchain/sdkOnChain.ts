@@ -368,6 +368,7 @@ export function createDuskDomainsOnChainClient(
     getRecord,
     resolveName,
     getPrimaryName,
+    readPrimaryName,
     verifyPrimaryName,
     getPendingCommitment,
     getFeeConfig,

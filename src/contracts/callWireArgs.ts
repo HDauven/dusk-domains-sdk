@@ -20,6 +20,7 @@ import {
   isCoreSetRecordSenderRuntimeArgs,
   isRouterSetReferralConfigRuntimeArgs,
   isCoreUpdateAuthoritiesRuntimeArgs,
+  isCoreTakeBackSubnamesRuntimeArgs,
   isDuskPrincipal,
   isMarketplaceAuctionNodeArgs,
   isMarketplaceBuyFixedSaleRuntimeArgs,
@@ -143,6 +144,11 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
       referrer: args.referrer && hasClaimableReferrerShape(args.referrer) ? principal(args.referrer, 'referrer') : null,
     }
   }
+  if (call.contract === 'core' && call.functionName === 'take_back_subnames_runtime') {
+    if (!isCoreTakeBackSubnamesRuntimeArgs(args)) throw new Error('Take-back requires 1 to 256 distinct subnames and an owner and manager.')
+    return { node: bytes32(args.node, 'node'), nodes: args.nodes.map(node => bytes32(node, 'subname')),
+      owner: bytes32(args.owner, 'owner'), manager: bytes32(args.manager, 'manager') }
+  }
   if (call.contract === 'core' && call.functionName === 'renew_runtime' && isCoreRenewRuntimeArgs(args)) {
     return {
       node: bytes32(args.node, 'node'),
@@ -152,13 +158,14 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
   }
   if (
     call.contract === 'core' &&
-    call.functionName === 'update_authorities_runtime' &&
-    isCoreUpdateAuthoritiesRuntimeArgs(args)
+    call.functionName === 'update_authorities_runtime'
   ) {
+    if (!isCoreUpdateAuthoritiesRuntimeArgs(args)) throw new Error('Authority updates require owner and manager strings and an optional boolean clearRecords.')
     return {
       node: bytes32(args.node, 'node'),
       owner: bytes32(args.owner, 'owner'),
       manager: bytes32(args.manager, 'manager'),
+      clear_records: args.clearRecords ?? false,
     }
   }
   if (
@@ -434,6 +441,7 @@ const poolNodeCalls = new Set([
   'core.record_slot',
   'core.move_records_runtime',
   'core.prune_subname_runtime',
+  'core.remove_subname_runtime',
 ])
 
 const poolEndpointCalls = new Set([

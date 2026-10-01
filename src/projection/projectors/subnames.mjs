@@ -11,7 +11,7 @@ import {
 export function applySubnameEvent(store, event, meta) {
   const parentNode = normalizeNode(event.parentNode)
   const node = normalizeNode(event.node)
-  if (event.type === 'subname_pruned' || store.subnamesByNode.has(node) || store.namesByNode.has(node)) {
+  if (event.type !== 'subname_created' || store.subnamesByNode.has(node) || store.namesByNode.has(node)) {
     clearReleasedName(store, node)
     store.namesByNode.delete(node)
   }
@@ -22,13 +22,14 @@ export function applySubnameEvent(store, event, meta) {
     node,
     name: event.name,
     actor: event.actor,
-    target: event.type === 'subname_pruned' ? 'pruned' : event.manager,
+    target: event.type === 'subname_removed' ? 'removed' : event.type === 'subname_pruned' ? 'pruned' : event.manager,
     timestamp: subnameTimestamp(event),
     meta,
   })
 
   if (subname) {
     store.subnamesByNode.set(node, subname)
+    store.subnamesByCanonical?.set(normalizeName(subname.name), subname)
     store.subnamesByParent.set(parentNode, [
       subname,
       ...(store.subnamesByParent.get(parentNode) ?? []).filter((candidate) => candidate.node !== node),
@@ -65,9 +66,7 @@ export function renewInheritingSubnames(store, rootNode) {
       }
       const renewed = { ...subname, ...parentExpiry, ...lifecycle }
       store.subnamesByNode.set(subname.node, renewed)
-      // An authority change gives a subname a name row too, which renews with it.
-      const row = store.namesByNode.get(subname.node)
-      if (row) store.namesByNode.set(subname.node, { ...row, ...lifecycle })
+      store.subnamesByCanonical?.set(normalizeName(subname.name), renewed)
       parents.add(subname.node)
       return renewed
     }))

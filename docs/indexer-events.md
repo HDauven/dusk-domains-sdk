@@ -91,3 +91,16 @@ initially false. Repeated authorized setter values emit nothing; handover and
 fee updates preserve pause state. Indexer health exposes
 `pause: { registrationsPaused, tradingPaused }` and marketplace config exposes
 `tradingPaused`. Healthy indexed status supports display; contracts enforce the gates.
+
+## Namespace control
+
+`name_owner_changed` updates a subname's owner and manager in the subname indexes. Its
+optional `dataCleared` flag clears only that node's records and primary name; descendants
+keep their data. A holder’s own transfers leave the flag false unless `clearRecords` is requested. Ancestor reassignments and take-back batches set it whenever an owner or manager changes. `subname_removed` removes the
+node and its subtree; `subname_pruned` remains expired cleanup.
+
+Name responses may include `namespace` with `descendantCount`, `heldByOthersCount`, all
+stored `subnames` (including expired ones), and the `ancestors` used for authority display.
+Marketplace summaries compare descendant owners to the seller while the root is escrowed.
+A completed purchase records `namespacePurchase` with its buyer and seller so clients can
+offer to take back seller-held subnames. A later root transfer clears that purchase marker.
