@@ -8,8 +8,7 @@ export const ACTIVITY_EVENT_TYPES = [
   'record_update',
   'primary_name',
   'subname_created',
-  'subname_delegated',
-  'subname_revoked',
+  'subname_pruned',
   'domain_fixed_sale_opened',
   'domain_fixed_sale_closed',
   'domain_fixed_sale_filled',
@@ -77,8 +76,7 @@ export function activityLabel(eventType: ActivityEventType): string {
   if (eventType === 'record_update') return 'Record updated'
   if (eventType === 'primary_name') return 'Primary domain set'
   if (eventType === 'subname_created') return 'Subdomain created'
-  if (eventType === 'subname_delegated') return 'Subdomain delegated'
-  if (eventType === 'subname_revoked') return 'Subdomain revoked'
+  if (eventType === 'subname_pruned') return 'Expired subdomain pruned'
   if (eventType === 'domain_fixed_sale_opened') return 'Listed for sale'
   if (eventType === 'domain_fixed_sale_closed') return 'Sale closed'
   if (eventType === 'domain_fixed_sale_filled') return 'Domain sold'

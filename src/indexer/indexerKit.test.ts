@@ -96,7 +96,6 @@ describe('Dusk Domains indexer kit', () => {
         expiresAt,
         parentExpiresAt: expiresAt,
         expiryPolicy: 'inherits_parent',
-        revocationPolicy: 'parent_revocable',
         createdAt: '2026-06-27T00:00:00.000Z',
       },
       ...[node, subnode].map((moved) => ({ type: 'records_moved', node: moved, controller: owner, fromResolver, toResolver, recordCount: 1 })),
@@ -131,7 +130,6 @@ describe('Dusk Domains indexer kit', () => {
         expiresAt,
         parentExpiresAt: expiresAt,
         expiryPolicy: 'inherits_parent',
-        revocationPolicy: 'parent_revocable',
         createdAt: '2026-06-27T00:00:00.000Z',
       },
       // The contract reports a subname's authority change as a name_owner_changed on its node.

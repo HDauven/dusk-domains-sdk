@@ -131,10 +131,11 @@ MVP rules:
 - Subnames can use independent managers/controllers, resolvers, and typed public records.
 - Default expiry policy is `inherits_parent`: renewing the root name renews the subname.
 - Optional fixed expiry must be capped at the parent expiry.
-- Default revocation policy is `parent_revocable`.
-- `locked` subnames cannot be revoked by the parent after creation, but they still cannot outlive the parent expiry.
 - Indexers must expose subname state by parent node and subname node.
-- UI must show expiry and revocation policy before signing and after creation.
+- UI must show expiry policy before signing and after creation.
+- Inheriting expiry must equal the parent's expiry at creation and follows root renewal, including renewal during grace. Fixed expiry is not extended.
+- At expiry, the active parent owner or manager may recreate a subname with fresh authorities and empty records, clearing old primary names and descendants.
+- Limits are 64 direct children, depth 3, and 256 descendants per root. Expired entries retain capacity until recreation, explicit `prune_subname_runtime({ node })`, or root re-registration. Pruning removes the expired subtree through the bounded child index and decrements both counters.
 
 Policy reference: [Subname Policy](subnames.md).
 

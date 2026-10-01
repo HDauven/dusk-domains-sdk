@@ -30,8 +30,7 @@ export const reverseEventTypes = [
 /** Event types emitted by subdomain management operations. */
 export const subnameEventTypes = [
     'subname_created',
-    'subname_delegated',
-    'subname_revoked',
+    'subname_pruned',
 ];
 /** Event types emitted by treasury intake, claims and operator changes. */
 export const treasuryEventTypes = [

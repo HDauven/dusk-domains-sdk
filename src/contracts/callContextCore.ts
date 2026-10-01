@@ -192,6 +192,14 @@ export function decodedCoreDuskDomainContext(call: DuskDomainCallMetadata): Dusk
     }
   }
 
+  if (call.functionName === 'prune_subname_runtime' && isPoolNodeArgs(call.args)) {
+    return {
+      title: 'Prune expired subdomain',
+      description: 'Remove this expired subdomain and its descendants to free namespace capacity.',
+      fields: [{ label: 'Node', value: call.args.node }],
+    }
+  }
+
   if (call.functionName === 'create_subname_runtime' && isCoreCreateSubnameRuntimeArgs(call.args)) {
     return {
       title: `Create ${call.args.name}`,

@@ -1,11 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
-  canParentRevokeSubname,
   createSubnameState,
   resolveSubnameExpiresAt,
-  revokeSubname,
   subnameExpiryDescription,
-  subnameRevocationDescription,
 } from './subnames'
 
 describe('Dusk Domains subname policy', () => {
@@ -30,9 +27,7 @@ describe('Dusk Domains subname policy', () => {
       manager: 'dusk1manager',
       expiresAt: parentExpiresAt,
       expiryPolicy: 'inherits_parent',
-      revocationPolicy: 'parent_revocable',
       status: 'active',
-      revokedAt: null,
     })
     expect(subname.node).toMatch(/^0x[0-9a-f]{64}$/)
     expect(subname.parentNode).toMatch(/^0x[0-9a-f]{64}$/)
@@ -78,38 +73,8 @@ describe('Dusk Domains subname policy', () => {
     })).toThrow('Use lowercase letters, numbers, or interior hyphens.')
   })
 
-  it('makes parent revocation behavior explicit', () => {
-    const revocable = createSubnameState({
-      parentName: 'acme.dusk',
-      label: 'payroll',
-      owner: 'dusk1owner',
-      manager: 'dusk1manager',
-      resolver: `0x${'44'.repeat(32)}`,
-      parentExpiresAt,
-    })
-    const locked = createSubnameState({
-      parentName: 'acme.dusk',
-      label: 'investor-relations',
-      owner: 'dusk1owner',
-      manager: 'dusk1manager',
-      resolver: `0x${'44'.repeat(32)}`,
-      parentExpiresAt,
-      revocationPolicy: 'locked',
-    })
-
-    expect(canParentRevokeSubname(revocable)).toBe(true)
-    expect(revokeSubname(revocable, 1_810_000_000)).toMatchObject({
-      status: 'revoked',
-      revokedAt: 1_810_000_000,
-    })
-    expect(canParentRevokeSubname(locked)).toBe(false)
-    expect(() => revokeSubname(locked, 1_810_000_000)).toThrow('locked')
-  })
-
-  it('describes expiry and revocation policies for UI and docs', () => {
+  it('describes expiry policies for UI and docs', () => {
     expect(subnameExpiryDescription('inherits_parent')).toBe('Inherits parent expiry')
     expect(subnameExpiryDescription('fixed_before_parent')).toBe('Fixed and capped by parent expiry')
-    expect(subnameRevocationDescription('parent_revocable')).toBe('Parent can revoke')
-    expect(subnameRevocationDescription('locked')).toBe('Locked after creation')
   })
 })

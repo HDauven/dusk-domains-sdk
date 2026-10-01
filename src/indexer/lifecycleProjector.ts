@@ -56,6 +56,8 @@ export function createLifecycleEventProjector(): LifecycleEventProjector {
   const resolverRecords = new Map<string, IndexedResolverRecordSet>()
   const primaryNames = new Map<string, IndexedReversePrimaryName>()
   const subnames = new Map<string, IndexedSubname>()
+  const childNodesByParent = new Map<string, Set<string>>()
+  const primaryKeysByNode = new Map<string, Set<string>>()
   const referrals = new Map<string, IndexedReferralState>()
   const activity = new Map<string, ActivityEntry[]>()
   let treasuryState: IndexedTreasuryState = emptyTreasuryState()
@@ -140,8 +142,11 @@ export function createLifecycleEventProjector(): LifecycleEventProjector {
       blockHeight: meta.blockHeight ?? null,
     })
 
+    const previous = primaryNames.get(next.key)
+    if (previous) removeIndexEntry(primaryKeysByNode, previous.node, next.key)
     if (next.status === 'set') {
       primaryNames.set(next.key, next)
+      addIndexEntry(primaryKeysByNode, next.node, next.key)
     } else {
       primaryNames.delete(next.key)
     }
@@ -150,28 +155,28 @@ export function createLifecycleEventProjector(): LifecycleEventProjector {
   }
 
   function applySubname(event: SubnameRegistryEvent, meta: IndexerEventMeta = {}) {
-    const current = subnames.get(event.node)
-    const next = reduceSubname(event, current, meta, subnames.get(event.parentNode) ?? names.get(event.parentNode))
+    if (event.type === 'subname_pruned' || subnames.has(event.node) || names.has(event.node)) {
+      clearNodeTreeDerivedState(event.node)
+      names.delete(event.node)
+    }
+    const next = event.type === 'subname_created'
+      ? reduceSubname(event, meta, subnames.get(event.parentNode) ?? names.get(event.parentNode))
+      : null
     const entry = createActivityEntry({
       eventType: event.type,
       node: event.node,
       name: event.name,
       actor: event.actor,
-      target: event.type === 'subname_created'
-        ? event.manager
-        : event.type === 'subname_delegated'
-          ? event.manager
-          : 'revoked',
-      timestamp: event.type === 'subname_created'
-        ? event.createdAt
-        : event.type === 'subname_delegated'
-          ? event.delegatedAt
-          : event.revokedAt,
+      target: event.type === 'subname_created' ? event.manager : 'pruned',
+      timestamp: event.type === 'subname_created' ? event.createdAt : event.prunedAt,
       txId: meta.txId,
       blockHeight: meta.blockHeight ?? null,
     })
 
-    subnames.set(event.node, next)
+    if (next) {
+      subnames.set(event.node, next)
+      addIndexEntry(childNodesByParent, event.parentNode, event.node)
+    }
     activity.set(event.node, [entry, ...(activity.get(event.node) ?? [])])
     activity.set(event.parentNode, [entry, ...(activity.get(event.parentNode) ?? [])])
     return next
@@ -228,10 +233,9 @@ export function createLifecycleEventProjector(): LifecycleEventProjector {
   function getSubnamesByParent(parentNode: string) {
     const now = new Date()
     if (!namespaceNodeIsLive(parentNode, now)) return []
-    return [...subnames.values()].filter((subname) => (
-      subname.parentNode === parentNode
-      && subnameIsLive(subname, now)
-    ))
+    return [...(childNodesByParent.get(parentNode) ?? [])]
+      .map((node) => subnames.get(node)!)
+      .filter((subname) => subnameIsLive(subname, now))
   }
 
   function getTreasuryState() {
@@ -282,12 +286,13 @@ export function createLifecycleEventProjector(): LifecycleEventProjector {
     const staleNodes = collectNodeTree(node)
     for (const staleNode of staleNodes) {
       resolverRecords.delete(staleNode)
+      const subname = subnames.get(staleNode)
+      if (subname) removeIndexEntry(childNodesByParent, subname.parentNode, staleNode)
+      childNodesByParent.delete(staleNode)
       subnames.delete(staleNode)
       if (staleNode !== node) names.delete(staleNode)
-    }
-
-    for (const [key, primaryName] of primaryNames) {
-      if (staleNodes.has(primaryName.node)) primaryNames.delete(key)
+      for (const key of primaryKeysByNode.get(staleNode) ?? []) primaryNames.delete(key)
+      primaryKeysByNode.delete(staleNode)
     }
   }
 
@@ -296,15 +301,21 @@ export function createLifecycleEventProjector(): LifecycleEventProjector {
   function renewInheritingSubnames(rootNode: string, root: IndexedLifecycleName) {
     const parents = new Set([rootNode])
     for (const parentNode of parents) {
-      for (const subname of subnames.values()) {
-        if (subname.parentNode !== parentNode || subname.expiryPolicy !== 'inherits_parent') continue
+      for (const childNode of childNodesByParent.get(parentNode) ?? []) {
+        const subname = subnames.get(childNode)!
+        const parentExpiry = {
+          parentExpiresAt: root.expiresAt ?? subname.parentExpiresAt,
+          parentExpiresAtBlockHeight: root.expiresAtBlockHeight,
+        }
+        subnames.set(subname.node, { ...subname, ...parentExpiry })
+        if (subname.expiryPolicy !== 'inherits_parent') continue
         const lifecycle = {
           expiresAt: root.expiresAt ?? subname.expiresAt,
           graceEndsAt: root.graceEndsAt,
           expiresAtBlockHeight: root.expiresAtBlockHeight,
           graceEndsAtBlockHeight: root.graceEndsAtBlockHeight,
         }
-        subnames.set(subname.node, { ...subname, ...lifecycle })
+        subnames.set(subname.node, { ...subname, ...parentExpiry, ...lifecycle })
         // An authority change gives a subname a name row too, which renews with it.
         const row = names.get(subname.node)
         if (row) names.set(subname.node, { ...row, ...lifecycle })
@@ -315,15 +326,8 @@ export function createLifecycleEventProjector(): LifecycleEventProjector {
 
   function collectNodeTree(rootNode: string) {
     const staleNodes = new Set([rootNode])
-    let grew = true
-    while (grew) {
-      grew = false
-      for (const subname of subnames.values()) {
-        if (staleNodes.has(subname.parentNode) && !staleNodes.has(subname.node)) {
-          staleNodes.add(subname.node)
-          grew = true
-        }
-      }
+    for (const node of staleNodes) {
+      for (const child of childNodesByParent.get(node) ?? []) staleNodes.add(child)
     }
     return staleNodes
   }
@@ -394,4 +398,17 @@ function commitmentKey(controller: string, commitment: string) {
 
 function hexKey(value: string) {
   return value.trim().toLowerCase().replace(/^0x/, '')
+}
+
+function addIndexEntry(index: Map<string, Set<string>>, node: string, key: string) {
+  const keys = index.get(node) ?? new Set<string>()
+  keys.add(key)
+  index.set(node, keys)
+}
+
+function removeIndexEntry(index: Map<string, Set<string>>, node: string, key: string) {
+  const keys = index.get(node)
+  if (!keys) return
+  keys.delete(key)
+  if (keys.size === 0) index.delete(node)
 }

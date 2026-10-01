@@ -1,7 +1,6 @@
 import type { CoreFeeConfig } from '../core/namePolicy'
 import type { DuskPrincipal } from '../core/principal'
 import type { ResolverRecord } from '../core/records'
-import type { SubnameRevocationPolicy } from '../core/subnames'
 
 export type DuskDomainContractKey = 'core' | 'treasury' | 'marketplace' | 'router'
 export type DuskDomainRequiredContractKey = 'core' | 'treasury' | 'router'
@@ -216,7 +215,6 @@ export type CoreCreateSubnameRuntimeArgs = {
   manager: string
   expiresAt: number
   expiryPolicy: string
-  revocationPolicy: SubnameRevocationPolicy
 }
 
 export type CoreGetNameArgs = {

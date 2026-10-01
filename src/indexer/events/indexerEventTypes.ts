@@ -1,7 +1,7 @@
 import type { CoreFeeConfig } from '../../core/namePolicy'
 import type { DuskPrincipal } from '../../core/principal'
 import type { ResolverRecord, ResolverRecordKey } from '../../core/records'
-import type { SubnameExpiryPolicy, SubnameRevocationPolicy } from '../../core/subnames'
+import type { SubnameExpiryPolicy } from '../../core/subnames'
 
 export type IndexerEventMeta = {
   txId?: string
@@ -130,25 +130,15 @@ export type SubnameRegistryEvent =
       expiresAtBlockHeight?: number | null
       parentExpiresAtBlockHeight?: number | null
       expiryPolicy: SubnameExpiryPolicy
-      revocationPolicy: SubnameRevocationPolicy
       createdAt: string
     }
   | {
-      type: 'subname_delegated'
+      type: 'subname_pruned'
       parentNode: string
       node: string
       name: string
       actor: string
-      manager: string
-      delegatedAt: string
-    }
-  | {
-      type: 'subname_revoked'
-      parentNode: string
-      node: string
-      name: string
-      actor: string
-      revokedAt: string
+      prunedAt: string
     }
 
 export type TreasuryEvent =

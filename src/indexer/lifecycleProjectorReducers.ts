@@ -200,81 +200,31 @@ export function reduceReversePrimaryName(
 }
 
 export function reduceSubname(
-  event: SubnameRegistryEvent,
-  current: IndexedSubname | undefined,
+  event: Extract<SubnameRegistryEvent, { type: 'subname_created' }>,
   meta: IndexerEventMeta,
   parent?: Pick<IndexedSubname, 'graceEndsAt' | 'graceEndsAtBlockHeight'>,
 ): IndexedSubname {
-  if (event.type === 'subname_created') {
-    return {
-      parentNode: event.parentNode,
-      node: event.node,
-      parentName: event.parentName,
-      name: event.name,
-      label: event.label,
-      owner: event.owner,
-      manager: event.manager,
-      resolver: event.resolver,
-      expiresAt: event.expiresAt,
-      graceEndsAt: parent?.graceEndsAt ?? null,
-      parentExpiresAt: event.parentExpiresAt,
-      expiresAtBlockHeight: event.expiresAtBlockHeight ?? null,
-      graceEndsAtBlockHeight: parent?.graceEndsAtBlockHeight ?? null,
-      parentExpiresAtBlockHeight: event.parentExpiresAtBlockHeight ?? null,
-      expiryPolicy: event.expiryPolicy,
-      revocationPolicy: event.revocationPolicy,
-      status: 'active',
-      createdAt: event.createdAt,
-      revokedAt: null,
-      lastEventType: event.type,
-      txId: meta.txId ?? null,
-      blockHeight: meta.blockHeight ?? null,
-    }
-  }
-
-  const base = current ?? {
+  return {
     parentNode: event.parentNode,
     node: event.node,
-    parentName: event.name.split('.').slice(1).join('.'),
+    parentName: event.parentName,
     name: event.name,
-    label: event.name.split('.')[0] ?? event.name,
-    owner: '',
-    manager: '',
-    resolver: '',
-    expiresAt: '',
-    graceEndsAt: null,
-    parentExpiresAt: '',
-    expiresAtBlockHeight: null,
-    graceEndsAtBlockHeight: null,
-    parentExpiresAtBlockHeight: null,
-    expiryPolicy: 'inherits_parent' as const,
-    revocationPolicy: 'parent_revocable' as const,
-    status: 'active' as const,
-    createdAt: '',
-    revokedAt: null,
+    label: event.label,
+    owner: event.owner,
+    manager: event.manager,
+    resolver: event.resolver,
+    expiresAt: event.expiresAt,
+    graceEndsAt: parent?.graceEndsAt ?? null,
+    parentExpiresAt: event.parentExpiresAt,
+    expiresAtBlockHeight: event.expiresAtBlockHeight ?? null,
+    graceEndsAtBlockHeight: parent?.graceEndsAtBlockHeight ?? null,
+    parentExpiresAtBlockHeight: event.parentExpiresAtBlockHeight ?? null,
+    expiryPolicy: event.expiryPolicy,
+    status: 'active',
+    createdAt: event.createdAt,
     lastEventType: event.type,
-    txId: null,
-    blockHeight: null,
-  }
-
-  if (event.type === 'subname_delegated') {
-    return {
-      ...base,
-      manager: event.manager,
-      status: base.status === 'revoked' ? 'revoked' : 'active',
-      lastEventType: event.type,
-      txId: meta.txId ?? base.txId,
-      blockHeight: meta.blockHeight ?? base.blockHeight,
-    }
-  }
-
-  return {
-    ...base,
-    status: 'revoked',
-    revokedAt: event.revokedAt,
-    lastEventType: event.type,
-    txId: meta.txId ?? base.txId,
-    blockHeight: meta.blockHeight ?? base.blockHeight,
+    txId: meta.txId ?? null,
+    blockHeight: meta.blockHeight ?? null,
   }
 }
 

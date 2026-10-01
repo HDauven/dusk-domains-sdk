@@ -76,13 +76,18 @@ When a name is released, indexers must clear derived resolver records, controlle
 | --- | --- | --- |
 | `name_owner_changed` | Name owner/manager/resolver metadata changed, including transfer. | `node`, `actor`, `previous_owner`, `owner`, `manager`, `resolver`, `expires_at`. |
 | `resolver_changed` | Resolver reference changed. | `node`, `actor`, `resolver`. |
-| `subname_created` | A parent namespace created a subname. | `parent_node`, `node`, `parent_name`, `name`, `label`, `actor`, `owner`, `manager`, `resolver`, `expires_at`, `parent_expires_at`, `expiry_policy`, `revocation_policy`, `created_at`. |
-| `subname_delegated` | A subname controller changed. | `parent_node`, `node`, `name`, `actor`, `manager`, `delegated_at`. |
-| `subname_revoked` | A parent-revocable subname was revoked. | `parent_node`, `node`, `name`, `actor`, `revoked_at`. |
+| `subname_created` | A parent namespace created a subname. | `parent_node`, `node`, `parent_name`, `name`, `label`, `actor`, `owner`, `manager`, `resolver`, `expires_at`, `parent_expires_at`, `expiry_policy`, `created_at`. |
+| `subname_pruned` | An active parent owner or manager removed an expired subname and its descendants. | `parent_node`, `node`, `name`, `actor`, `pruned_at`. |
+
+`subname_created` also signals recreation: clear the node's old records, primary name,
+name/authority row and descendant state before applying the fresh row. `subname_pruned`
+clears the same subtree without replacing it. Keep historical activity. Root `name_renewed`
+updates expiry along inheriting chains, including renewal during grace; fixed subtrees
+keep their expiry. Authority changes use `name_owner_changed`.
 
 For transfer history, indexers should read `previous_owner` and `owner`. For resolver safety warnings, indexers should record `resolver_changed` timestamps and expose recent changes to wallets and explorers.
 
-For subname dashboards, indexers should store subname state keyed by both `parent_node` and `node`. Subname activity should appear in the parent namespace history and in the subname node history. Subname records remain resolver events on the subname `node`; they must not be merged into the parent name records. Parent-scoped subname lists are active namespace views and should be empty once the parent is released or expired beyond grace, while direct subname reads may still expose historical rows.
+For subname dashboards, indexers should store subname state keyed by both `parent_node` and `node`. Subname activity should appear in the parent namespace history and in the subname node history. Subname records remain resolver events on the subname `node`; they must not be merged into the parent name records. Parent-scoped subname lists are active namespace views and should be empty once the parent is released or expired beyond grace, and direct subname reads return null for inactive entries.
 
 A subname takes its `expires_at` from `subname_created` and its grace end from its parent at that moment. `name_renewed` on a root name emits nothing for its subnames, but it renews each `inherits_parent` subname whose ancestors up to that root all inherit too: indexers give those subnames the root's new `expires_at` and `grace_ends_at`. A `fixed_before_parent` subname keeps its lifecycle, and so do the subnames below it.
 

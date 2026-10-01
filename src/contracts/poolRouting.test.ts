@@ -3,6 +3,7 @@ import {
   clearDuskDomainRegistryCache,
   coreCommitRuntimeCall,
   coreCreateSubnameRuntimeCall,
+  corePruneSubnameRuntimeCall,
   coreGetNameCall,
   corePendingCommitmentCall,
   coreReadPrimaryNameCall,
@@ -104,10 +105,18 @@ describe('contract pool routing', () => {
       manager: `0x${'09'.repeat(32)}`,
       expiresAt: 1_820_000_000,
       expiryPolicy: 'inherits_parent',
-      revocationPolicy: 'parent_revocable',
     }), contracts)
     await readDuskDomainContract(app, coreReadPrimaryNameCall({ endpointType: 'moonlight_address', endpointValue }), contracts)
     expect(targets).toEqual([olderRegistry, olderRegistry])
+  })
+
+  it('routes expired subname cleanup to the registry holding the subname', async () => {
+    const { app, targets, reads } = poolApp()
+    await prepareDuskDomainContractCall(app, corePruneSubnameRuntimeCall({ node: heldNode }), {
+      ...contracts, core: { ...contracts.core, contractId: newestRegistry },
+    })
+    expect(targets).toEqual([olderRegistry])
+    expect(reads).toContain('router.locate_name')
   })
 
   it('leaves explicit targets, other contracts and deployments without a router alone', async () => {
