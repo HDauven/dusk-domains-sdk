@@ -1,5 +1,5 @@
 import type { ForwardResolutionResponse, IndexedNameSummary } from '../indexer/indexer'
-import type { DuskDomainsIndexerClient } from '../indexer/indexerClient'
+import { createDuskDomainsIndexerClient, type DuskDomainsIndexerClient } from '../indexer/indexerClient'
 import { namehashHex } from '../core/namehash'
 import type { DuskDomainsOnChainClient } from '../onchain/sdkOnChain'
 
@@ -8,6 +8,7 @@ export const endpointValue = 'dusk1localresolverproof01'
 
 export function fakeIndexer(overrides: Partial<DuskDomainsIndexerClient>): DuskDomainsIndexerClient {
   return {
+    ...createDuskDomainsIndexerClient({ baseUrl: '/unused', fetch: async () => { throw new Error('not implemented') } }),
     async getHealth() {
       throw new Error('not implemented')
     },

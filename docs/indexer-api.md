@@ -4,6 +4,162 @@ Status: MVP baseline
 
 The indexer/API layer is a read model over DuskDS events and contract reads. It must not become the canonical source of ownership, resolver records, or reverse records.
 
+## Pagination and public HTTP policy
+
+All collection requests accept `limit` (default **50**, maximum **200**) and an
+opaque `cursor`. `limit` must be a positive decimal integer; values above 200
+are clamped. Empty, negative, fractional, nonnumeric, or repeated limits return
+400 `invalid_limit`. Malformed, oversized, repeated, or mismatched cursors return
+400 `invalid_cursor` before the store is read.
+
+```text
+GET /names?owner=0x...&limit=50
+GET /names?owner=0x...&limit=50&cursor=<nextCursor from the previous response>
+```
+
+```json
+{ "names": [], "nextCursor": null }
+```
+
+Pass cursors back verbatim (URL-encoded) with the same route and filters. The page
+size may change. A non-null `nextCursor` means another page exists; `null` is the
+last page, including an empty result. Cursors encode the last sort key and query
+scope, never an offset. Inserting or deleting earlier rows does not shift later
+pages. These are live reads, not a frozen snapshot: rows inserted before the
+cursor are seen on a fresh traversal, and ownership, expiry, or order changes may
+remove rows between requests. Cursors are versioned continuation tokens, not
+credentials or encrypted data.
+
+**Migration:** these endpoints previously returned bare arrays, so there were no
+existing top-level item field names to retain. They now return the named arrays
+below plus `nextCursor`; every item keeps its existing fields. Direct HTTP clients
+must unwrap the array. The updated SDK keeps its existing array-returning methods
+(first page), adds `*Page` methods exposing the named array and cursor, and accepts
+legacy array responses for a staged rollout. Deploy compatible clients before
+switching the server. `/names` without `owner` is always paginated.
+
+All 24 GET routes were reviewed:
+
+| Route | Pagination and ordering |
+| --- | --- |
+| `/health` | `warnings` + `nextCursor`; stable diagnostic keys. Other arrays are bounded route/schema/deployment diagnostics. |
+| `/commitment` | Single commitment or null. |
+| `/search` | Single exact-name availability result, **not** a search-results list in this API. Existing fields retained; accepts/validates `limit` and returns `nextCursor: null`. No continuation cursor is valid. |
+| `/names` | `names`; canonical name then node, ascending. Owner/controller filter applies before pagination. |
+| `/resolve` | `warnings` + `nextCursor`, newest timestamp first with immutable event identity as a tie-breaker. Resolution fields retained; embedded current records are contract-bounded (16). |
+| `/name` | Single lifecycle state or null. |
+| `/records` | `records`; record key ascending (also contract-bounded to 16). |
+| `/record` | Single record or null. |
+| `/record-history` | `history`; block height, event index, timestamp descending, then transaction/key/content digest to break ties. Optional `key` filter retained. |
+| `/activity` | `activity`; block height and timestamp descending, then transaction/ID/content digest to break ties. Missing height sorts after known heights. |
+| `/reverse` | Single reverse result or null. |
+| `/subnames` | `subnames`; name then node ascending; only live entries. |
+| `/subname` | Single live subname or null. |
+| `/treasury` | Single aggregate; `claims` already capped at 12 by the projection, fee sources are contract configuration. |
+| `/referrals` | Single referrer's aggregate; `recentActivity` already capped at 12. |
+| `/fee-config` | Single configuration. |
+| `/marketplace/config` | Single configuration. |
+| `/marketplace/fixed-sales` | `fixedSales`; node ascending. |
+| `/marketplace/fixed-sale` | Single order or null. |
+| `/marketplace/auctions` | `auctions`; node ascending (bids do not move an order between pages). |
+| `/marketplace/auction` | Single order or null. |
+| `/marketplace/offers` | `offers`; node then buyer authority ascending; optional filters apply before pagination. |
+| `/marketplace/offer` | Single offer or null. |
+| `/marketplace/refund` | Single refund balance or null. |
+
+String keys use deterministic code-point ordering. Selection retains at most
+`limit + 1` rows and hydrates only the selected name/order summaries. The existing
+in-memory read model still requires a linear scan; this is not a database-index
+migration. A reverse-proxy limit remains recommended to bound aggregate traffic.
+
+SDK examples:
+
+```ts
+const page = await indexer.getNamesPage({ owner, limit: 50 })
+if (page.nextCursor) {
+  const next = await indexer.getNamesPage({ owner, cursor: page.nextCursor })
+}
+const allOwned = await indexer.getAllNames({ owner, maxItems: 1000 })
+const allChildren = await indexer.getAllSubnames(parentNode, 1000)
+```
+
+Complete-set helpers require an owner/parent, use pages of at most 200, and have a
+hard maximum of 10,000 items (caller may lower it). Legacy bare arrays may exceed
+200 items; they are still validated and complete-set reads enforce the same cap.
+They throw on overflow or a non-advancing cursor instead of silently returning a partial set. They must not be
+used to crawl the global namespace. `getActivityPage`, `getNodeRecordsPage`,
+`getRecordHistoryPage`, `getSubnamesPage`, `getMarketplaceFixedSalesPage`,
+`getMarketplaceAuctionsPage`, and `getMarketplaceOffersPage` expose the other
+collections. `getHealth({ limit, cursor })` pages diagnostics.
+`resolveForward(name, { limit, cursor })` pages recent-change warnings while
+retaining the current resolution fields. Warning age is not part of the cursor;
+warnings can age out of the three-day window between requests.
+
+### Rate limiting and proxy trust
+
+The app uses a fixed window per IPv4 address or IPv6 /64 prefix, before loading
+the store. Defaults:
+
+| Environment variable | Default | Meaning |
+| --- | --- | --- |
+| `NODE_ENV` | development behavior unless `production` | Production turns on limits and closes empty CORS configuration. |
+| `DUSK_DOMAINS_INDEXER_RATE_LIMIT` | `true` in production; `false` otherwise | Enable/disable the app limiter (`true`/`false` or `1`/`0`). |
+| `DUSK_DOMAINS_INDEXER_RATE_LIMIT_MAX` | `200` | Requests per IPv4 address or IPv6 /64 per window; positive integer. |
+| `DUSK_DOMAINS_INDEXER_RATE_LIMIT_WINDOW_MS` | `60000` | Window duration in milliseconds; positive integer. |
+| `DUSK_DOMAINS_INDEXER_TRUST_PROXY` | `false` | Use the last `X-Forwarded-For` address, the one the proxy appended, when valid instead of the socket peer. |
+| `DUSK_DOMAINS_INDEXER_CORS_ORIGINS` | `*` in development; empty in production | Comma-separated exact browser origins. |
+
+All requests, including health checks and preflights, count. Exhaustion returns
+HTTP 429, `{ "error": "rate_limited", "message": "Too many requests." }`, and
+`Retry-After` in seconds. Expired budgets are pruned before admitting a new client.
+At most 100,000 active client keys are retained; new clients receive 429 while
+that table is full. Budgets are
+process-local and reset on restart. Add a reverse-proxy/global limit in front of
+multiple instances. Keep proxy trust off unless the indexer is reachable only
+through one trusted proxy. With trust on, the indexer reads the last
+`X-Forwarded-For` entry, which that proxy writes, so addresses a client puts in
+the header itself are ignored. Behind a chain of proxies, have the outermost one
+overwrite the header.
+
+The frontend fixture session (home, search, a name with 20 subnames, marketplace,
+and two continuation pages) makes 49 requests, including health and two wallet
+owner queries. The 200-request default provides roughly four such sessions per
+minute. Child resolution uses four workers and shares a successful health check
+for five seconds; explicit health polling remains fresh. Requests across tabs or
+users sharing a client key consume the same budget.
+
+### Errors and CORS
+
+Client errors retain short codes and specific messages, e.g.
+`{ "error": "invalid_limit", "message": "limit must be a positive integer." }`.
+Unknown routes return 404 `not_found`; absent entities retain their existing
+200/null semantics. Forward-resolution validation retains its structured `errors`
+array. Unexpected failures return HTTP 500 with only:
+
+```json
+{ "error": "internal_error", "requestId": "server-generated UUID" }
+```
+
+Every response also has `X-Request-Id`. Detailed exceptions are logged with the
+same ID, never sent to clients. Health warnings/degradation retain diagnostic
+codes and status, with generic public messages; detailed warnings, cursor errors,
+and durability checks are logged with the health request ID. Local database and
+checkpoint paths are omitted from public diagnostics. Default responses use
+`Cache-Control: no-store`; successful forward resolution keeps its existing TTL.
+
+Configure `DUSK_DOMAINS_INDEXER_CORS_ORIGINS=https://dusk.domains,https://app.example`.
+Only matching request origins receive `Access-Control-Allow-Origin`; responses
+vary on `Origin`. OPTIONS, error responses, and 429s use the same policy.
+`Retry-After` and `X-Request-Id` are exposed to allowed browser origins. Development
+keeps `*` by default. In production an empty allowlist (or `*` alone) grants no
+cross-origin access and logs a startup warning. CORS controls browsers, not
+server-to-server access; the public read API requires no authentication.
+
+`DUSK_DOMAINS_INDEXER_CORS_ORIGIN` remains a compatibility alias; the plural variable
+takes precedence, even when empty. `--cors-origin` overrides either with the same
+comma-separated allowlist syntax. The systemd unit and Docker image select
+production mode; `.env.example` enables the limiter and lists the frontend origin.
+
 ## Health And Replay State
 
 Local and hosted indexers should expose operational read-model status through:
