@@ -1,7 +1,9 @@
 node_modules/
 dist/
 coverage/
+# Real env files never belong in git; only the example is tracked.
 .env
 .env.*
+!.env.example
 target/
 *.tsbuildinfo
