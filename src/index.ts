@@ -52,6 +52,8 @@ export {
   authorityHexFromPublicSender,
   contractPrincipalFromWalletAccount,
   decodeBase58,
+  hasClaimableReferrerShape,
+  isClaimableReferrer,
   principalKey,
   principalLabel,
   principalShortValue,

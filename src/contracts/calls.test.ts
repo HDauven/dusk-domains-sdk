@@ -88,6 +88,7 @@ import {
 import { registrationCommitmentHex, registrationCommitWindow } from '../core/commitment'
 import { decodeBase58 } from '../core/principal'
 import type { DuskPrincipal } from '../core/principal'
+import { referrerShapeVectors } from '../core/claimableReferrer.test-fixtures'
 
 const node = `0x${'07'.repeat(32)}`
 const parentNode = `0x${'08'.repeat(32)}`
@@ -145,7 +146,7 @@ function registrationCall() {
       endpointType: 'moonlight_address',
       endpointValue,
     },
-    referrer: operatorPrincipal(),
+    referrer: { kind: 'Moonlight', bytes: endpointBytes },
   })
 }
 
@@ -370,7 +371,21 @@ describe('Dusk Domains contract call helpers', () => {
         kind: 'MoonlightAddress',
         value: endpointBytes,
       },
-      referrer: operatorPrincipal(),
+      referrer: { kind: 'Moonlight', bytes: endpointBytes },
+    })
+  })
+
+  it.each(referrerShapeVectors)('filters referrers synchronously in builders and wire encoding: $name', ({ principal: referrer, shape }) => {
+    const args = { ...registrationCall().args, referrer }
+    const call = coreCompleteRegistrationRuntimeCall(args)
+    const expected = shape ? referrer : null
+    expect(call.args.referrer).toEqual(expected)
+    expect(args.referrer).toBe(referrer)
+    expect(toDuskDomainWireArgs(call)).toMatchObject({ referrer: expected })
+    const direct = { ...call, args }
+    expect(toDuskDomainWireArgs(direct)).toMatchObject({ referrer: expected })
+    expect(JSON.parse(new TextDecoder().decode(encodeDuskDomainCall(fakeDriver(), direct)))).toMatchObject({
+      json: { referrer: expected, fee_lux: args.feeLux },
     })
   })
 

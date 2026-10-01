@@ -1,4 +1,4 @@
-import { decodeBase58 } from '../core/principal'
+import { decodeBase58, hasClaimableReferrerShape } from '../core/principal'
 import type { DuskPrincipal } from '../core/principal'
 import type { ResolverRecord } from '../core/records'
 import { DUSK_DOMAINS_CONTRACTS } from './callContracts'
@@ -126,7 +126,7 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
       primary_endpoint: args.primaryEndpoint
         ? endpoint(args.primaryEndpoint.endpointType, args.primaryEndpoint.endpointValue)
         : null,
-      referrer: args.referrer ? principal(args.referrer, 'referrer') : null,
+      referrer: args.referrer && hasClaimableReferrerShape(args.referrer) ? principal(args.referrer, 'referrer') : null,
     }
   }
   if (call.contract === 'core' && call.functionName === 'renew_runtime' && isCoreRenewRuntimeArgs(args)) {
