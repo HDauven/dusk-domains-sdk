@@ -524,6 +524,10 @@ describe('Dusk Domains contract call helpers', () => {
   })
 
   it('provides wallet approval context for core and treasury writes', () => {
+    expect(decodedDuskDomainContext(coreRenewRuntimeCall({ node, durationYears: 1, feeLux: 50_000_000_000 }))).toMatchObject({
+      title: 'Renew .dusk domain',
+      description: 'Extend the registration of an existing .dusk domain from its current expiry.',
+    })
     expect(decodedDuskDomainContext(registrationCall())).toMatchObject({
       title: 'Register aurora.dusk',
       fields: expect.arrayContaining([
