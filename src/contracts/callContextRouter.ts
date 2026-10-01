@@ -3,6 +3,7 @@ import {
   isRouterInitArgs,
   isRouterSetFeeConfigRuntimeArgs,
   isRouterProposeOperatorRuntimeArgs,
+  isRouterIssueReservedNameRuntimeArgs,
   isRouterSetReferralConfigRuntimeArgs,
 } from './callArgGuards'
 import { formatLux, principalSummary } from './callContextFormat'
@@ -37,6 +38,19 @@ export function decodedRouterDuskDomainContext(call: DuskDomainCallMetadata): Du
       title: 'Add a resolver to the pool',
       description: 'New records will be stored in this resolver. Existing records stay where they are.',
       fields: [{ label: 'Resolver', value: call.args.member }],
+    }
+  }
+
+  if (call.functionName === 'issue_reserved_name_runtime' && isRouterIssueReservedNameRuntimeArgs(call.args)) {
+    return {
+      title: 'Issue a reserved name',
+      description: 'The router operator assigns a protected name without a registration fee.',
+      fields: [
+        { label: 'Name', value: `${call.args.label}.dusk` },
+        { label: 'Owner', value: call.args.owner },
+        { label: 'Manager', value: call.args.manager },
+        { label: 'Years', value: String(call.args.durationYears) },
+      ],
     }
   }
 

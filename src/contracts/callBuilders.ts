@@ -34,6 +34,7 @@ import type {
   RouterAddPoolMemberArgs,
   RouterInitArgs,
   RouterProposeOperatorRuntimeArgs,
+  RouterIssueReservedNameRuntimeArgs,
   CoreMoveRecordsRuntimeArgs,
   MarketplaceSetFeeRuntimeArgs,
   MarketplaceProposeOperatorRuntimeArgs,
@@ -51,6 +52,12 @@ export function coreInitCall(args: CoreInitArgs): DuskDomainCallMetadata<CoreIni
     kind: 'write',
     args,
   }
+}
+
+export function routerIssueReservedNameRuntimeCall(
+  args: RouterIssueReservedNameRuntimeArgs,
+): DuskDomainCallMetadata<RouterIssueReservedNameRuntimeArgs> {
+  return { contract: 'router', functionName: 'issue_reserved_name_runtime', kind: 'write', args }
 }
 
 export function routerSetReferralConfigRuntimeCall(

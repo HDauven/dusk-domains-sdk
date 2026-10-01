@@ -17,6 +17,7 @@ import type {
   RouterAddPoolMemberArgs,
   RouterInitArgs,
   RouterProposeOperatorRuntimeArgs,
+  RouterIssueReservedNameRuntimeArgs,
   CoreSetRecordSenderRuntimeArgs,
   RouterSetReferralConfigRuntimeArgs,
   CoreUpdateAuthoritiesRuntimeArgs,
@@ -44,6 +45,12 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function isCoreInitArgs(value: unknown): value is CoreInitArgs {
   return isRecord(value) && typeof value.router === 'string'
+}
+
+export function isRouterIssueReservedNameRuntimeArgs(value: unknown): value is RouterIssueReservedNameRuntimeArgs {
+  return isRecord(value) && typeof value.node === 'string' && typeof value.label === 'string'
+    && typeof value.owner === 'string' && typeof value.manager === 'string'
+    && isNonNegativeSafeInteger(value.durationYears)
 }
 
 export function isRouterSetReferralConfigRuntimeArgs(

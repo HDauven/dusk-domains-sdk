@@ -71,6 +71,7 @@ import {
   routerAcceptOperatorRuntimeCall,
   routerCancelOperatorRuntimeCall,
   routerSetReferralConfigRuntimeCall,
+  routerIssueReservedNameRuntimeCall,
   toDuskDomainWireArgs,
   treasuryClaimAllReferralRewardsRuntimeCall,
   treasuryClaimAllRuntimeCall,
@@ -167,6 +168,7 @@ function schemaCalls(): DuskDomainCallMetadata[] {
     routerAddRegistryRuntimeCall({ member: coreContract }),
     routerAddResolverRuntimeCall({ member: `0x${'47'.repeat(32)}` }),
     routerProposeOperatorRuntimeCall({ operator: operatorPrincipal() }),
+    routerIssueReservedNameRuntimeCall({ node, label: 'wallet', owner: node, manager: node, durationYears: 1 }),
     routerConfigCall(),
     routerFeeConfigCall(),
     routerActiveRegistryCall(),
@@ -718,6 +720,7 @@ describe('Dusk Domains contract call helpers', () => {
         'is_pool_member',
         'registry_context',
         'drop_primary_from_pool',
+        'issue_reserved_name_from_router',
         // Commitment pruning is keeper-facing and has no browser SDK builder.
         ...(contract === 'core' ? ['prune_commitments_runtime'] : []),
       ])
@@ -726,6 +729,7 @@ describe('Dusk Domains contract call helpers', () => {
       )).sort() ?? []
       const configuredFunctions = Object.keys(DUSK_DOMAINS_CONTRACTS[contract].methodSigs).sort()
       expect(schemaFunctions).toEqual(configuredFunctions)
+      if (contract === 'router') expect(driver.getSchema?.().events?.flatMap((event) => event.topics)).toContain('reserved_name_issued')
       if (contract !== 'core') {
         const eventNames = driver.getSchema?.().events?.flatMap((event) => event.topics)
         expect(eventNames).toEqual(expect.arrayContaining([
