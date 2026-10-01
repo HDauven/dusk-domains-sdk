@@ -53,6 +53,7 @@ describe('Dusk Domains indexer kit', () => {
     })
 
     expect(projector.getPoolState()).toEqual({
+      registrationsPaused: false,
       pendingOperator: null,
       initialized: true,
       router,

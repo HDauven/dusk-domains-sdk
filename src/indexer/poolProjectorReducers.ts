@@ -2,6 +2,7 @@ import type { IndexedPoolState, IndexerEventMeta, PoolEvent } from './indexerTyp
 
 export function emptyPoolState(): IndexedPoolState {
   return {
+    registrationsPaused: false,
     initialized: false,
     router: null,
     operator: null,
@@ -31,6 +32,7 @@ export function reducePoolState(
     return {
       ...current,
       ...stamped,
+      registrationsPaused: false,
       initialized: true,
       router: meta.contractId ?? current.router,
       operator: event.operator,
@@ -48,6 +50,9 @@ export function reducePoolState(
       operator: event.operator,
       [list]: [...current[list], event.member],
     }
+  }
+  if (event.type === 'registrations_paused_changed') {
+    return { ...current, ...stamped, registrationsPaused: event.paused }
   }
   if (event.type === 'router_operator_proposed') {
     return { ...current, ...stamped, pendingOperator: event.pendingOperator }

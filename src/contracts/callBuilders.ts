@@ -15,6 +15,8 @@ import type {
   CoreReadPrimaryNameArgs,
   CoreReadRecordArgs,
   CoreRenewRuntimeArgs,
+  RouterSetRegistrationsPausedRuntimeArgs,
+  MarketplaceSetTradingPausedRuntimeArgs,
   RouterSetFeeConfigRuntimeArgs,
   CoreSetPrimaryNameRuntimeArgs,
   CoreSetRecordSenderRuntimeArgs,
@@ -653,4 +655,12 @@ export function treasuryReadStateCall(): DuskDomainCallMetadata<undefined> {
     kind: 'read',
     args: undefined,
   }
+}
+
+export function routerSetRegistrationsPausedRuntimeCall(args: RouterSetRegistrationsPausedRuntimeArgs): DuskDomainCallMetadata<RouterSetRegistrationsPausedRuntimeArgs> {
+  return { contract: 'router', functionName: 'set_registrations_paused_runtime', kind: 'write', args }
+}
+
+export function marketplaceSetTradingPausedRuntimeCall(args: MarketplaceSetTradingPausedRuntimeArgs): DuskDomainCallMetadata<MarketplaceSetTradingPausedRuntimeArgs> {
+  return { contract: 'marketplace', functionName: 'set_trading_paused_runtime', kind: 'write', args }
 }

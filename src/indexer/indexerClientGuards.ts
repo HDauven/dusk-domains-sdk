@@ -60,6 +60,7 @@ export function isIndexerHealth(value: unknown): value is {
   return (
     isRecord(value) &&
     typeof value.ok === 'boolean' &&
+    (value.pause === undefined || (isRecord(value.pause) && typeof value.pause.registrationsPaused === 'boolean' && typeof value.pause.tradingPaused === 'boolean')) &&
     (value.apiVersion === undefined || typeof value.apiVersion === 'string') &&
     typeof value.generatedAt === 'string' &&
     typeof value.source === 'string' &&
@@ -223,6 +224,7 @@ export function isIndexedMarketplaceConfig(value: unknown): value is IndexedMark
     isNullableString(value.router) &&
     isNullableString(value.treasuryContract) &&
     isNullableString(value.marketplaceAuthority) &&
+    (value.tradingPaused === undefined || typeof value.tradingPaused === 'boolean') &&
     isNullableString(value.operator) &&
     (value.pendingOperator === undefined || isNullableString(value.pendingOperator)) &&
     isNonNegativeInteger(value.feeBps) &&

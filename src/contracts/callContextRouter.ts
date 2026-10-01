@@ -1,4 +1,5 @@
 import {
+  isPauseRuntimeArgs,
   isRouterAddPoolMemberArgs,
   isRouterInitArgs,
   isRouterSetFeeConfigRuntimeArgs,
@@ -11,6 +12,13 @@ import type { DuskDomainCallMetadata, DuskDomainDecodedContext } from './callTyp
 
 export function decodedRouterDuskDomainContext(call: DuskDomainCallMetadata): DuskDomainDecodedContext | null {
   if (call.contract !== 'router') return null
+  if (call.functionName === 'set_registrations_paused_runtime' && isPauseRuntimeArgs(call.args)) {
+    return {
+      title: call.args.paused ? 'Pause registrations' : 'Resume registrations',
+      description: 'Claims, refunds, settlement and custody release remain available.',
+      fields: [{ label: 'Paused', value: String(call.args.paused) }],
+    }
+  }
 
   if (call.functionName === 'init' && isRouterInitArgs(call.args)) {
     return {

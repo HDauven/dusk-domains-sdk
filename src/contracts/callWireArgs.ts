@@ -14,6 +14,7 @@ import {
   isCoreInitArgs,
   isCoreMutateRecordsSenderRuntimeArgs,
   isCoreRenewRuntimeArgs,
+  isPauseRuntimeArgs,
   isRouterSetFeeConfigRuntimeArgs,
   isCoreSetPrimaryNameRuntimeArgs,
   isCoreSetRecordSenderRuntimeArgs,
@@ -55,6 +56,9 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
   if (args === undefined) {
     if (noArgDuskDomainCalls.has(callKey) || !knownDuskDomainCalls.has(callKey)) return undefined
     throw invalidKnownCallArgs(call)
+  }
+  if ((callKey === 'router.set_registrations_paused_runtime' || callKey === 'marketplace.set_trading_paused_runtime') && isPauseRuntimeArgs(args)) {
+    return { paused: args.paused }
   }
   if (call.contract === 'core' && call.functionName === 'init' && isCoreInitArgs(args)) {
     return { router: bytes32(args.router, 'router') }

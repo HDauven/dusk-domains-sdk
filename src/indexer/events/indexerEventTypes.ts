@@ -232,6 +232,12 @@ export type FeeConfigEvent = {
 
 export type MarketplaceEvent =
   | {
+      type: 'trading_paused_changed'
+      paused: boolean
+      operator: string
+      updatedAtBlockHeight: number
+    }
+  | {
       type: 'marketplace_operator_proposed'
       operator: string
       pendingOperator: string
@@ -374,6 +380,12 @@ export type MarketplaceEvent =
 export type PoolMemberKind = 'registry' | 'resolver'
 
 export type PoolEvent =
+  | {
+      type: 'registrations_paused_changed'
+      paused: boolean
+      operator: DuskPrincipal
+      updatedAtBlockHeight: number
+    }
   | {
       type: 'router_operator_proposed'
       operator: DuskPrincipal

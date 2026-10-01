@@ -61,6 +61,7 @@ export const feeConfigEventTypes = [
 
 /** Event types emitted by the optional Dusk Domains marketplace. */
 export const marketplaceEventTypes = [
+  'trading_paused_changed',
   'marketplace_initialized',
   'marketplace_config_updated',
   'marketplace_operator_proposed',
@@ -81,6 +82,7 @@ export const marketplaceEventTypes = [
 
 /** Event types emitted as the contract pool grows: router setup, new members, records moving. */
 export const poolEventTypes = [
+  'registrations_paused_changed',
   'router_initialized',
   'pool_member_added',
   'router_operator_changed',
