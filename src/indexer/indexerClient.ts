@@ -1,3 +1,5 @@
+import { collectPages, pageQuery, parsePage, type IndexerPage, type IndexerPageParams } from './indexerClientPagination'
+export { INDEXER_COMPLETE_SET_CAP, type IndexerPage, type IndexerPageParams } from './indexerClientPagination'
 import type { ActivityEntry } from './activity'
 import type { ForwardResolutionResponse } from './indexer'
 import type {
@@ -47,29 +49,39 @@ export type DuskDomainsIndexerClientOptions = {
 }
 
 export type DuskDomainsIndexerClient = DuskDomainsReadTransport & {
-  getHealth: () => Promise<DuskDomainsIndexerHealth>
-  searchName: (query: string) => Promise<NameResult>
+  getNamesPage: (params?: { owner?: string } & IndexerPageParams) => Promise<IndexerPage<IndexedNameSummary, 'names'>>
+  getNodeRecordsPage: (node: string, params?: IndexerPageParams) => Promise<IndexerPage<ResolverRecord, 'records'>>
+  getRecordHistoryPage: (node: string, key?: string, params?: IndexerPageParams) => Promise<IndexerPage<IndexedResolverRecordHistoryEntry, 'history'>>
+  getActivityPage: (node: string, params?: IndexerPageParams) => Promise<IndexerPage<ActivityEntry, 'activity'>>
+  getSubnamesPage: (parentNode: string, params?: IndexerPageParams) => Promise<IndexerPage<IndexedSubname, 'subnames'>>
+  getMarketplaceFixedSalesPage: (params?: IndexerPageParams) => Promise<IndexerPage<IndexedMarketplaceFixedSale, 'fixedSales'>>
+  getMarketplaceAuctionsPage: (params?: IndexerPageParams) => Promise<IndexerPage<IndexedMarketplaceAuction, 'auctions'>>
+  getMarketplaceOffersPage: (filters?: { node?: string; buyerAuthority?: string } & IndexerPageParams) => Promise<IndexerPage<IndexedMarketplaceOffer, 'offers'>>
+  getAllNames: (params: { owner: string; maxItems?: number }) => Promise<IndexedNameSummary[]>
+  getAllSubnames: (parentNode: string, maxItems?: number) => Promise<IndexedSubname[]>
+  getHealth: (params?: IndexerPageParams) => Promise<DuskDomainsIndexerHealth>
+  searchName: (query: string, params?: IndexerPageParams) => Promise<NameResult & { nextCursor?: string | null }>
   /**
    * With a controller, reads that controller's record for the hash; commitments are scoped per
    * controller. Without one, the indexer returns the latest record for the hash.
    */
   getCommitment: (commitment: string, controller?: string) => Promise<IndexedRegistrationCommitment | null>
-  resolveForward: (canonicalName: string) => Promise<ForwardResolutionResponse>
+  resolveForward: (canonicalName: string, params?: IndexerPageParams) => Promise<ForwardResolutionResponse & { nextCursor?: string | null }>
   getRecords: (canonicalName: string) => Promise<ResolverRecord[]>
-  getNodeRecords: (node: string) => Promise<ResolverRecord[]>
+  getNodeRecords: (node: string, params?: IndexerPageParams) => Promise<ResolverRecord[]>
   getNodeRecord: (node: string, key: string) => Promise<ResolverRecord | null>
-  getRecordHistory: (node: string, key?: string) => Promise<IndexedResolverRecordHistoryEntry[]>
+  getRecordHistory: (node: string, key?: string, params?: IndexerPageParams) => Promise<IndexedResolverRecordHistoryEntry[]>
   getNameState: (node: string) => Promise<IndexedLifecycleName | null>
-  getNames: (params?: { owner?: string }) => Promise<IndexedNameSummary[]>
-  getActivity: (node: string) => Promise<ActivityEntry[]>
-  getSubnames: (parentNode: string) => Promise<IndexedSubname[]>
+  getNames: (params?: { owner?: string } & IndexerPageParams) => Promise<IndexedNameSummary[]>
+  getActivity: (node: string, params?: IndexerPageParams) => Promise<ActivityEntry[]>
+  getSubnames: (parentNode: string, params?: IndexerPageParams) => Promise<IndexedSubname[]>
   getSubname: (node: string) => Promise<IndexedSubname | null>
   getMarketplaceConfig: () => Promise<IndexedMarketplaceConfig>
-  getMarketplaceFixedSales: () => Promise<IndexedMarketplaceFixedSale[]>
+  getMarketplaceFixedSales: (params?: IndexerPageParams) => Promise<IndexedMarketplaceFixedSale[]>
   getMarketplaceFixedSale: (node: string) => Promise<IndexedMarketplaceFixedSale | null>
-  getMarketplaceAuctions: () => Promise<IndexedMarketplaceAuction[]>
+  getMarketplaceAuctions: (params?: IndexerPageParams) => Promise<IndexedMarketplaceAuction[]>
   getMarketplaceAuction: (node: string) => Promise<IndexedMarketplaceAuction | null>
-  getMarketplaceOffers: (filters?: { node?: string; buyerAuthority?: string }) => Promise<IndexedMarketplaceOffer[]>
+  getMarketplaceOffers: (filters?: { node?: string; buyerAuthority?: string } & IndexerPageParams) => Promise<IndexedMarketplaceOffer[]>
   getMarketplaceOffer: (node: string, buyerAuthority: string) => Promise<IndexedMarketplaceOffer | null>
   getMarketplaceRefund: (authority: string) => Promise<IndexedMarketplaceRefund | null>
   getTreasury: () => Promise<IndexedTreasuryState>
@@ -79,6 +91,7 @@ export type DuskDomainsIndexerClient = DuskDomainsReadTransport & {
 
 export type DuskDomainsIndexerHealth = {
   ok: boolean
+  nextCursor?: string | null
   apiVersion?: string
   generatedAt: string
   source: string
@@ -153,8 +166,8 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
 
   if (!fetcher) throw new Error('Dusk Domains indexer client requires a fetch implementation.')
 
-  async function getHealth() {
-    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'health', {}))
+  async function getHealth(params: IndexerPageParams = {}) {
+    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'health', pageQuery(params)))
 
     if (!isIndexerHealth(payload)) {
       throw new Error('Dusk Domains indexer returned an invalid health response.')
@@ -163,8 +176,8 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
     return payload
   }
 
-  async function searchName(query: string) {
-    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'search', { query }))
+  async function searchName(query: string, params: IndexerPageParams = {}) {
+    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'search', pageQuery({ query, ...params })))
 
     if (!isNameResult(payload)) {
       throw new Error('Dusk Domains indexer returned an invalid search response.')
@@ -185,8 +198,8 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
     return payload
   }
 
-  async function resolveForward(canonicalName: string) {
-    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'resolve', { name: canonicalName }))
+  async function resolveForward(canonicalName: string, params: IndexerPageParams = {}) {
+    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'resolve', pageQuery({ name: canonicalName, ...params })))
 
     if (!isForwardResolutionResponse(payload)) {
       throw new Error('Dusk Domains indexer returned an invalid forward-resolution response.')
@@ -200,14 +213,13 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
     return response.records
   }
 
-  async function getNodeRecords(node: string) {
-    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'records', { node }))
+  async function getNodeRecordsPage(node: string, params: IndexerPageParams = {}) {
+    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'records', pageQuery({ node, ...params })))
+    return parsePage(payload, 'records', isResolverRecord, 'node records')
+  }
 
-    if (!Array.isArray(payload) || !payload.every(isResolverRecord)) {
-      throw new Error('Dusk Domains indexer returned an invalid node records response.')
-    }
-
-    return payload
+  async function getNodeRecords(node: string, params: IndexerPageParams = {}) {
+    return (await getNodeRecordsPage(node, params)).records
   }
 
   async function getNodeRecord(node: string, key: string) {
@@ -221,16 +233,13 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
     return payload
   }
 
-  async function getRecordHistory(node: string, key?: string) {
-    const params: Record<string, string> = { node }
-    if (key) params.key = key
-    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'record-history', params))
+  async function getRecordHistoryPage(node: string, key?: string, params: IndexerPageParams = {}) {
+    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'record-history', pageQuery({ node, key, ...params })))
+    return parsePage(payload, 'history', isIndexedResolverRecordHistoryEntry, 'record history')
+  }
 
-    if (!Array.isArray(payload) || !payload.every(isIndexedResolverRecordHistoryEntry)) {
-      throw new Error('Dusk Domains indexer returned an invalid record history response.')
-    }
-
-    return payload
+  async function getRecordHistory(node: string, key?: string, params: IndexerPageParams = {}) {
+    return (await getRecordHistoryPage(node, key, params)).history
   }
 
   async function getPrimaryName(endpoint: DuskEndpoint) {
@@ -253,34 +262,31 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
     return payload
   }
 
-  async function getNames(params: { owner?: string } = {}) {
-    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'names', params.owner ? { owner: params.owner } : {}))
-
-    if (!Array.isArray(payload) || !payload.every(isIndexedNameSummary)) {
-      throw new Error('Dusk Domains indexer returned an invalid name list response.')
-    }
-
-    return payload
+  async function getNamesPage(params: { owner?: string } & IndexerPageParams = {}) {
+    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'names', pageQuery(params)))
+    return parsePage(payload, 'names', isIndexedNameSummary, 'name list')
   }
 
-  async function getActivity(node: string) {
-    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'activity', { node }))
-
-    if (!Array.isArray(payload) || !payload.every(isActivityEntry)) {
-      throw new Error('Dusk Domains indexer returned an invalid activity response.')
-    }
-
-    return payload
+  async function getNames(params: { owner?: string } & IndexerPageParams = {}) {
+    return (await getNamesPage(params)).names
   }
 
-  async function getSubnames(parentNode: string) {
-    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'subnames', { parentNode }))
+  async function getActivityPage(node: string, params: IndexerPageParams = {}) {
+    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'activity', pageQuery({ node, ...params })))
+    return parsePage(payload, 'activity', isActivityEntry, 'activity')
+  }
 
-    if (!Array.isArray(payload) || !payload.every(isIndexedSubname)) {
-      throw new Error('Dusk Domains indexer returned an invalid subname list response.')
-    }
+  async function getActivity(node: string, params: IndexerPageParams = {}) {
+    return (await getActivityPage(node, params)).activity
+  }
 
-    return payload
+  async function getSubnamesPage(parentNode: string, params: IndexerPageParams = {}) {
+    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'subnames', pageQuery({ parentNode, ...params })))
+    return parsePage(payload, 'subnames', isIndexedSubname, 'subname list')
+  }
+
+  async function getSubnames(parentNode: string, params: IndexerPageParams = {}) {
+    return (await getSubnamesPage(parentNode, params)).subnames
   }
 
   async function getSubname(node: string) {
@@ -302,12 +308,13 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
     return payload
   }
 
-  async function getMarketplaceFixedSales() {
-    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'marketplace/fixed-sales', {}))
-    if (!Array.isArray(payload) || !payload.every(isIndexedMarketplaceFixedSale)) {
-      throw new Error('Dusk Domains indexer returned an invalid marketplace fixed-sale response.')
-    }
-    return payload
+  async function getMarketplaceFixedSalesPage(params: IndexerPageParams = {}) {
+    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'marketplace/fixed-sales', pageQuery(params)))
+    return parsePage(payload, 'fixedSales', isIndexedMarketplaceFixedSale, 'marketplace fixed-sale')
+  }
+
+  async function getMarketplaceFixedSales(params: IndexerPageParams = {}) {
+    return (await getMarketplaceFixedSalesPage(params)).fixedSales
   }
 
   async function getMarketplaceFixedSale(node: string) {
@@ -319,14 +326,13 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
     return payload
   }
 
-  async function getMarketplaceAuctions() {
-    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'marketplace/auctions', {}))
+  async function getMarketplaceAuctionsPage(params: IndexerPageParams = {}) {
+    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'marketplace/auctions', pageQuery(params)))
+    return parsePage(payload, 'auctions', isIndexedMarketplaceAuction, 'marketplace auction')
+  }
 
-    if (!Array.isArray(payload) || !payload.every(isIndexedMarketplaceAuction)) {
-      throw new Error('Dusk Domains indexer returned an invalid marketplace auction response.')
-    }
-
-    return payload
+  async function getMarketplaceAuctions(params: IndexerPageParams = {}) {
+    return (await getMarketplaceAuctionsPage(params)).auctions
   }
 
   async function getMarketplaceAuction(node: string) {
@@ -340,12 +346,13 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
     return payload
   }
 
-  async function getMarketplaceOffers(filters: { node?: string; buyerAuthority?: string } = {}) {
-    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'marketplace/offers', filters))
-    if (!Array.isArray(payload) || !payload.every(isIndexedMarketplaceOffer)) {
-      throw new Error('Dusk Domains indexer returned an invalid marketplace offer response.')
-    }
-    return payload
+  async function getMarketplaceOffersPage(filters: { node?: string; buyerAuthority?: string } & IndexerPageParams = {}) {
+    const payload = await getJson(fetcher, endpointUrl(baseUrl, 'marketplace/offers', pageQuery(filters)))
+    return parsePage(payload, 'offers', isIndexedMarketplaceOffer, 'marketplace offer')
+  }
+
+  async function getMarketplaceOffers(filters: { node?: string; buyerAuthority?: string } & IndexerPageParams = {}) {
+    return (await getMarketplaceOffersPage(filters)).offers
   }
 
   async function getMarketplaceOffer(node: string, buyerAuthority: string) {
@@ -396,27 +403,53 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
     return payload
   }
 
+  async function getAllNames({ owner, maxItems }: { owner: string; maxItems?: number }) {
+    if (!owner?.trim()) throw new Error('Complete name reads require an owner.')
+    return collectPages(async (params) => {
+      const page = await getNamesPage({ owner, ...params })
+      return { items: page.names, nextCursor: page.nextCursor }
+    }, maxItems)
+  }
+
+  async function getAllSubnames(parentNode: string, maxItems?: number) {
+    if (!parentNode.trim()) throw new Error('Complete subname reads require a parent node.')
+    return collectPages(async (params) => {
+      const page = await getSubnamesPage(parentNode, params)
+      return { items: page.subnames, nextCursor: page.nextCursor }
+    }, maxItems)
+  }
+
   return {
+    getAllNames,
+    getAllSubnames,
     getHealth,
     searchName,
     getCommitment,
     resolveForward,
     getRecords,
     getNodeRecords,
+    getNodeRecordsPage,
     getNodeRecord,
     getRecordHistory,
+    getRecordHistoryPage,
     getPrimaryName,
     getNameState,
     getNames,
+    getNamesPage,
     getActivity,
+    getActivityPage,
     getSubnames,
+    getSubnamesPage,
     getSubname,
     getMarketplaceConfig,
     getMarketplaceFixedSales,
+    getMarketplaceFixedSalesPage,
     getMarketplaceFixedSale,
     getMarketplaceAuctions,
+    getMarketplaceAuctionsPage,
     getMarketplaceAuction,
     getMarketplaceOffers,
+    getMarketplaceOffersPage,
     getMarketplaceOffer,
     getMarketplaceRefund,
     getTreasury,

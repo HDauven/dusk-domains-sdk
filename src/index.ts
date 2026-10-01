@@ -95,3 +95,5 @@ export type {
   PrimaryNameVerification,
   ResolvedName,
 } from './client/sdkTypes'
+
+export { INDEXER_COMPLETE_SET_CAP, type IndexerPage, type IndexerPageParams } from './indexer/indexerClient'
