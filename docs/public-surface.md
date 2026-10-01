@@ -1,116 +1,72 @@
-# Public SDK Surface
+# SDK surface
 
-Status: pre-production public boundary
+[package.json](../package.json) defines these exported entrypoints:
 
-The SDK has focused package entrypoints:
+| Import | Use |
+| --- | --- |
+| `@duskdomains/sdk` | Combined/direct/indexer clients, namehash, records, principals, manifests and projector helpers. |
+| `@duskdomains/sdk/writes` | Runtime-bound call builders, encoding, preparation, submission and confirmation. |
+| `@duskdomains/sdk/marketplace` | Fixed-sale, auction, offer/refund builders and indexed models. |
+| `@duskdomains/sdk/connect-app` | Dusk Connect app adapter without a runtime wallet-library dependency. |
+| `@duskdomains/sdk/event-catalog` | Plain JavaScript event families and contract topics. |
+| `@duskdomains/sdk/projection` | Plain JavaScript projection, decoded-event normalization and reserved-name policy, with types. |
+| `@duskdomains/sdk/write-proof` | Write-proof capture helpers. |
+| `@duskdomains/sdk/internal` | First-party lower-level helpers; not a stable third-party API. |
 
-```ts
-import { ... } from '@duskdomains/sdk'
-import { ... } from '@duskdomains/sdk/event-catalog'
-import { ... } from '@duskdomains/sdk/writes'
-import { ... } from '@duskdomains/sdk/connect'
-import { ... } from '@duskdomains/sdk/local-dev'
-import { ... } from '@duskdomains/sdk/write-proof'
-import { ... } from '@duskdomains/sdk/internal'
-```
+Browser wallet runtime creation and local wallet shims are repository-internal.
+The package does not export `connect` or `local-dev` subpaths.
 
-## Public Entry Point
+## Reads and writes
 
-The public entrypoint is for wallets, explorers, dApps and read-focused services.
+Start with [direct-read examples](examples/direct-onchain-reads.md) and the
+[trust model](integration-trust-model.md). The indexer client's `*Page` methods
+expose named arrays and `nextCursor`. Array-returning methods return one page.
+`getAllNames({ owner, maxItems })` and `getAllSubnames(parentNode, maxItems)`
+traverse scoped collections with a hard 10,000-item cap and fail on overflow or
+non-advancing cursors. See the [HTTP API](https://github.com/HDauven/dusk-domains-indexer/blob/main/docs/indexer-api.md).
 
-Stable-ish exports:
+Write builders produce call metadata; the configured wallet/transport signs and
+submits it. Paid builders derive exact deposits and reject Lux values above
+`Number.MAX_SAFE_INTEGER`. Canonical marketplace reads retain `u64` as `bigint`.
 
-- `createDuskDomainsClientFromManifest`
-- `createDuskDomainsClient`
-- `createDuskDomainsOnChainClient`
-- `createDuskDomainsIndexerClient`
-- `createDuskDomainsReadWriteClient`
-- `checkDuskDomainsIndexerCompatibilityFromHealth`
-- `namehash`, `namehashHex`
-- record helpers such as `createResolverRecord`, `getRecordDefinition` and `validateRecordValue`
-- principal display/normalization helpers
-- release-manifest helpers
-- indexed event envelope helpers and projector helpers
+The call surface includes `corePruneSubnameRuntimeCall({ node })` for expired
+subtrees, `routerIssueReservedNameRuntimeCall({ node, label, owner, manager,
+durationYears })` for router-operator issuance, and the two pause setters
+`routerSetRegistrationsPausedRuntimeCall({ paused })` and
+`marketplaceSetTradingPausedRuntimeCall({ paused })`. Runtime caller authority
+remains enforced by contracts. [Operator handovers](operator-handover.md) require
+acceptance by the proposed operator; treasury also changes its payout recipient.
 
-The public entrypoint must not require app components, React, browser-only globals, private deployment material, mnemonics, operator secrets or the Dusk Domains contract source tree.
+For referral input, await `isClaimableReferrer(principal)` for full Moonlight
+curve/subgroup validation. It lazily loads Noble. Builders and wire encoding use
+the synchronous `hasClaimableReferrerShape` predicate matching the contract's
+structural check. Structurally valid off-curve points pass that cheaper boundary.
+Failed full validation leaves attribution inactive in the frontend.
 
-`checkDuskDomainsIndexerCompatibilityFromHealth` is the release-manifest/indexer handshake helper. It validates API version, event schema version, route manifest, block lag, event history, deployment chain and core/treasury contract IDs when `/health` exposes them.
-
-## Event Catalog Entry Point
-
-The event catalog entrypoint is a Node-safe JavaScript export for standalone indexers and event decoders:
-
-```js
-import {
-  duskDomainsIndexedEventTypes,
-  isDuskDomainsIndexedEventType,
-} from '@duskdomains/sdk/event-catalog'
-```
-
-Use this entrypoint when plain Node must route decoded Dusk Domains events without compiling TypeScript source. Keep the catalog additive unless a contract redeploy intentionally changes the event schema.
-
-## Projection Entry Point
-
-`@duskdomains/sdk/projection` is a plain JavaScript entrypoint with TypeScript types:
+## Projection
 
 ```js
-import {
-  createProjectionState,
-  applyProjectionEvent,
-  createLifecycleEventProjector,
-  normalizeObservedEvent,
-  RESERVED_NAME_POLICIES,
-} from '@duskdomains/sdk/projection'
+import { createProjectionState, applyProjectionEvent, normalizeObservedEvent }
+  from '@duskdomains/sdk/projection'
 ```
 
-`normalizeObservedEvent` converts data-driver decoded payloads into camelCase event
-envelopes. `createProjectionState` and `applyProjectionEvent` maintain the maps used
-by persistent indexers, including record history and derived-state indexes.
-Callers provide event ordering, deduplication, journal identity (`meta.eventId`) and
-observation time (`meta.observedAt`). Activity uses that time or a timestamp in the
-event, and leaves it empty when neither is known; replay time is never substituted.
-Transport, storage and HTTP routing stay with
-the caller. `createLifecycleEventProjector` provides the existing SDK getter API
-on the same state engine. Its subname getters use wall-clock expiry; a server may
-derive a read view at a confirmed chain height from the mutable projection state.
+The caller supplies event order, deduplication, `meta.eventId` and observation
+time. Activity uses supplied event/observation time; replay time is not invented.
+`createLifecycleEventProjector` exposes getters over the same state engine; its
+subname getters use wall-clock expiry. Servers can derive reads at a confirmed
+chain height from mutable projection state. [Event semantics](indexer-events.md)
+are shared by the standalone indexer.
 
-Reserved labels and reasons derive from `RESERVED_NAME_POLICIES`.
-`duskDomainsContractEventTopics` from `@duskdomains/sdk/event-catalog` supplies the
-collector's router, core, treasury and marketplace topic lists.
+## Source and versions
 
-## Internal Entry Point
+`src/core` owns name rules, `contracts` call/wire shapes, `client` public clients,
+`onchain` canonical reads, `indexer` HTTP clients/types, `projection` shared
+JavaScript state, `runtime` configuration/manifests, `wallet` adapters, `writes`
+submission and `proof` proof helpers. Root files are entrypoint facades.
 
-The internal entrypoint is for first-party Dusk Domains app read models, indexer operators and deployment scripts that need lower-level helpers before they are promoted to a stable public API.
-
-Internal exports include:
-
-- low-level indexer/projector state helpers
-- runtime config helpers
-- name policy, reservation, record draft and primary-name status helpers
-- compatibility read clients and on-chain read helpers
-
-Internal exports may change before a public package release. Do not document them as third-party APIs unless they are promoted to the public entrypoint first.
-
-## Explicit First-Party Entry Points
-
-Use these only when the integration deliberately needs write or local tooling:
-
-- `@duskdomains/sdk/writes`: Dusk Connect write adapters, runtime-bound call builders, call metadata and transaction submission helpers.
-- `@duskdomains/sdk/local-dev`: local development wallet mock used by app and harnesses.
-- `@duskdomains/sdk/write-proof`: deployment/write proof capture and replay helpers.
-
-These entrypoints keep the public SDK readable without deleting first-party capabilities from the repository.
-
-## Promotion Rule
-
-Promote an internal helper only when all of these are true:
-
-- a wallet, explorer, dApp or standalone indexer needs it outside the app repo;
-- the helper can be explained without private contract-source assumptions;
-- it has focused tests in this package;
-- it does not expose operator custody, deployment secrets or preview-only write paths;
-- the change is recorded in `docs/release-versioning.md`.
-
-## Current Package Name
-
-The package is pre-production and scoped as `@duskdomains/sdk`. A later package-manager release can rename or republish it, but downstream code should currently depend on a specific Git commit or tag.
+SDK package version, contract deployment/source commit, artifact manifest and
+indexer revision are independent compatibility boundaries. A package version
+alone does not select a deployed contract. The build regenerates
+`src/indexer/events/indexerEventCatalog.mjs` from its TypeScript source; that file
+is committed for raw archive installs. LICENSE defines package licensing;
+manifest package labels do not prove publication of separate artifact/client packages.

@@ -1,186 +1,47 @@
 # Dusk Domains SDK
 
-TypeScript SDK for resolving and integrating `.dusk` domains.
+TypeScript clients, contract-call builders and shared event projection for `.dusk`
+names. Direct reads use DuskDS contracts; indexer reads provide search, lists,
+history and dashboards.
 
-The SDK gives wallets, explorers, dApps and indexers a stable way to work with Dusk Domains without depending on the frontend repository.
+## Use
 
-## Install
-
-```bash
-deno add jsr:@duskdomains/sdk
-npx jsr add @duskdomains/sdk
-```
-
-For npm projects, install the JSR npm compatibility package with an alias:
-
-```json
-{
-  "dependencies": {
-    "@duskdomains/sdk": "npm:@jsr/duskdomains__sdk@^0.1.0"
-  }
-}
-```
-
-## Usage
+The package is `@duskdomains/sdk`. Pin a version or exact source revision
+compatible with the deployment.
+The package exports TypeScript sources; plain Node projection and event catalog
+entrypoints are also available.
 
 ```ts
-import { createDuskDomainsClientFromManifest } from '@duskdomains/sdk'
+import { namehashHex } from '@duskdomains/sdk'
 
-const domains = await createDuskDomainsClientFromManifest({
-  manifestUrl: 'https://artifacts.example/dusk-domains/testnet/manifest.json',
-  indexerUrl: 'https://indexer.example',
-  app: duskConnectApp,
-})
-
-const record = await domains.resolveName('aurora.dusk', 'moonlight_address')
+const node = namehashHex('aurora.dusk')
 ```
 
-Use the public entrypoint for third-party integrations:
-
-```ts
-import { namehashHex, createDuskDomainsClientFromManifest } from '@duskdomains/sdk'
-```
-
-## Read Paths
-
-The SDK supports two read paths:
-
-- On-chain reads for canonical ownership, records, primary-name checks and fee config.
-- Indexer reads for search, history, My Domains, subdomains, treasury views,
-  referral dashboards and marketplace discovery.
-
-Value-bearing flows should verify indexed discovery with canonical reads before treating a domain as authoritative.
-
-`getCurrentBlockHeight()` uses the direct client's configured node-height
-reader. Applications should combine it with direct ownership and order reads
-immediately before preparing lifecycle-sensitive writes. Indexer height is for
-discovery and display, not signing authorization.
-
-The marketplace entrypoint exposes fixed-sale, English-auction, offer and
-aggregate-refund call builders plus matching indexed read models:
-
-```ts
-import {
-  MARKETPLACE_MIN_AMOUNT_LUX,
-  marketplacePlaceBidRuntimeCall,
-  marketplaceReadAuctionCall,
-} from '@duskdomains/sdk/marketplace'
-```
-
-Paid calls derive their exact DUSK deposit from typed call metadata.
-Marketplace writes remain runtime-bound and require a matching core, treasury
-and marketplace deployment plus Forge data drivers.
-
-JavaScript write builders reject Lux amounts above `Number.MAX_SAFE_INTEGER`
-(about 9,007,199 DUSK) instead of risking JSON precision loss. Canonical reads
-retain the full contract `u64` as `bigint`.
-
-Subname creation takes an expiry policy; v1 has no revocation policy. Inheriting
-subnames follow root renewal, while fixed subnames retain their expiry. To reclaim
-capacity for an expired subtree, its active parent owner or manager can submit
-`corePruneSubnameRuntimeCall({ node })` from `@duskdomains/sdk/writes`. The call routes
-to the registry holding the subname. Recreating the same expired name also clears its
-old records, primary name, and descendants and reuses its capacity slot.
-
-## Entrypoints
-
-- `@duskdomains/sdk`: public client, records, namehashing, principals and release manifests.
-- `@duskdomains/sdk/marketplace`: marketplace constants, call builders and indexed models.
-- `@duskdomains/sdk/event-catalog`: event families and data-driver topics grouped by contract.
-- `@duskdomains/sdk/projection`: shared projectors, reserved-name policy and decoded-event normalization for plain Node and TypeScript.
-
-`@duskdomains/sdk/connect-app` exports `createDuskDomainsConnectApp` and its transport types. It adapts direct contract methods or the request fallback, preserving prepared transaction payloads and wallet display context, without a runtime dependency on a wallet library.
-
-Browser wallet creation/runtime helpers and local development shims remain repository-internal.
-
-## Source Layout
-
-```text
-src/
-  client/       public and combined SDK clients
-  contracts/    contract call builders, wire args and wallet display context
-  core/         name policy, namehashing, records, principals and domain helpers
-  dev/          local development wallet utilities
-  indexer/      event types, indexer client and read-model helpers
-  projection/   shared event projection and decoder implementation
-  onchain/      direct contract read client and decoders
-  proof/        browser write proof capture
-  runtime/      runtime config and release manifests
-  wallet/       Dusk Connect adapters
-  writes/       transaction tracking and write confirmation helpers
-```
-
-Root files are package entrypoint facades. Implementation code should live in the folders above.
+[Direct reads and primary-name verification](docs/examples/direct-onchain-reads.md)
+show client setup, including the current chain-height reader needed for routing.
 
 ## Development
 
-```bash
-npm install
+Use Node 24. From this repository's root:
+
+```sh
+npm ci
 npm test
-npm run typecheck
 npm run build
+npm run typecheck
+git diff --exit-code -- src/indexer/events/indexerEventCatalog.mjs
 ```
 
-`npm run build` also regenerates the committed plain-Node event catalog from
-`src/indexer/events/indexerEventCatalog.ts`. Keep its `.mjs` output committed for
-raw GitHub archive installs; the public `.d.mts` declarations remain unchanged.
+The build regenerates the committed plain-Node event catalog. Tests include the
+check for missing npm scripts in tracked Markdown.
 
-## License
+## Documentation
 
-MIT
+- [Entrypoints, writes and version boundaries](docs/public-surface.md)
+- [Integration trust model](docs/integration-trust-model.md)
+- [Shared event schema and projection](docs/indexer-events.md)
+- [Operator handover](docs/operator-handover.md)
+- [Protocol standard](https://github.com/HDauven/dusk-domains-protocol/blob/main/docs/dusk-domains-standard.md)
+- [Indexer API and pagination](https://github.com/HDauven/dusk-domains-indexer/blob/main/docs/indexer-api.md)
 
-## Referrers
-
-Two exported predicates serve different boundaries:
-
-- `hasClaimableReferrerShape(principal): boolean` is the cheap, synchronous check
-  used by registration call builders and wire encoding. It mirrors the contract:
-  a nonzero 32-byte contract ID, or exactly 96 Moonlight bytes with compression
-  set, infinity clear and both coordinates below the BLS12-381 modulus. Phoenix,
-  raw 193-byte keys and malformed encodings are dropped without changing the fee.
-  This check accepts structurally valid off-curve and out-of-subgroup points.
-- `isClaimableReferrer(principal): Promise<boolean>` belongs at referral input,
-  before making attribution active. It also validates the Moonlight curve,
-  subgroup and non-identity point. Noble loads lazily only for structurally valid
-  Moonlight referrals; empty referrals, contracts and Phoenix skip the import.
-
-Call builders, `toDuskDomainWireArgs` and `encodeDuskDomainCall` remain synchronous:
-
-```ts
-const referrer = await isClaimableReferrer(inputPrincipal) ? inputPrincipal : null
-const call = coreCompleteRegistrationRuntimeCall({ ...registrationArgs, referrer })
-const encoded = encodeDuskDomainCall(driver, call)
-```
-
-A BLS module-load failure rejects full input validation. It does not affect
-building or encoding calls. The frontend keeps attribution inactive until full
-validation succeeds. General principal parsing still supports other principal uses.
-
-## Reserved issuance
-
-`routerIssueReservedNameRuntimeCall` (from `@duskdomains/sdk/writes`) takes `node`, `label`, `owner`, `manager` and `durationYears`. Only the current router operator can submit it. It has no deposit, referrer or commitment; labels must be in the target registry's compiled reserved list. Issued names renew and transfer normally.
-
-The `reserved_name_issued` event supplements normal registration/ownership events. Lifecycle projections expose `issuedAsReserved` and `reservedIssuance` (typed operator, registry, issuance time and block height). The SDK's official-profile `saleLocked` flag remains client policy metadata, with no contract-level restriction.
-
-## Indexer pagination
-
-Use `getNamesPage({ owner, limit, cursor })` (and the other `*Page` methods) to
-read a named list plus `nextCursor`. The default page size is 50, capped at 200.
-Existing array-returning methods read one page. During a staged rollout, legacy
-bare arrays over 200 items remain accepted; complete-set caps still apply. `getAllNames({ owner, maxItems })`
-and `getAllSubnames(parentNode, maxItems)` traverse scoped collections, throw on
-incomplete/cyclic responses, and enforce a 10,000-item hard cap. See
-[the API contract](docs/indexer-api.md) for every route and deployment settings.
-
-## Operator pauses
-
-Operator pauses use `routerSetRegistrationsPausedRuntimeCall({ paused })` and
-`marketplaceSetTradingPausedRuntimeCall({ paused })`. Router `config` exposes
-`registrations_paused` (`RouterPauseResponse`); marketplace `read_config` exposes
-`config.trading_paused` (`MarketplacePauseResponse`). The event catalog includes
-`registrations_paused_changed` and `trading_paused_changed`, with the operator,
-new value and block height. Indexed pool/marketplace reads expose
-`registrationsPaused` / `tradingPaused`, and health optionally includes
-`pause: { registrationsPaused, tradingPaused }` for compatible older indexers.
-Repeated setter values are authorized no-ops. Pauses do not block claims, refunds,
-ended-auction settlement, custody cleanup or ordinary name management.
+Licensed under [MIT](LICENSE).

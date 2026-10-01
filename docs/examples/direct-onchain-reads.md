@@ -1,15 +1,8 @@
-# Direct On-Chain Reads
+# Direct reads and primary-name display
 
-Status: MVP integration example
-
-Dusk Domains has two read paths:
-
-- Direct on-chain reads for canonical known-name lookups.
-- Indexer reads for search, lists, history, and discovery.
-
-Use direct reads when trust matters and the caller already knows the name or endpoint to check.
-
-## Create a Direct-Read Client
+Use a Dusk Connect app and a `contracts` map containing the deployed router,
+core and treasury presets with matching IDs and data-driver URLs. The transport
+routes names through the router to their home registry.
 
 ```ts
 import {
@@ -19,78 +12,48 @@ import {
 
 const domains = createDuskDomainsOnChainClient({
   read: createDuskDomainsOnChainReadTransport(duskConnectApp, contracts),
+  currentBlockHeight: readCurrentNodeHeight,
 })
 ```
 
-The transport calls the deployed core contract read entrypoints:
+`duskConnectApp`, `contracts` and `readCurrentNodeHeight` are supplied by the
+integrating application. The height callback returns a current nonnegative safe
+integer from the configured node. Without it, active routing returns
+`lifecycle_unavailable`.
 
-- `get_name`
-- `read_record`
-- `read_primary_name`
-- `pending_commitment`
-- `fee_config`
-
-## Owner Lookup
+## Resolve a record
 
 ```ts
-const owner = await domains.getNameOwner('aurora.dusk')
+const result = await domains.resolveName('aurora.dusk', 'moonlight_address')
+if (!result.ok) throw new Error(result.error.message)
 
-if (!owner.ok) {
-  throw new Error(owner.error.message)
-}
-
-console.log(owner.value)
+showRecipient(result.value.record.value)
 ```
 
-This does not require the Dusk Domains indexer.
+`resolveName` checks active lifecycle and the requested record. `getNameOwner`
+returns stored ownership; it does not alone prove an active registration.
+`getRecords` reads a bounded configured key list, not arbitrary enumeration.
+Use an explicit key for dynamic `text.*` or `service_endpoint.*` records.
 
-## Record Lookup
+## Verify a wallet display name
 
 ```ts
-const address = await domains.getRecord('aurora.dusk', 'moonlight_address')
+const endpoint = { type: 'moonlight_address', value: moonlightPublicKey } as const
+const result = await domains.verifyPrimaryName(endpoint)
 
-if (!address.ok) {
-  throw new Error(address.error.message)
-}
-
-sendTo(address.value.value)
+renderRecipient({
+  label: result.ok ? result.value.primaryName : endpoint.value,
+  raw: endpoint.value,
+  verified: result.ok,
+})
 ```
 
-`dusk_public_address` is accepted as an SDK alias for `moonlight_address`. The canonical contract record key remains `moonlight_address`.
+`moonlightPublicKey` is the real base58-encoded public key from the wallet.
+Verification reads the primary mapping, checks active lifecycle, then compares
+the forward record for the same endpoint type and value. Phoenix endpoints are
+not v1 public primary names. Contract, asset and EVM records are separate
+metadata types, never default Dusk wallet recipients.
 
-## Primary-Name Verification
-
-```ts
-const endpoint = {
-  type: 'moonlight_address',
-  value: 'dusk1...',
-} as const
-
-const verification = await domains.verifyPrimaryName(endpoint)
-
-if (verification.ok) {
-  renderName(verification.value.primaryName)
-} else {
-  renderAddress(endpoint.value)
-}
-```
-
-Verification uses only contract reads:
-
-1. `read_primary_name(endpoint)` to get the candidate name.
-2. `read_record(node, endpoint.type)` to prove the name points back to the same endpoint.
-
-Do not display reverse records without the forward check.
-
-## What Still Needs The Indexer
-
-Direct contract reads intentionally do not replace the indexer. Use the indexer for:
-
-- Search.
-- My Domains.
-- Subdomain lists.
-- Activity and record history.
-- Recent-change warnings.
-- Referral and treasury dashboards.
-
-The on-chain `getRecords(name)` helper reads a bounded set of known keys. It is not arbitrary record enumeration.
+Search, owner lists, subname lists and history use the indexer. See the
+[integration trust model](../integration-trust-model.md) for fallback behavior
+and [public surface](../public-surface.md) for write builders.
