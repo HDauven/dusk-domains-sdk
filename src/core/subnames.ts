@@ -1,6 +1,8 @@
 import { namehashHex } from './namehash'
 import { validateName } from './namePolicy'
 
+export const MAX_TAKE_BACK_SUBNAMES = 256
+
 export type SubnameExpiryPolicy = 'inherits_parent' | 'fixed_before_parent'
 export type SubnameStatus = 'active' | 'expired'
 

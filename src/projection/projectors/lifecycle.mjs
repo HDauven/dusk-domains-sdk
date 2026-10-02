@@ -13,14 +13,21 @@ import {
 export function applyLifecycleEvent(store, event, meta, fallbackTimestamp) {
   const node = normalizeNode(event.node)
   const current = store.namesByNode.get(node)
-  const canonicalName = 'label' in event ? `${event.label}.dusk` : current?.canonicalName ?? node
+  const subname = store.subnamesByNode.get(node)
+  const canonicalName = 'label' in event ? `${event.label}.dusk` : subname?.canonicalName ?? current?.canonicalName ?? node
 
-  const lifecycle = reduceLifecycleEvent(event, current, canonicalName)
-  // An authority change gives a subname a name row, which starts with the subname's grace end.
-  const subname = current ? null : store.subnamesByNode.get(node)
-  store.namesByNode.set(node, subname
-    ? { ...lifecycle, graceEndsAt: subname.graceEndsAt ?? null, graceEndsAtBlockHeight: subname.graceEndsAtBlockHeight ?? null }
-    : lifecycle)
+  if (subname && (event.type === 'name_owner_changed' || event.type === 'resolver_changed')) {
+    const updated = { ...subname, resolver: event.resolver, lastEventType: event.type,
+      ...(event.type === 'name_owner_changed' ? { owner: event.owner, manager: event.manager } : {}) }
+    store.subnamesByNode.set(node, updated)
+    store.subnamesByCanonical?.set(canonicalName, updated)
+    store.subnamesByParent.set(subname.parentNode, (store.subnamesByParent.get(subname.parentNode) ?? [])
+      .map(candidate => candidate.node === node ? updated : candidate))
+    store.namesByNode.delete(node)
+  } else {
+    store.namesByNode.set(node, reduceLifecycleEvent(event, current, canonicalName))
+  }
+  if (event.type === 'name_owner_changed' && event.dataCleared) clearNodeIdentity(store, node)
   store.activityByNode.set(node, [
     activityEntry({
       eventType: lifecycleActivityType(event.type),
@@ -36,7 +43,7 @@ export function applyLifecycleEvent(store, event, meta, fallbackTimestamp) {
 }
 
 // Moved records keep their content; the name now resolves through the resolver holding them.
-// A subname whose authorities changed has a name row too, and both follow the move.
+// Keep the subname indexes aligned with its resolver.
 export function applyRecordsMoved(store, event, meta, fallbackTimestamp) {
   const node = normalizeNode(event.node)
   if (store.namesByNode.has(node)) {
@@ -48,12 +55,12 @@ export function applyRecordsMoved(store, event, meta, fallbackTimestamp) {
   const moved = { ...subname, resolver: event.toResolver }
   const parentNode = normalizeNode(subname.parentNode)
   store.subnamesByNode.set(node, moved)
+  store.subnamesByCanonical?.set(normalizeName(subname.name), moved)
   const siblings = store.subnamesByParent.get(parentNode) ?? []
   store.subnamesByParent.set(parentNode, siblings.map((candidate) => (candidate.node === node ? moved : candidate)))
 }
 
-// Releasing a name, or registering a lapsed one again, also drops the name rows its subnames got
-// from authority changes.
+// Clear descendants and any legacy lifecycle rows when a namespace is released.
 export function clearReleasedName(store, node) {
   for (const staleNode of clearNodeDerivedState({ ...store, node })) {
     if (staleNode !== node) store.namesByNode.delete(staleNode)
@@ -141,7 +148,7 @@ function reduceLifecycleEvent(event, current, canonicalName) {
     const retained = event.type === 'name_registered' ? null : base
     return {
       ...base,
-      ...(event.type === 'name_registered' ? { issuedAsReserved: false, reservedIssuance: null } : {}),
+      ...(event.type === 'name_registered' ? { issuedAsReserved: false, reservedIssuance: null, namespacePurchase: null } : {}),
       ...(event.type === 'name_renewed' ? {} : { canonicalName, owner: event.owner }),
       expiresAt: event.expiresAt,
       graceEndsAt: event.graceEndsAt,
@@ -169,6 +176,7 @@ function reduceLifecycleEvent(event, current, canonicalName) {
   if (event.type === 'name_owner_changed') {
     return {
       ...base,
+      namespacePurchase: base.owner === event.owner || base.namespacePurchase?.buyer === event.owner ? base.namespacePurchase : null,
       owner: event.owner,
       manager: event.manager,
       resolverId: event.resolver,
@@ -184,4 +192,12 @@ function reduceLifecycleEvent(event, current, canonicalName) {
     resolverId: event.resolver,
     lastEventType: event.type,
   }
+}
+
+function clearNodeIdentity(store, node) {
+  for (const record of store.recordsByNode.get(node) ?? []) store.recordsByNodeKey?.delete(`${node}\u0000${record.key}`)
+  store.recordsByNode.delete(node)
+  store.controllersByNode.delete(node)
+  for (const key of store.reverseKeysByNode.get(node) ?? []) store.reverseByEndpoint.delete(key)
+  store.reverseKeysByNode.delete(node)
 }

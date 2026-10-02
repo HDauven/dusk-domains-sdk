@@ -14,6 +14,7 @@ import {
   isCoreSetPrimaryNameRuntimeArgs,
   isCoreSetRecordSenderRuntimeArgs,
   isCoreUpdateAuthoritiesRuntimeArgs,
+  isCoreTakeBackSubnamesRuntimeArgs,
 } from './callArgGuards'
 import {
   formatLux,
@@ -82,10 +83,21 @@ export function decodedCoreDuskDomainContext(call: DuskDomainCallMetadata): Dusk
     }
   }
 
+  if (call.functionName === 'remove_subname_runtime' && isPoolNodeArgs(call.args)) {
+    return { title: 'Remove subname', description: 'Remove this subname and every name below it, including their records and primary names.',
+      fields: [{ label: 'Subname reference', value: call.args.node }] }
+  }
+  if (call.functionName === 'take_back_subnames_runtime' && isCoreTakeBackSubnamesRuntimeArgs(call.args)) {
+    return { title: `Take back ${call.args.nodes.length} subnames`, description: 'Reassign these subnames. Changing an owner or manager always clears that name’s records and primary name.',
+      fields: [{ label: 'Ancestor reference', value: call.args.node }, { label: 'Owner authority', value: call.args.owner }, { label: 'Manager authority', value: call.args.manager }] }
+  }
+
   if (call.functionName === 'update_authorities_runtime' && isCoreUpdateAuthoritiesRuntimeArgs(call.args)) {
     return {
       title: 'Update domain authorities',
-      description: 'Transfer owner rights or replace the manager for this domain.',
+      description: call.args.clearRecords
+        ? 'Change authorities and clear this name’s records and primary name.'
+        : 'Transfer owner rights or replace the manager. An ancestor changing another holder’s owner or manager always clears the subname’s records and primary name.',
       fields: [
         { label: 'Domain reference', value: call.args.node },
         { label: 'Owner authority', value: call.args.owner },

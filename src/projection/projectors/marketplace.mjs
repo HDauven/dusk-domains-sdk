@@ -86,6 +86,15 @@ export function applyMarketplaceEvent(store, event, meta, fallbackTimestamp) {
     return result
   }
 
+  const buyer = event.type === 'domain_auction_settled' && !event.domainExpired ? event.winnerAuthority
+    : ['domain_fixed_sale_filled', 'domain_offer_accepted'].includes(event.type) ? event.buyerAuthority : null
+  if (buyer && store.namesByNode.has(node)) {
+    const current = store.namesByNode.get(node)
+    store.namesByNode.set(node, {
+      ...current, namespacePurchase: { seller: normalizedHex(event.sellerAuthority), buyer: normalizedHex(buyer) },
+    })
+  }
+
   if (event.type === 'domain_fixed_sale_opened') {
     const marketplaceContractId = normalizedHex(meta.contractId)
     store.marketplaceFixedSalesByNode.set(node, {

@@ -32,7 +32,7 @@ export function normalizeObservedEvent({
   const eventHeight = numericBlockHeight([
     'created_at', 'updated_at', 'opened_at', 'closed_at', 'filled_at',
     'placed_at', 'cancelled_at', 'settled_at', 'accepted_at', 'claimed_at',
-    'observed_at', 'released_at', 'pruned_at', 'issued_at',
+    'observed_at', 'released_at', 'pruned_at', 'removed_at', 'issued_at',
   ].map(key => event[key]).find(value => value != null) ?? event.record?.updated_at ?? event.config?.updated_at)
   const anchor = eventHeight ?? numericBlockHeight(observedBlockHeight)
   const lifecycleValueToIso = (value, time, seconds) => blockHeightToIso(value, time, seconds, anchor)
@@ -164,6 +164,7 @@ export function normalizeObservedEvent({
     return {
       event: {
         type: 'name_owner_changed',
+        dataCleared: event.data_cleared === true,
         node: bytesToHex(event.node),
         actor: bytesToHex(event.actor),
         previousOwner: bytesToHex(event.previous_owner),
@@ -211,6 +212,12 @@ export function normalizeObservedEvent({
       },
       meta,
     }
+  }
+
+  if (eventName === 'subname_removed') {
+    return { event: { type: 'subname_removed', parentNode: bytesToHex(event.parent_node),
+      node: bytesToHex(event.node), name: event.name, actor: bytesToHex(event.actor),
+      removedAt: lifecycleValueToIso(event.removed_at, observedAt, targetBlockSeconds) }, meta }
   }
 
   if (eventName === 'subname_pruned') {

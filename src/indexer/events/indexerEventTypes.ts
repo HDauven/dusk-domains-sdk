@@ -73,6 +73,7 @@ export type NameLifecycleEvent =
     }
   | {
       type: 'name_owner_changed'
+      dataCleared?: boolean
       node: string
       actor: string
       previousOwner: string | null
@@ -133,6 +134,7 @@ export type ReverseRegistryEvent = {
 }
 
 export type SubnameRegistryEvent =
+  | { type: 'subname_removed'; parentNode: string; node: string; name: string; actor: string; removedAt: string }
   | {
       type: 'subname_created'
       parentNode: string

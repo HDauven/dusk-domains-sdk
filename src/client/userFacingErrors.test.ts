@@ -70,3 +70,11 @@ it('explains the reservation cap even inside a runtime rejection', () => {
   expect(userFacingErrorMessage(new Error('Transaction rejected: runtime panic: DuskDomains: pending commitment limit reached (16)')))
     .toBe('This wallet has 16 pending reservations. Open My names to finish a reservation, or wait for one to expire before reserving another.')
 })
+
+ it.each([
+  ['DuskDomains: take-back batch must contain 1 to 256 subnames', 'Choose between 1 and 256 distinct subnames to take back.'],
+  ['DuskDomains: active ancestor authority required', 'Connect the owner or manager of an active ancestor.'],
+  ['DuskDomains: name is outside ancestor namespace', 'Every selected subname must be below the name you control.'],
+])('explains namespace error %s', (message, expected) => {
+  expect(userFacingErrorMessage(new Error(message))).toBe(expected)
+})

@@ -1,3 +1,4 @@
+import { MAX_TAKE_BACK_SUBNAMES } from '../core/subnames'
 import type {
   CoreClearPrimaryNameRuntimeArgs,
   CoreClearRecordSenderRuntimeArgs,
@@ -21,6 +22,7 @@ import type {
   CoreSetRecordSenderRuntimeArgs,
   RouterSetReferralConfigRuntimeArgs,
   CoreUpdateAuthoritiesRuntimeArgs,
+  CoreTakeBackSubnamesRuntimeArgs,
   MarketplaceAuctionNodeArgs,
   MarketplaceBuyFixedSaleRuntimeArgs,
   MarketplaceClaimRefundRuntimeArgs,
@@ -114,8 +116,16 @@ export function isCoreUpdateAuthoritiesRuntimeArgs(value: unknown): value is Cor
     isRecord(value) &&
     typeof value.node === 'string' &&
     typeof value.owner === 'string' &&
-    typeof value.manager === 'string'
+    typeof value.manager === 'string' &&
+    (value.clearRecords === undefined || typeof value.clearRecords === 'boolean')
   )
+}
+
+export function isCoreTakeBackSubnamesRuntimeArgs(value: unknown): value is CoreTakeBackSubnamesRuntimeArgs {
+  return isCoreUpdateAuthoritiesRuntimeArgs(value) && 'nodes' in value
+    && Array.isArray(value.nodes) && value.nodes.length > 0 && value.nodes.length <= MAX_TAKE_BACK_SUBNAMES
+    && value.nodes.every((node: unknown) => typeof node === 'string')
+    && new Set(value.nodes.map((node: string) => node.toLowerCase().replace(/^0x/u, ''))).size === value.nodes.length
 }
 
 export function isCoreCreateSubnameRuntimeArgs(value: unknown): value is CoreCreateSubnameRuntimeArgs {

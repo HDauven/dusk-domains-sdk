@@ -20,7 +20,7 @@ const routerContract = {
 }
 
 describe('Dusk Domains indexer event decoder', () => {
-  it('decodes v1 subname payloads and rejects removed events', () => {
+  it('decodes creation, expired pruning, removal and take-back payloads', () => {
     const args = {
       parent_node: bytes(1), node: bytes(2), parent_name: 'acme.dusk', name: 'pay.acme.dusk',
       label: 'pay', actor: bytes(3), owner: bytes(3), manager: bytes(4), resolver: bytes(0),
@@ -31,9 +31,21 @@ describe('Dusk Domains indexer event decoder', () => {
     expect(created.event).not.toHaveProperty('revocationPolicy')
     const pruned = normalizeObservedEvent({ contract, observedAt, eventName: 'subname_pruned', event: { ...args, created_at: undefined, pruned_at: 100 } })
     expect(pruned).toMatchObject({ event: { type: 'subname_pruned', node: hex(2), parentNode: hex(1), prunedAt: observedAt }, meta: { blockHeight: 100 } })
+    const removed = normalizeObservedEvent({ contract, observedAt, eventName: 'subname_removed', event: { ...args, created_at: undefined, removed_at: 100 } })
+    expect(removed.event).toMatchObject({ type: 'subname_removed', node: hex(2), parentNode: hex(1), removedAt: observedAt })
+    const taken = normalizeObservedEvent({ contract, observedAt, eventName: 'name_owner_changed', event: { ...args, data_cleared: true, previous_owner: bytes(4) } })
+    expect(taken.event).toMatchObject({ type: 'name_owner_changed', dataCleared: true })
     for (const eventName of ['subname_revoked', 'subname_delegated']) {
       expect(normalizeObservedEvent({ contract, observedAt, eventName, event: args })).toBeNull()
     }
+  })
+
+  it.each([undefined, false, true])('decodes root transfer clearing %s', clear => {
+    const result = normalizeObservedEvent({ contract, observedAt, eventName: 'name_owner_changed', event: {
+      node: bytes(1), actor: bytes(2), previous_owner: bytes(2), owner: bytes(3), manager: bytes(3),
+      resolver: bytes(0), expires_at: 100, ...(clear === undefined ? {} : { data_cleared: clear }),
+    } })
+    expect(result.event).toMatchObject({ type: 'name_owner_changed', owner: hex(3), manager: hex(3), dataCleared: clear === true })
   })
 
   it('rejects u64 values that JavaScript cannot represent exactly', () => {

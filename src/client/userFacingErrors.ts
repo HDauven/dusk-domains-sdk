@@ -7,6 +7,12 @@ export function userFacingErrorMessage(error: unknown, fallback: string = defaul
 export function userFacingMessageFromText(message: string | undefined, fallback: string = defaultErrorMessage): string {
   const trimmed = String(message ?? '').trim()
   if (!trimmed) return ''
+  if (/take-back batch|take-back requires/i.test(trimmed)) return 'Choose between 1 and 256 distinct subnames to take back.'
+  if (/outside ancestor namespace/i.test(trimmed)) return 'Every selected subname must be below the name you control.'
+  if (/active ancestor authority required/i.test(trimmed)) return 'Connect the owner or manager of an active ancestor.'
+  if (/active namespace authority required/i.test(trimmed)) return 'Connect the owner or manager of this name or an active ancestor.'
+  if (/owner or manager authorization required/i.test(trimmed)) return 'Connect the owner or manager of this name.'
+  if (/duplicate subname/i.test(trimmed)) return 'Select each subname only once.'
   if (/close the marketplace listing before renewing/i.test(trimmed)) return 'Close the marketplace listing before renewing this name.'
   if (isPendingCommitmentLimitMessage(trimmed)) return 'This wallet has 16 pending reservations. Open My names to finish a reservation, or wait for one to expire before reserving another.'
   if (isReadOnlyWalletMessage(trimmed)) return 'This wallet can preview domains but cannot submit transactions.'

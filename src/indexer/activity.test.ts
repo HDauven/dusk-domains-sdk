@@ -24,6 +24,7 @@ describe('Dusk Domains activity entries', () => {
       ['primary_name', 'Primary domain set'],
       ['subname_created', 'Subdomain created'],
       ['subname_pruned', 'Expired subdomain pruned'],
+      ['subname_removed', 'Subname removed'],
       ['domain_fixed_sale_opened', 'Listed for sale'],
       ['domain_fixed_sale_closed', 'Sale closed'],
       ['domain_fixed_sale_filled', 'Domain sold'],

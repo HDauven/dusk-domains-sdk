@@ -111,7 +111,7 @@ describe('Dusk Domains indexer kit', () => {
     expect(projector.getNameByNode(subnode)).toBeNull()
   })
 
-  it('moves both views of a subname whose authorities changed', () => {
+  it('moves the subname resolver after an authority change', () => {
     const projector = createDuskDomainsProjector()
     const [node, subnode, owner, manager, fromResolver, toResolver] = ['12', '13', '14', '15', '21', '22'].map((byte) => `0x${byte.repeat(32)}`)
     const expiresAt = '2099-06-27T00:00:00.000Z'
@@ -139,7 +139,7 @@ describe('Dusk Domains indexer kit', () => {
     ] as const
     for (const event of events) applyDuskDomainsIndexedEvent(projector, { event, meta: { txId: `tx-${event.type}` } })
 
-    expect(projector.getNameByNode(subnode)?.resolverId).toBe(toResolver)
+    expect(projector.getNameByNode(subnode)).toBeNull()
     expect(projector.getSubnameByNode(subnode)?.resolver).toBe(toResolver)
     expect(projector.getSubnamesByParent(node)).toMatchObject([{ node: subnode, resolver: toResolver }])
   })

@@ -46,6 +46,8 @@ export const DUSK_DOMAINS_CONTRACTS: DuskDomainContractMap = {
       clear_primary_name_runtime: 'clear_primary_name_runtime(ClearPrimaryNameRuntime)',
       create_subname_runtime: 'create_subname_runtime(CreateSubnameRuntime)',
       prune_subname_runtime: 'prune_subname_runtime(PruneSubnameRuntime)',
+      remove_subname_runtime: 'remove_subname_runtime(RemoveSubnameRuntime)',
+      take_back_subnames_runtime: 'take_back_subnames_runtime(TakeBackSubnamesRuntime)',
       get_name: 'get_name(GetName)',
       read_record: 'read_record(ReadRecord)',
       read_primary_name: 'read_primary_name(ReadPrimaryName)',

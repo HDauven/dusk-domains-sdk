@@ -36,6 +36,7 @@ export const reverseEventTypes = [
 export const subnameEventTypes = [
   'subname_created',
   'subname_pruned',
+  'subname_removed',
 ] as const
 
 /** Event types emitted by treasury intake, claims and operator changes. */

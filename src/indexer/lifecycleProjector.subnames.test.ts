@@ -366,7 +366,7 @@ describe('Dusk Domains lifecycle event projector subnames', () => {
     expect(projector.getSubnameByNode(belowFixedNode)?.parentExpiresAt).not.toBe(renewed.expiresAt)
   })
 
-  it('renews the name row an authority change gave an inheriting subname', () => {
+  it('renews an inheriting subname after an authority change without creating a root row', () => {
     const projector = createLifecycleEventProjector()
     const rootNode = `0x${'58'.repeat(32)}`
     const childNode = `0x${'59'.repeat(32)}`
@@ -377,7 +377,7 @@ describe('Dusk Domains lifecycle event projector subnames', () => {
     projector.apply(subnameAuthoritiesChanged(childNode, '2040-06-17T00:00:00.000Z', 1_000))
     projector.applySubname(subnameCreated(childNode, nestedNode, 'desk.settlement.acme.dusk', 'inherits_parent', '2040-06-17T00:00:00.000Z', 1_000))
 
-    for (const lifecycle of [projector.getNameByNode(childNode), projector.getSubnameByNode(nestedNode)]) {
+    for (const lifecycle of [projector.getSubnameByNode(childNode), projector.getSubnameByNode(nestedNode)]) {
       expect(lifecycle).toMatchObject({
         graceEndsAt: '2040-07-17T00:00:00.000Z',
         graceEndsAtBlockHeight: 1_300,
@@ -386,7 +386,7 @@ describe('Dusk Domains lifecycle event projector subnames', () => {
 
     projector.apply(rootRenewed(rootNode))
 
-    expect(projector.getNameByNode(childNode)).toMatchObject(renewed)
+    expect(projector.getNameByNode(childNode)).toBeNull()
     expect(projector.getSubnameByNode(childNode)).toMatchObject(renewed)
     expect(projector.getSubnameByNode(nestedNode)).toMatchObject(renewed)
   })

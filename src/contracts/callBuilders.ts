@@ -22,6 +22,7 @@ import type {
   CoreSetRecordSenderRuntimeArgs,
   RouterSetReferralConfigRuntimeArgs,
   CoreUpdateAuthoritiesRuntimeArgs,
+  CoreTakeBackSubnamesRuntimeArgs,
   DuskDomainCallMetadata,
   MarketplaceAuctionNodeArgs,
   MarketplaceBuyFixedSaleRuntimeArgs,
@@ -118,6 +119,7 @@ export function coreRenewRuntimeCall(
   }
 }
 
+/** Change authorities, optionally clearing this name's identity with clearRecords (default false). */
 export function coreUpdateAuthoritiesRuntimeCall(
   args: CoreUpdateAuthoritiesRuntimeArgs,
 ): DuskDomainCallMetadata<CoreUpdateAuthoritiesRuntimeArgs> {
@@ -211,6 +213,17 @@ export function coreCreateSubnameRuntimeCall(
     kind: 'write',
     args,
   }
+}
+
+/** Reassign through an active ancestor; changing its owner or manager clears that subname's identity. */
+export const coreReassignSubnameRuntimeCall = coreUpdateAuthoritiesRuntimeCall
+
+export function coreRemoveSubnameRuntimeCall(args: PoolNodeArgs): DuskDomainCallMetadata<PoolNodeArgs> {
+  return { contract: 'core', functionName: 'remove_subname_runtime', kind: 'write', args }
+}
+
+export function coreTakeBackSubnamesRuntimeCall(args: CoreTakeBackSubnamesRuntimeArgs): DuskDomainCallMetadata<CoreTakeBackSubnamesRuntimeArgs> {
+  return { contract: 'core', functionName: 'take_back_subnames_runtime', kind: 'write', args }
 }
 
 export function corePruneSubnameRuntimeCall(args: PoolNodeArgs): DuskDomainCallMetadata<PoolNodeArgs> {

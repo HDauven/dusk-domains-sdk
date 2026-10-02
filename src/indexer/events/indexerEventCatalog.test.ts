@@ -21,8 +21,8 @@ describe('generated plain-Node event catalog', () => {
   })
 })
 
-it('limits v1 subname events to creation and expiry cleanup', () => {
-  expect(generated.subnameEventTypes).toEqual(['subname_created', 'subname_pruned'])
+it('includes explicit namespace removal events', () => {
+  expect(generated.subnameEventTypes).toEqual(['subname_created', 'subname_pruned', 'subname_removed'])
 })
 
 it('separates retired contract topics from supported events without retiring router fee updates', () => {

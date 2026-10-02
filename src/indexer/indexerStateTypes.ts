@@ -72,7 +72,13 @@ export type IndexedReferralState = {
   recentActivity: IndexedReferralActivity[]
 }
 
+export type NamespaceSummary = { descendantCount: number; heldByOthersCount: number }
+export type NamespaceAncestor = { node: string; name: string; owner: string; manager: string; expiresAtBlockHeight: number | null }
+export type IndexedNamespace = NamespaceSummary & { subnames: IndexedSubname[]; ancestors: NamespaceAncestor[] }
+
 export type IndexedLifecycleName = {
+  namespacePurchase?: { seller: string; buyer: string } | null
+  namespace?: IndexedNamespace
   /** Provenance of this registration; retained through renewal and transfer. */
   issuedAsReserved?: boolean
   reservedIssuance?: {
@@ -189,6 +195,7 @@ export type IndexedMarketplaceConfig = {
 }
 
 export type IndexedMarketplaceFixedSale = {
+  namespace?: NamespaceSummary
   node: string
   name: string
   sellerAuthority: string
@@ -211,6 +218,7 @@ export type IndexedMarketplaceBid = {
 }
 
 export type IndexedMarketplaceAuction = {
+  namespace?: NamespaceSummary
   node: string
   name: string
   sellerAuthority: string
