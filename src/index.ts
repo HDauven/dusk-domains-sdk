@@ -101,3 +101,7 @@ export { INDEXER_COMPLETE_SET_CAP, type IndexerPage, type IndexerPageParams } fr
 export type { NamespaceSummary, NamespaceAncestor, IndexedNamespace } from './indexer/indexerStateTypes'
 
 export { MAX_TAKE_BACK_SUBNAMES } from './core/subnames'
+
+export * from './core/premium.mjs'
+
+export { quoteRegistration, registrationFeeLux, registrationPrice, DEFAULT_FEE_CONFIG, type CoreFeeConfig } from './core/namePolicy'

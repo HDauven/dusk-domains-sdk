@@ -13,3 +13,5 @@ export { eventTimestamp } from './projection/activity.mjs'
 export type * from './indexer/indexerTypes'
 export type { ProjectionState } from './projection/state.mjs'
 export type { DuskDomainsIndexedEvent, DuskDomainsIndexedEventEnvelope } from './indexer/indexerKit'
+
+export * from './core/premium.mjs'

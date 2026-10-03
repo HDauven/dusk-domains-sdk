@@ -1,3 +1,4 @@
+import { DEFAULT_FEE_CONFIG } from '../core/namePolicyData.mjs'
 import { decodeBase58, hasClaimableReferrerShape } from '../core/principal'
 import type { DuskPrincipal } from '../core/principal'
 import type { ResolverRecord } from '../core/records'
@@ -70,6 +71,7 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
       treasury: bytes32(args.treasury, 'treasury'),
       marketplace: args.marketplace ? bytes32(args.marketplace, 'marketplace') : Array(32).fill(0),
       referral_reward_bps: args.referralRewardBps,
+      premium_start_lux: args.premiumStartLux ?? DEFAULT_FEE_CONFIG.premiumStartLux,
     }
   }
   if (
@@ -118,6 +120,7 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
       referral_reward_bps: args.referralRewardBps,
       renewal_referral_reward_bps: args.renewalReferralRewardBps,
       premium_referral_reward_bps: args.premiumReferralRewardBps,
+      premium_start_lux: args.premiumStartLux,
     }
   }
   if (call.contract === 'core' && call.functionName === 'commit_runtime' && isCoreCommitRuntimeArgs(args)) {
@@ -440,6 +443,7 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
 const poolNodeCalls = new Set([
   'router.locate_name',
   'core.holds_name',
+  'core.registration_premium',
   'core.record_slot',
   'core.move_records_runtime',
   'core.prune_subname_runtime',

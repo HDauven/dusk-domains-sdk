@@ -49,6 +49,7 @@ export function feeConfigFromEvent(value) {
     referralRewardBps: Number(value?.referral_reward_bps ?? 0),
     renewalReferralRewardBps: Number(value?.renewal_referral_reward_bps ?? 0),
     premiumReferralRewardBps: Number(value?.premium_referral_reward_bps ?? 0),
+    premiumStartLux: Number(value?.premium_start_lux ?? 0),
     version: Number(value?.version ?? 0),
     updatedAt: Number(value?.updated_at ?? 0),
   }

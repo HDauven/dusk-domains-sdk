@@ -1,3 +1,4 @@
+import { accountingLux, sumAccountingLux, subtractAccountingLux } from '../accounting.mjs'
 import { referralKey } from './principals.mjs'
 
 export function emptyReferralState(referrer = null, supported = false) {
@@ -61,8 +62,8 @@ function normalizeReferralState(value) {
   return {
     supported: Boolean(value.supported ?? referrer),
     referrer,
-    claimableLux: Number(value.claimableLux ?? value.claimable_lux ?? 0),
-    claimedLux: Number(value.claimedLux ?? value.claimed_lux ?? 0),
+    claimableLux: accountingLux(value.claimableLux ?? value.claimable_lux ?? 0),
+    claimedLux: accountingLux(value.claimedLux ?? value.claimed_lux ?? 0),
     referralCount: Number(value.referralCount ?? value.referral_count ?? 0),
     recentActivity: normalizeReferralActivity(value.recentActivity ?? value.recent_activity),
   }
@@ -77,7 +78,7 @@ function normalizeReferralActivity(value) {
       return {
         txId: activity.txId ?? activity.tx_id ?? null,
         blockHeight: activity.blockHeight ?? activity.block_height ?? null,
-        amountLux: Number(activity.amountLux ?? activity.amount_lux ?? 0),
+        amountLux: accountingLux(activity.amountLux ?? activity.amount_lux ?? 0),
         kind,
         counterparty: referralKey(activity.counterparty ?? activity.buyer ?? activity.buyerAuthority ?? activity.buyer_authority ?? null) || null,
       }
@@ -89,9 +90,9 @@ function normalizeReferralActivity(value) {
 function reduceReferralEvent(event, current, meta) {
   const referrer = referralKey(event.referrer ?? event.referrerAuthority ?? event.referrer_authority ?? current.referrer)
   if (event.type === 'referral_reward_accrued') {
-    const amountLux = Number(event.amountLux ?? event.amount_lux ?? 0)
-    const claimableLux = Number(event.claimableLux ?? event.claimable_lux ?? current.claimableLux + amountLux)
-    const claimedLux = Number(event.claimedLux ?? event.claimed_lux ?? current.claimedLux)
+    const amountLux = accountingLux(event.amountLux ?? event.amount_lux ?? 0)
+    const claimableLux = accountingLux(event.claimableLux ?? event.claimable_lux ?? sumAccountingLux(current.claimableLux, amountLux))
+    const claimedLux = accountingLux(event.claimedLux ?? event.claimed_lux ?? current.claimedLux)
     const referralCount = Number(event.referralCount ?? event.referral_count ?? current.referralCount + 1)
     return {
       supported: true,
@@ -112,13 +113,13 @@ function reduceReferralEvent(event, current, meta) {
     }
   }
 
-  const amountLux = Number(event.amountLux ?? event.amount_lux ?? 0)
-  const remainingLux = Number(event.remainingLux ?? event.remaining_lux ?? Math.max(0, current.claimableLux - amountLux))
+  const amountLux = accountingLux(event.amountLux ?? event.amount_lux ?? 0)
+  const remainingLux = accountingLux(event.remainingLux ?? event.remaining_lux ?? subtractAccountingLux(current.claimableLux, amountLux))
   return {
     supported: true,
     referrer,
     claimableLux: remainingLux,
-    claimedLux: Number(event.claimedLux ?? event.claimed_lux ?? current.claimedLux + amountLux),
+    claimedLux: accountingLux(event.claimedLux ?? event.claimed_lux ?? sumAccountingLux(current.claimedLux, amountLux)),
     referralCount: Number(event.referralCount ?? event.referral_count ?? current.referralCount),
     recentActivity: [
       {

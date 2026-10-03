@@ -72,6 +72,7 @@ export function isRouterSetFeeConfigRuntimeArgs(value: unknown): value is Router
     isNonNegativeSafeInteger(value.fivePlusYearLux) &&
     isNonNegativeSafeInteger(value.referralRewardBps) &&
     isNonNegativeSafeInteger(value.renewalReferralRewardBps) &&
+    isNonNegativeSafeInteger(value.premiumStartLux) &&
     isNonNegativeSafeInteger(value.premiumReferralRewardBps)
   )
 }
@@ -409,6 +410,7 @@ export function isRouterInitArgs(value: unknown): value is RouterInitArgs {
     isDuskPrincipal(value.operator) &&
     typeof value.treasury === 'string' &&
     (value.marketplace === null || typeof value.marketplace === 'string') &&
+    (value.premiumStartLux === undefined || isNonNegativeSafeInteger(value.premiumStartLux)) &&
     isNonNegativeSafeInteger(value.referralRewardBps)
   )
 }

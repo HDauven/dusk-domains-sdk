@@ -12,6 +12,13 @@ the shared projection supplies lifecycle, records, primary names, treasury,
 referrals, pool and marketplace state. Persistence and HTTP serving live in the
 [indexer](https://github.com/HDauven/dusk-domains-indexer/blob/main/README.md).
 
+Driver JSON represents `*_lux` amounts as decimal strings at every nesting depth.
+The decoders also accept safe numbers from earlier drivers, and either decimal
+strings or numbers for other u64 fields such as heights, counts and timestamps.
+Bounded fields must fit the JavaScript safe-integer range. Treasury and referral
+accounting remains exact beyond that range; a rounded number from an older driver
+cannot be recovered and is rejected.
+
 ## Envelope
 
 ```ts
@@ -107,3 +114,23 @@ stored `subnames` (including expired ones), and the `ancestors` used for authori
 Marketplace summaries compare descendant owners to the seller while the root is escrowed.
 A completed purchase records `namespacePurchase` with its buyer and seller so clients can
 offer to take back seller-held subnames. A later root transfer clears that purchase marker.
+
+## Registration premiums
+
+`name_registered` includes `feeLux` (the total payment) and `premiumLux` (its
+premium component). The raw contract field is `premium_lux`; events from earlier
+deployments without it decode to zero. Lifecycle projection retains the amount as
+`registrationPremiumLux`, and treasury projection accumulates
+`premiumReceivedLux`. This is a subset of registration receipts, not additional
+income to add to the treasury total.
+
+Normalized treasury and referral Lux fields use safe integer numbers for small values and
+decimal strings above `Number.MAX_SAFE_INTEGER`. Arithmetic and snapshot loading
+preserve the exact Lux amount. Consumers can use `BigInt(value)` for either form.
+Unsafe numeric inputs are rejected rather than rounded. If premium statistics
+cannot be updated, `premiumAccountingError` records the failure while lifecycle
+and activity projection continue; rebuild the projection to repair those statistics.
+
+Router initialization and `fee_config_updated` carry `premiumStartLux` in their
+fee config (`premium_start_lux` on chain). Historical configs without the field
+normalize to zero. Newly deployed routers default to 1,000,000 DUSK in Lux.

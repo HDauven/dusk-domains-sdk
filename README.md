@@ -41,6 +41,7 @@ check for missing npm scripts in tracked Markdown.
 - [Integration trust model](docs/integration-trust-model.md)
 - [Resolver record keys](docs/records.md)
 - [Shared event schema and projection](docs/indexer-events.md)
+- [Registration quotes and premiums](docs/registration.md)
 - [Operator handover](docs/operator-handover.md)
 - [Protocol standard](https://github.com/HDauven/dusk-domains-protocol/blob/main/docs/dusk-domains-standard.md)
 - [Indexer API and pagination](https://github.com/HDauven/dusk-domains-indexer/blob/main/docs/indexer-api.md)

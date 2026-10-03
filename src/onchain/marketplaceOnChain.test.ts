@@ -6,8 +6,8 @@ const seller = `0x${'22'.repeat(32)}`
 const buyer = `0x${'33'.repeat(32)}`
 
 describe('canonical marketplace reads', () => {
-  it('decodes exact-key reads and keeps monetary values as bigint', async () => {
-    const read = vi.fn(async (call: { functionName: string }) => ({
+  it.each([false, true])('decodes exact-key reads with string integers %s and keeps monetary values as bigint', async strings => {
+    const read = vi.fn(async (call: { functionName: string }) => JSON.parse(JSON.stringify({
       output: call.functionName === 'read_fixed_sale' ? {
         sale: {
           node,
@@ -35,7 +35,9 @@ describe('canonical marketplace reads', () => {
         refund: { authority: buyer, amount_lux: 3_000_000_000 },
       },
       fnName: call.functionName,
-    }))
+    }, function (_key, value) {
+      return strings && typeof value === 'number' && !Array.isArray(this) ? String(value) : value
+    })))
     const client = createDuskDomainsMarketplaceOnChainClient({ read })
 
     expect(await client.getFixedSale(node)).toMatchObject({ ok: true, value: { priceLux: 18_446_744_073_709_551_615n } })

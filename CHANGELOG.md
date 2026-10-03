@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Accept decimal-string integers in driver events and outputs, including scalar premium reads. ([#124])
+
+- Expose dropped-name premiums in registration quotes. ([#124])
+- Preserve exact treasury and referral Lux totals beyond the safe-number range. ([#124])
+- Keep registration projection independent of premium accounting failures. ([#124])
+
 - Add validated Bitcoin, Ethereum, Solana and default EVM address records with canonical write values. ([#242])
 - Export shared chain-address validators for plain Node consumers. ([#242])
 - Distinguish primary-name set and cleared activity while retaining legacy activity support. ([#243])
@@ -42,3 +48,5 @@
 
 [#242]: https://github.com/HDauven/dusk-domains-protocol/issues/242
 [#243]: https://github.com/HDauven/dusk-domains-protocol/issues/243
+
+[#124]: https://github.com/HDauven/dusk-domains-protocol/issues/124

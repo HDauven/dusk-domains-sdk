@@ -1,3 +1,4 @@
+import { accountingLux } from './accounting.mjs'
 import {
   bytesToBase58,
   bytesToHex,
@@ -28,7 +29,7 @@ export function normalizeObservedEvent({
   observedBlockHeight = null,
   targetBlockSeconds = defaultTargetBlockSeconds,
 }) {
-  assertSafeEventNumbers(event)
+  assertSafeEventNumbers(event, 'event', /^(?:treasury_|referral_)/.test(eventName))
   const eventHeight = numericBlockHeight([
     'created_at', 'updated_at', 'opened_at', 'closed_at', 'filled_at',
     'placed_at', 'cancelled_at', 'settled_at', 'accepted_at', 'claimed_at',
@@ -107,6 +108,7 @@ export function normalizeObservedEvent({
         expiresAtBlockHeight: numberOrNull(event.expires_at),
         graceEndsAtBlockHeight: numberOrNull(event.grace_ends_at),
         feeLux: Number(event.fee_lux ?? 0),
+        premiumLux: Number(event.premium_lux ?? 0),
       },
       meta,
     }
@@ -440,12 +442,12 @@ export function normalizeObservedEvent({
         sourceContract: bytesToHex(event.source_contract),
         reason: treasuryReasonName(event.reason),
         node: bytesToHex(event.node),
-        amountLux: Number(event.amount_lux ?? 0),
-        totalReceivedLux: Number(event.total_received_lux ?? 0),
-        availableLux: Number(event.available_lux ?? 0),
-        registrationReceivedLux: Number(event.registration_received_lux ?? 0),
-        renewalReceivedLux: Number(event.renewal_received_lux ?? 0),
-        otherReceivedLux: Number(event.other_received_lux ?? 0),
+        amountLux: accountingLux(event.amount_lux ?? 0),
+        totalReceivedLux: accountingLux(event.total_received_lux ?? 0),
+        availableLux: accountingLux(event.available_lux ?? 0),
+        registrationReceivedLux: accountingLux(event.registration_received_lux ?? 0),
+        renewalReceivedLux: accountingLux(event.renewal_received_lux ?? 0),
+        otherReceivedLux: accountingLux(event.other_received_lux ?? 0),
       },
       meta,
     }
@@ -457,8 +459,8 @@ export function normalizeObservedEvent({
         type: 'treasury_claimed',
         operator: principalFromEvent(event.operator, event.operator_authority),
         operatorRecipient: bytesToBase58(event.operator_recipient),
-        amountLux: Number(event.amount_lux ?? 0),
-        remainingLux: Number(event.remaining_lux ?? 0),
+        amountLux: accountingLux(event.amount_lux ?? 0),
+        remainingLux: accountingLux(event.remaining_lux ?? 0),
       },
       meta,
     }
@@ -471,9 +473,9 @@ export function normalizeObservedEvent({
         referrer: principalFromEvent(event.referrer, event.referrer_authority),
         buyer: principalFromEvent(event.buyer, event.buyer_authority),
         node: bytesToHex(event.node),
-        amountLux: Number(event.amount_lux ?? 0),
-        claimableLux: Number(event.claimable_lux ?? 0),
-        claimedLux: Number(event.claimed_lux ?? 0),
+        amountLux: accountingLux(event.amount_lux ?? 0),
+        claimableLux: accountingLux(event.claimable_lux ?? 0),
+        claimedLux: accountingLux(event.claimed_lux ?? 0),
         referralCount: Number(event.referral_count ?? 0),
       },
       meta,
@@ -486,9 +488,9 @@ export function normalizeObservedEvent({
         type: 'referral_reward_claimed',
         referrer: principalFromEvent(event.referrer, event.referrer_authority),
         recipient: bytesToBase58(event.referrer_recipient),
-        amountLux: Number(event.amount_lux ?? 0),
-        remainingLux: Number(event.remaining_lux ?? 0),
-        claimedLux: Number(event.claimed_lux ?? 0),
+        amountLux: accountingLux(event.amount_lux ?? 0),
+        remainingLux: accountingLux(event.remaining_lux ?? 0),
+        claimedLux: accountingLux(event.claimed_lux ?? 0),
         referralCount: Number(event.referral_count ?? 0),
       },
       meta,
@@ -701,7 +703,7 @@ export function normalizeObservedEvent({
   return null
 }
 
-function assertSafeEventNumbers(value, path = 'event') {
+function assertSafeEventNumbers(value, path = 'event', accounting = false) {
   if (typeof value === 'number') {
     if (!Number.isSafeInteger(value) || value < 0) {
       throw new Error(`${path} contains an unsafe numeric value`)
@@ -715,24 +717,28 @@ function assertSafeEventNumbers(value, path = 'event') {
     return
   }
   if (Array.isArray(value)) {
-    value.forEach((item, index) => assertSafeEventNumbers(item, `${path}[${index}]`))
+    value.forEach((item, index) => assertSafeEventNumbers(item, `${path}[${index}]`, accounting))
     return
   }
   if (!value || typeof value !== 'object') return
   for (const [key, item] of Object.entries(value)) {
-    if (typeof item === 'string' && isNumericEventField(key) && /^\d+$/u.test(item)) {
-      const parsed = BigInt(item)
-      if (parsed > BigInt(Number.MAX_SAFE_INTEGER)) {
+    if (accounting && item != null && /_lux$/.test(key)) {
+      accountingLux(item)
+      continue
+    }
+    if (typeof item === 'string' && isNumericEventField(key)) {
+      if (!/^\d+$/u.test(item) || !Number.isSafeInteger(Number(item))) {
         throw new Error(`${path}.${key} contains an unsafe numeric value`)
       }
       continue
     }
-    assertSafeEventNumbers(item, `${path}.${key}`)
+    assertSafeEventNumbers(item, `${path}.${key}`, accounting)
   }
 }
 
 function isNumericEventField(key) {
-  return /(?:^|_)(?:lux|bps|at|height|block|blocks|count|seconds|years)$/u.test(key)
+  return /(?:^|_)(?:lux|bps|at|height|block|blocks|count|seconds|years|deadline)$/u.test(key)
+    || ['version', 'index', 'offer_id'].includes(key)
 }
 
 function recordValueFromEvent(key, value) {

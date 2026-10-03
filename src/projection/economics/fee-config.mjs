@@ -11,6 +11,7 @@ export function normalizeFeeConfig(value) {
     referralRewardBps: Number(value.referralRewardBps ?? value.referral_reward_bps ?? DEFAULT_FEE_CONFIG.referralRewardBps),
     renewalReferralRewardBps: Number(value.renewalReferralRewardBps ?? value.renewal_referral_reward_bps ?? DEFAULT_FEE_CONFIG.renewalReferralRewardBps),
     premiumReferralRewardBps: Number(value.premiumReferralRewardBps ?? value.premium_referral_reward_bps ?? DEFAULT_FEE_CONFIG.premiumReferralRewardBps),
+    premiumStartLux: Number(value.premiumStartLux ?? value.premium_start_lux ?? 0),
     version: Number(value.version ?? DEFAULT_FEE_CONFIG.version),
     updatedAt: Number(value.updatedAt ?? value.updated_at ?? DEFAULT_FEE_CONFIG.updatedAt),
     operator: normalizePrincipal(value.operator ?? value.operator_principal ?? null)

@@ -21,6 +21,7 @@ describe('Dusk Domains indexer kit', () => {
       fivePlusYearLux: 10_000_000_000,
       referralRewardBps: 1_500,
       renewalReferralRewardBps: 1_000,
+      premiumStartLux: 0,
       premiumReferralRewardBps: 0,
       version: 1,
       updatedAt: 0,
