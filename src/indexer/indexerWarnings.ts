@@ -7,6 +7,10 @@ export const HIGH_RISK_RECORD_KEYS = [
   'dusk_contract',
   'dusk_asset',
   'evm_address',
+  'address.btc',
+  'address.eth',
+  'address.sol',
+  'address.evm',
   'website',
   'compliance_ref',
 ] as const
@@ -72,7 +76,7 @@ function warningFromActivityEntry(
     })
   }
 
-  if (entry.eventType === 'primary_name') {
+  if (['primary_name', 'primary_name_set', 'primary_name_cleared'].includes(entry.eventType)) {
     return createRecentWarning(entry, {
       code: 'recent_primary_name_change',
       severity: 'warning',

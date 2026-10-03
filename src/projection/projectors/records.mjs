@@ -75,9 +75,9 @@ export function applyReverseEvent(store, event, meta) {
 
   store.activityByNode.set(node, [
     activityEntry({
-      eventType: 'primary_name',
+      eventType: name ? 'primary_name_set' : 'primary_name_cleared',
       node,
-      name: name ?? store.namesByNode.get(node)?.canonicalName ?? node,
+      name: name ?? event.previousName ?? store.namesByNode.get(node)?.canonicalName ?? node,
       actor: event.controller,
       target: key,
       timestamp: event.updatedAt,
@@ -95,7 +95,7 @@ export function collectSnapshotControllers(name) {
   }
   if (Array.isArray(name.activity)) {
     for (const entry of name.activity) {
-      if (entry?.eventType === 'record_update' || entry?.eventType === 'primary_name') {
+      if (['record_update', 'primary_name', 'primary_name_set', 'primary_name_cleared'].includes(entry?.eventType)) {
         rememberControllerValue(controllers, entry.actor)
       }
     }

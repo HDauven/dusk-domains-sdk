@@ -9,6 +9,7 @@
 | `@duskdomains/sdk/marketplace` | Fixed-sale, auction, offer/refund builders and indexed models. |
 | `@duskdomains/sdk/connect-app` | Dusk Connect app adapter without a runtime wallet-library dependency. |
 | `@duskdomains/sdk/event-catalog` | Plain JavaScript event families and contract topics. |
+| `@duskdomains/sdk/chain-addresses` | Plain JavaScript Bitcoin, Ethereum/EVM and Solana record validators and normalizers. |
 | `@duskdomains/sdk/projection` | Plain JavaScript projection, decoded-event normalization and reserved-name policy, with types. |
 | `@duskdomains/sdk/write-proof` | Write-proof capture helpers. |
 | `@duskdomains/sdk/internal` | First-party lower-level helpers; not a stable third-party API. |
