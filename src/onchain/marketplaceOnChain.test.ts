@@ -30,7 +30,7 @@ describe('canonical marketplace reads', () => {
           bid_count: 2,
         },
       } : call.functionName === 'read_offer' ? {
-        offer: { node, buyer_authority: buyer, amount_lux: 15_000_000_000, expires_at: 250 },
+        offer: { offer_id: 42, fee_bps: 250, node, buyer_authority: buyer, amount_lux: 15_000_000_000, expires_at: 250 },
       } : {
         refund: { authority: buyer, amount_lux: 3_000_000_000 },
       },
@@ -40,7 +40,7 @@ describe('canonical marketplace reads', () => {
 
     expect(await client.getFixedSale(node)).toMatchObject({ ok: true, value: { priceLux: 18_446_744_073_709_551_615n } })
     expect(await client.getAuction(node)).toMatchObject({ ok: true, value: { highestBid: { amountLux: 12_000_000_000n } } })
-    expect(await client.getOffer(node, buyer)).toMatchObject({ ok: true, value: { amountLux: 15_000_000_000n } })
+    expect(await client.getOffer(node, buyer)).toMatchObject({ ok: true, value: { offerId: 42, feeBps: 250, amountLux: 15_000_000_000n } })
     expect(await client.getRefund(buyer)).toMatchObject({ ok: true, value: { amountLux: 3_000_000_000n } })
   })
 
@@ -51,4 +51,11 @@ describe('canonical marketplace reads', () => {
     const malformed = createDuskDomainsMarketplaceOnChainClient({ read: async () => ({ sale: { node: 'bad' } }) })
     expect(await malformed.getFixedSale(node)).toMatchObject({ ok: false, error: { code: 'contract_read_failed' } })
   })
+})
+
+it.each([{ offer_id: undefined }, { offer_id: 0 }, { offer_id: Number.MAX_SAFE_INTEGER + 1 }, { fee_bps: undefined }, { fee_bps: 1_001 }, { fee_bps: 1.5 }])('requires valid offer identity and fee: %j', async (changed) => {
+  const client = createDuskDomainsMarketplaceOnChainClient({ read: async () => ({ offer: {
+    node, buyer_authority: buyer, amount_lux: 10, expires_at: 100, offer_id: 1, fee_bps: 250, ...changed,
+  } }) })
+  expect(await client.getOffer(node, buyer)).toMatchObject({ ok: false, error: { code: 'contract_read_failed' } })
 })

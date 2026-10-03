@@ -207,6 +207,8 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
       marketplace_contract: bytes32(args.marketplaceContract, 'marketplaceContract'),
       buyer_authority: bytes32(args.buyerAuthority, 'buyerAuthority'),
       expected_amount_lux: args.expectedAmountLux,
+      expected_offer_id: args.expectedOfferId,
+      expected_fee_bps: args.expectedFeeBps,
       seller_recipient: moonlightPublicKeyBytes(args.sellerRecipient, 'sellerRecipient'),
     }
   }

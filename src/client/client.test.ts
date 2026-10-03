@@ -6,6 +6,7 @@ import {
   createDuskDomainsOnChainClient,
   checkDuskDomainsIndexerCompatibilityFromHealth,
 } from './client'
+import { namehashHex } from '../core/namehash'
 import {
   endpointValue,
   fakeIndexer,
@@ -321,6 +322,7 @@ describe('Dusk Domains SDK mode packaging', () => {
     const client = createDuskDomainsClient({
       manifest: releaseManifest(),
       onChain: fakeOnChain({
+        async getCurrentBlockHeight() { return { ok: true, value: 99 } },
         async getName() {
           return {
             ok: true,
@@ -354,5 +356,98 @@ describe('Dusk Domains SDK mode packaging', () => {
         },
       },
     })
+  })
+
+  it('requires authorities and canonical lifecycle when verifying an indexed name', async () => {
+    const indexed = indexedNameSummary({
+      owner: null,
+      manager: '',
+      status: 'active',
+    })
+    const client = createDuskDomainsClient({
+      onChain: fakeOnChain({
+        async getCurrentBlockHeight() {
+          return { ok: true, value: 101 }
+        },
+        async getName() {
+          return {
+            ok: true,
+            value: {
+              canonicalName: 'aurora.dusk',
+              node,
+              record: {
+                label: 'aurora',
+                owner: '0xcanonical-owner',
+                manager: '0xcanonical-manager',
+                lifecycle: {
+                  expiresAtBlock: 100,
+                  graceEndsAtBlock: 110,
+                },
+                referrer: null,
+              },
+            },
+          }
+        },
+      }),
+    })
+
+    await expect(client.verifyIndexedName(indexed)).resolves.toMatchObject({
+      ok: true,
+      value: {
+        verified: false,
+      },
+    })
+  })
+
+  it('rejects a substituted name in verified resolution', async () => {
+    const requestedName = 'merchant.dusk'
+    const substitutedName = 'attacker.dusk'
+    const substitutedNode = namehashHex(substitutedName)
+    const response = {
+      ...forwardResponse(endpointValue),
+      canonicalName: substitutedName,
+      node: substitutedNode,
+    }
+    const indexer = createDuskDomainsIndexerClient({
+      baseUrl: '/api/dusk-domains',
+      fetch: async () => Response.json(response),
+    })
+    const client = createDuskDomainsClient({
+      indexer,
+      onChain: fakeOnChain({
+        async resolveName(name, key) {
+          return {
+            ok: true,
+            value: {
+              canonicalName: name,
+              node: namehashHex(name),
+              endpoint: {
+                type: key === 'dusk_public_address' ? 'moonlight_address' : key ?? 'moonlight_address',
+                value: endpointValue,
+              },
+              record: {
+                key: 'moonlight_address',
+                value: endpointValue,
+                visibility: 'public',
+                ttlSeconds: 300,
+                updatedAtBlock: 123,
+              },
+            },
+          }
+        },
+      }),
+    })
+
+    const acceptedAsVerified = await (async () => {
+      try {
+        const indexed = await indexer.resolveForward(requestedName)
+        const verification = await client.verifyIndexedResolution(requestedName, indexed)
+        return verification.ok && verification.value.verified
+      } catch {
+        return false
+      }
+    })()
+
+    expect(acceptedAsVerified).toBe(false)
   })
 })

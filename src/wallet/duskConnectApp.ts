@@ -3,6 +3,7 @@ import type {
   DuskDomainContractPreset,
   DuskDomainDecodedContext,
 } from '../contracts/calls'
+import { prepareBoundCall, preparedCallForTarget } from '../contracts/preparedCalls'
 
 export type DuskDomainsContractCallParams = {
   contract: DuskDomainContractPreset
@@ -17,6 +18,8 @@ export type DuskDomainsWriteContractCallParams = DuskDomainsContractCallParams &
 }
 
 export type DuskDomainsConnectAppTransport = {
+  readonly chainId?: string
+  readonly state?: { readonly chainId: string | null }
   readContract?: (params: DuskDomainsContractCallParams) => Promise<unknown>
   prepareContractCall?: (params: DuskDomainsContractCallParams) => Promise<unknown>
   writeContract?: (params: DuskDomainsWriteContractCallParams) => Promise<unknown>
@@ -45,17 +48,24 @@ export function createDuskDomainsConnectApp(
     ...defaultRequestMethods,
     ...options.requestMethods,
   }
+  const chain = { get chainId() { return transport.state ? transport.state.chainId ?? undefined : transport.chainId } }
 
   return {
+    get chainId() { return chain.chainId },
     async readContract(params) {
       if (transport.readContract) return await transport.readContract(connectReadContractParams(params))
       return await requestTransport(transport, requestMethods.readContract, connectReadContractParams(params))
     },
     async prepareContractCall(params) {
-      if (transport.prepareContractCall) return await transport.prepareContractCall(connectContractParams(params))
-      return await requestTransport(transport, requestMethods.prepareContractCall, connectContractParams(params))
+      return await prepareBoundCall(chain, params.contract.contractId, async () => {
+        if (transport.prepareContractCall) return await transport.prepareContractCall(connectContractParams(params))
+        return await requestTransport(transport, requestMethods.prepareContractCall, connectContractParams(params))
+      })
     },
     async writeContract(params) {
+      if (params.preparedCall !== undefined) {
+        params = { ...params, preparedCall: preparedCallForTarget(chain, params.contract.contractId, params.preparedCall) }
+      }
       if (transport.writeContract) return await transport.writeContract(connectWriteContractParams(params))
       const requestParams = requestMethods.writeContract === defaultRequestMethods.writeContract
         ? connectSendTransactionParams(params)
@@ -91,6 +101,9 @@ function connectWriteContractParams(params: DuskDomainsWriteContractCallParams) 
 function connectSendTransactionParams(params: DuskDomainsWriteContractCallParams) {
   if (!isObjectRecord(params.preparedCall)) {
     throw new Error('Prepared contract-call payload is required for dusk_sendTransaction.')
+  }
+  if (typeof params.preparedCall.contractId !== 'string' || params.preparedCall.contractId.toLowerCase() !== params.contract.contractId.toLowerCase()) {
+    throw new Error('Prepared contract-call payload does not match the target contract.')
   }
 
   return {

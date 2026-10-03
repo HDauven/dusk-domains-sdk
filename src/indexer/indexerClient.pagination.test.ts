@@ -1,3 +1,4 @@
+import { namehashHex } from '../core/namehash'
 import { describe, expect, it, vi } from 'vitest'
 import { createDuskDomainsIndexerClient, type IndexedNameSummary } from '../internal'
 
@@ -97,7 +98,7 @@ describe('indexer cursor client', () => {
   })
 
   it('passes warning pagination to forward resolution without losing resolution fields', async () => {
-    const response = { canonicalName: 'aurora.dusk', node: 'node', records: [], resolver: {}, expiry: {}, cache: {}, warnings: [], errors: [], verificationStatus: 'unverified', nextCursor: 'more-warnings' }
+    const response = { canonicalName: 'aurora.dusk', node: namehashHex('aurora.dusk'), records: [], resolver: {}, expiry: {}, cache: {}, warnings: [], errors: [], verificationStatus: 'unverified', nextCursor: 'more-warnings' }
     const { client, fetcher } = clientFor(response)
     expect(await client.resolveForward('aurora.dusk', { cursor: 'previous', limit: 4 })).toEqual(response)
     expect(String(fetcher.mock.calls[0][0])).toBe('/indexer/resolve?name=aurora.dusk&cursor=previous&limit=4')

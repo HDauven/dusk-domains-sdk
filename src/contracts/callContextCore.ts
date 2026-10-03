@@ -140,6 +140,8 @@ export function decodedCoreDuskDomainContext(call: DuskDomainCallMetadata): Dusk
         { label: 'Domain reference', value: call.args.node },
         { label: 'Buyer', value: call.args.buyerAuthority },
         { label: 'Offer', value: `${formatLux(call.args.expectedAmountLux)} DUSK` },
+        { label: 'Offer ID', value: String(call.args.expectedOfferId) },
+        { label: 'Fee', value: `${call.args.expectedFeeBps / 100}%` },
         { label: 'Marketplace', value: call.args.marketplaceContract },
       ],
     }

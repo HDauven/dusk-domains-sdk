@@ -14,6 +14,8 @@ import {
   type DuskDomainsIndexerHealth,
 } from '../indexer/indexerClient'
 import { namehashHex } from '../core/namehash'
+import { matchesIndexedName, matchesIndexerKey } from '../indexer/indexerRequestBinding'
+import { normalizeSdkName } from './sdkValidation'
 import type { NameResult } from '../core/namePolicy'
 import type { ResolverRecordKey } from '../core/records'
 import {
@@ -128,7 +130,7 @@ export type DuskDomainsIndexedNameVerification = {
   onChain: DuskDomainsOnChainNameResponse
   verified: boolean
   mismatches: Array<{
-    field: 'owner' | 'manager' | 'status'
+    field: 'node' | 'canonicalName' | 'owner' | 'manager' | 'status'
     indexed: string | null
     onChain: string | null
   }>
@@ -152,6 +154,7 @@ export type DuskDomainsClient = {
   checkIndexer: () => Promise<DuskDomainsResult<DuskDomainsIndexerCompatibility>>
   verifyIndexedName: (indexed: IndexedNameSummary) => Promise<DuskDomainsResult<DuskDomainsIndexedNameVerification>>
   verifyIndexedResolution: (
+    expectedName: string,
     response: ForwardResolutionResponse,
     key?: DuskDomainsOnChainRecordKey,
   ) => Promise<DuskDomainsResult<{
@@ -188,7 +191,8 @@ export function createDuskDomainsClient(options: DuskDomainsClientOptions): Dusk
     verifyPrimaryNameOnChain: requireOnChain(onChain, 'verifyPrimaryName'),
   checkIndexer: () => checkIndexerCompatibility({ indexer, manifest, maxIndexerLagBlocks }),
     verifyIndexedName: (indexed) => verifyIndexedName({ indexed, onChain, manifest, contracts }),
-    verifyIndexedResolution: (response, key = 'moonlight_address') => verifyIndexedResolution({
+    verifyIndexedResolution: (expectedName, response, key = 'moonlight_address') => verifyIndexedResolution({
+      expectedName,
       response,
       key,
       onChain,
@@ -464,11 +468,21 @@ async function verifyIndexedName(options: {
 }): Promise<DuskDomainsResult<DuskDomainsIndexedNameVerification>> {
   if (!options.onChain) return failure('read_transport_missing', 'No Dusk Domains on-chain client is configured.')
 
-  const onChain = await options.onChain.getName(options.indexed.canonicalName)
+  const expected = normalizeSdkName(options.indexed.canonicalName)
+  if (!expected.ok) return expected
+  const onChain = await options.onChain.getName(expected.value)
   if (!onChain.ok) return onChain
 
   const mismatches: DuskDomainsIndexedNameVerification['mismatches'] = []
+  const expectedNode = namehashHex(expected.value)
+  if (!matchesIndexerKey(options.indexed.node, expectedNode) || !matchesIndexerKey(onChain.value.node, expectedNode)) {
+    mismatches.push({ field: 'node', indexed: options.indexed.node, onChain: onChain.value.node })
+  }
+  if (options.indexed.canonicalName !== expected.value || onChain.value.canonicalName !== expected.value) {
+    mismatches.push({ field: 'canonicalName', indexed: options.indexed.canonicalName, onChain: onChain.value.canonicalName })
+  }
   const record = onChain.value.record
+  let blockHeight: number | null = null
   if (!record) {
     mismatches.push({
       field: 'status',
@@ -476,14 +490,19 @@ async function verifyIndexedName(options: {
       onChain: null,
     })
   } else {
-    if (options.indexed.owner && options.indexed.owner !== record.owner) {
+    if (!options.indexed.owner || options.indexed.owner !== record.owner) {
       mismatches.push({ field: 'owner', indexed: options.indexed.owner, onChain: record.owner })
     }
-    if (options.indexed.manager && options.indexed.manager !== record.manager) {
+    if (!options.indexed.manager || options.indexed.manager !== record.manager) {
       mismatches.push({ field: 'manager', indexed: options.indexed.manager, onChain: record.manager })
     }
-    if (options.indexed.status === 'released') {
-      mismatches.push({ field: 'status', indexed: options.indexed.status, onChain: 'active' })
+    const height = await options.onChain.getCurrentBlockHeight()
+    if (!height.ok) return height
+    blockHeight = height.value
+    const status = blockHeight < record.lifecycle.expiresAtBlock ? 'active'
+      : blockHeight < record.lifecycle.graceEndsAtBlock ? 'expired' : 'released'
+    if (options.indexed.status !== status) {
+      mismatches.push({ field: 'status', indexed: options.indexed.status, onChain: status })
     }
   }
 
@@ -494,6 +513,7 @@ async function verifyIndexedName(options: {
     mismatches,
     source: {
       kind: mismatches.length === 0 ? 'indexed_verified' : 'indexed',
+      blockHeight,
       contractId: options.contracts?.core.contractId ?? null,
       eventSchemaVersion: options.manifest?.eventSchemaVersion ?? null,
     },
@@ -501,6 +521,7 @@ async function verifyIndexedName(options: {
 }
 
 async function verifyIndexedResolution(options: {
+  expectedName: string
   response: ForwardResolutionResponse
   key: DuskDomainsOnChainRecordKey
   onChain: DuskDomainsOnChainClient | null
@@ -514,12 +535,17 @@ async function verifyIndexedResolution(options: {
 }>> {
   if (!options.onChain) return failure('read_transport_missing', 'No Dusk Domains on-chain client is configured.')
 
-  const canonical = await options.onChain.resolveName(options.response.canonicalName, options.key)
+  const expected = normalizeSdkName(options.expectedName)
+  if (!expected.ok) return expected
+  const canonical = await options.onChain.resolveName(expected.value, options.key)
   if (!canonical.ok) return canonical
 
   const indexedKey = onChainRecordKey(options.key)
   const indexedRecord = options.response.records.find((record) => record.key === indexedKey)
-  const verified = Boolean(indexedRecord && indexedRecord.value === canonical.value.record.value)
+  const verified = matchesIndexedName(options.response.canonicalName, options.response.node, expected.value)
+    && matchesIndexedName(canonical.value.canonicalName, canonical.value.node, expected.value)
+    && canonical.value.record.key === indexedKey
+    && Boolean(indexedRecord && indexedRecord.value === canonical.value.record.value)
 
   return success({
     indexed: options.response,

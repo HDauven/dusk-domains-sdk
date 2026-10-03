@@ -46,6 +46,8 @@ export type DuskDomainsOnChainAuction = {
 
 /** Canonical domain offer stored by the marketplace contract. */
 export type DuskDomainsOnChainOffer = {
+  offerId: number
+  feeBps: number
   node: string
   buyerAuthority: string
   amountLux: bigint
@@ -129,7 +131,12 @@ function decodeAuction(value: Record<string, unknown>): DuskDomainsOnChainAuctio
 }
 
 function decodeOffer(value: Record<string, unknown>): DuskDomainsOnChainOffer {
+  const offerId = safeNumber(value.offer_id, 'offer ID')
+  const feeBps = safeNumber(value.fee_bps, 'offer fee')
+  if (offerId === 0 || feeBps > 1_000) throw new Error('Offer terms are malformed.')
   return {
+    offerId,
+    feeBps,
     node: bytes32(value.node, 'offer node'),
     buyerAuthority: bytes32(value.buyer_authority, 'buyer authority'),
     amountLux: u64(value.amount_lux, 'offer amount'),

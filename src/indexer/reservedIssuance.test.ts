@@ -1,3 +1,4 @@
+import { namehashHex } from '../core/namehash'
 import { expect, it } from 'vitest'
 import { createDuskDomainsIndexerClient } from './indexerClient'
 import { createLifecycleEventProjector } from './lifecycleProjector'
@@ -21,15 +22,15 @@ it('projects reserved issuance provenance through renewal and transfer, resettin
 })
 
 it('reads issuance provenance and rejects malformed provenance while accepting older name responses', async () => {
-  const name = { node: 'node', canonicalName: 'wallet.dusk', owner: 'owner', manager: 'manager', resolverId: null, expiresAt: null, graceEndsAt: null, status: 'active', lastEventType: 'name_registered' }
+  const name = { node: namehashHex('wallet.dusk'), canonicalName: 'wallet.dusk', owner: 'owner', manager: 'manager', resolverId: null, expiresAt: null, graceEndsAt: null, status: 'active', lastEventType: 'name_registered' }
   const provenance = { operator: { kind: 'Contract', bytes: Array(32).fill(1) }, registry: 'registry', issuedAt: '2026-01-01T00:00:00Z', issuedAtBlockHeight: 100 }
   let response: object = name
   const client = createDuskDomainsIndexerClient({ baseUrl: '/indexer', fetch: async () => Response.json(response) })
-  await expect(client.getNameState('node')).resolves.toEqual(name)
+  await expect(client.getNameState(name.node)).resolves.toEqual(name)
   response = { ...name, issuedAsReserved: true, reservedIssuance: provenance }
-  await expect(client.getNameState('node')).resolves.toMatchObject({ issuedAsReserved: true, reservedIssuance: provenance })
+  await expect(client.getNameState(name.node)).resolves.toMatchObject({ issuedAsReserved: true, reservedIssuance: provenance })
   for (const invalid of [{ issuedAsReserved: 'yes' }, { reservedIssuance: { ...provenance, operator: 'invalid' } }, { reservedIssuance: { ...provenance, issuedAtBlockHeight: '100' } }]) {
     response = { ...name, ...invalid }
-    await expect(client.getNameState('node')).rejects.toThrow('invalid name-state response')
+    await expect(client.getNameState(name.node)).rejects.toThrow('invalid name-state response')
   }
 })

@@ -24,6 +24,51 @@ verification. Stored ownership can survive expiry; an owner lookup alone does no
 prove the name is active. For signing, check the exact current contract state and
 height. Display a primary only after typed forward/reverse verification.
 
+## Exact lookups and verification
+
+Exact indexer lookups reject responses whose identity differs from the normalized
+request. Name, fixed-sale, auction and offer responses bind the node to the
+canonical namehash; offers also bind the buyer. Commitment, refund and referral
+lookups bind their keys. A single record response binds its record key; that HTTP
+shape carries no node, so it cannot establish which node stored the value.
+Structured reverse responses bind the endpoint and namehash; legacy bare-name
+responses require a matching indexed forward record. These checks establish
+request consistency, not canonical truth. Lists and history remain discovery data.
+
+`verifyIndexedName(indexed)` requires canonical state and current block height.
+Its verified verdict covers only `canonicalName`, recomputed `node`, `owner`,
+`manager` and lifecycle `status`. Both authorities must be present. Status is
+`active` before expiry, `expired` from expiry until grace ends, and `released`
+from the end of grace. A verified expired/released summary is not an active name.
+Records, expiry timestamps, primary names, counts, namespace and provenance
+metadata are outside that verdict.
+
+`verifyIndexedResolution(expectedName, response, key?)` requires an independent
+caller-supplied name. It recomputes that name's node, compares both identities and
+the selected record key/value with canonical active resolution, and marks only
+those fields `indexed_verified`. Other records and indexed metadata are outside
+the verdict. A substituted genuine name never verifies for the requested name.
+
+## Registry routing
+
+Located registries are cached only after a routed read, preparation or write
+succeeds. Failures invalidate that route. The cache belongs to the transport and
+is keyed by its current `chainId`, router and node, with at most 256 entries per
+transport. Expose the current chain ID on `DuskConnectAppLike` (or the transport
+passed to `createDuskDomainsConnectApp`); without it, routing remains uncached.
+Router IDs must contain all 32 integer bytes and must be nonzero.
+
+## Offer acceptance
+
+Read the canonical offer with the marketplace client's `getOffer(node, buyer)`
+before review. Capture its `offerId`, `feeBps` and `amountLux`, and pass them as
+`expectedOfferId`, `expectedFeeBps` and `expectedAmountLux` to
+`coreAcceptMarketplaceOfferRuntimeCall`. Retain that snapshot through signing;
+refreshing it silently would accept terms the seller did not review. The contract
+rejects any changed term, including an identical-price replacement in the same
+block. IDs and fees are decoded as safe integers; monetary reads remain `bigint`.
+The new fields require matching core/marketplace data drivers and deployment ABI.
+
 ## Manifests
 
 `createDuskDomainsClientFromManifest` accepts a manifest or manifest URL, optional

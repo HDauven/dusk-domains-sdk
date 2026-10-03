@@ -1,3 +1,6 @@
+import { namehash } from '../core/namehash'
+import { normalizeNameInput } from '../core/namePolicy'
+import { assertRequestMatch, matchesIndexedName, matchesIndexerKey, normalizeIndexerKey } from './indexerRequestBinding'
 import { collectPages, pageQuery, parsePage, type IndexerPage, type IndexerPageParams } from './indexerClientPagination'
 export { INDEXER_COMPLETE_SET_CAP, type IndexerPage, type IndexerPageParams } from './indexerClientPagination'
 import type { ActivityEntry } from './activity'
@@ -18,6 +21,7 @@ import type {
   IndexedSubname,
 } from './indexer'
 import {
+  isRecord,
   isActivityEntry,
   isForwardResolutionResponse,
   isIndexedFeeConfig,
@@ -184,10 +188,13 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
       throw new Error('Dusk Domains indexer returned an invalid search response.')
     }
 
+    assertRequestMatch(payload.canonical === normalizeNameInput(query), 'search')
     return payload
   }
 
   async function getCommitment(commitment: string, controller?: string) {
+    commitment = normalizeIndexerKey(commitment)
+    if (controller !== undefined) controller = normalizeIndexerKey(controller)
     const params: Record<string, string> = controller ? { commitment, controller } : { commitment }
     const payload = await getJson(fetcher, endpointUrl(baseUrl, 'commitment', params))
     if (payload === null) return null
@@ -196,16 +203,19 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
       throw new Error('Dusk Domains indexer returned an invalid commitment response.')
     }
 
+    assertRequestMatch(matchesIndexerKey(payload.commitment, commitment) && (controller === undefined || matchesIndexerKey(payload.controller, controller)), 'commitment')
     return payload
   }
 
   async function resolveForward(canonicalName: string, params: IndexerPageParams = {}) {
+    canonicalName = namehash(canonicalName).canonicalName
     const payload = await getJson(fetcher, endpointUrl(baseUrl, 'resolve', pageQuery({ name: canonicalName, ...params })))
 
     if (!isForwardResolutionResponse(payload)) {
       throw new Error('Dusk Domains indexer returned an invalid forward-resolution response.')
     }
 
+    assertRequestMatch(matchesIndexedName(payload.canonicalName, payload.node, canonicalName), 'forward-resolution')
     return payload
   }
 
@@ -224,6 +234,7 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
   }
 
   async function getNodeRecord(node: string, key: string) {
+    node = normalizeIndexerKey(node)
     const payload = await getJson(fetcher, endpointUrl(baseUrl, 'record', { node, key }))
     if (payload === null) return null
 
@@ -231,6 +242,7 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
       throw new Error('Dusk Domains indexer returned an invalid node record response.')
     }
 
+    assertRequestMatch(payload.key === key, 'node record')
     return payload
   }
 
@@ -249,10 +261,16 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
       value: endpoint.value,
     }))
 
-    return primaryNameFromPayload(payload)
+    const name = primaryNameFromPayload(payload, endpoint)
+    if (name && (!isRecord(payload) || !('endpoint' in payload))) {
+      const forward = await resolveForward(name)
+      assertRequestMatch(forward.records.some((record) => record.key === endpoint.type && record.value === endpoint.value), 'reverse')
+    }
+    return name
   }
 
   async function getNameState(node: string) {
+    node = normalizeIndexerKey(node)
     const payload = await getJson(fetcher, endpointUrl(baseUrl, 'name', { node }))
     if (payload === null) return null
 
@@ -260,6 +278,7 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
       throw new Error('Dusk Domains indexer returned an invalid name-state response.')
     }
 
+    assertRequestMatch(matchesIndexerKey(payload.node, node) && matchesIndexedName(payload.canonicalName, node), 'name-state')
     return payload
   }
 
@@ -291,6 +310,7 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
   }
 
   async function getSubname(node: string) {
+    node = normalizeIndexerKey(node)
     const payload = await getJson(fetcher, endpointUrl(baseUrl, 'subname', { node }))
     if (payload === null) return null
 
@@ -298,6 +318,7 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
       throw new Error('Dusk Domains indexer returned an invalid subname response.')
     }
 
+    assertRequestMatch(matchesIndexerKey(payload.node, node) && matchesIndexedName(payload.name, node), 'subname')
     return payload
   }
 
@@ -319,11 +340,13 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
   }
 
   async function getMarketplaceFixedSale(node: string) {
+    node = normalizeIndexerKey(node)
     const payload = await getJson(fetcher, endpointUrl(baseUrl, 'marketplace/fixed-sale', { node }))
     if (payload === null) return null
     if (!isIndexedMarketplaceFixedSale(payload)) {
       throw new Error('Dusk Domains indexer returned an invalid marketplace fixed-sale response.')
     }
+    assertRequestMatch(matchesIndexerKey(payload.node, node) && matchesIndexedName(payload.name, node), 'marketplace fixed-sale')
     return payload
   }
 
@@ -337,6 +360,7 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
   }
 
   async function getMarketplaceAuction(node: string) {
+    node = normalizeIndexerKey(node)
     const payload = await getJson(fetcher, endpointUrl(baseUrl, 'marketplace/auction', { node }))
     if (payload === null) return null
 
@@ -344,6 +368,7 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
       throw new Error('Dusk Domains indexer returned an invalid marketplace auction response.')
     }
 
+    assertRequestMatch(matchesIndexerKey(payload.node, node) && matchesIndexedName(payload.name, node), 'marketplace auction')
     return payload
   }
 
@@ -357,20 +382,25 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
   }
 
   async function getMarketplaceOffer(node: string, buyerAuthority: string) {
+    node = normalizeIndexerKey(node)
+    buyerAuthority = normalizeIndexerKey(buyerAuthority)
     const payload = await getJson(fetcher, endpointUrl(baseUrl, 'marketplace/offer', { node, buyerAuthority }))
     if (payload === null) return null
     if (!isIndexedMarketplaceOffer(payload)) {
       throw new Error('Dusk Domains indexer returned an invalid marketplace offer response.')
     }
+    assertRequestMatch(matchesIndexerKey(payload.node, node) && matchesIndexedName(payload.name, node) && matchesIndexerKey(payload.buyerAuthority, buyerAuthority), 'marketplace offer')
     return payload
   }
 
   async function getMarketplaceRefund(authority: string) {
+    authority = normalizeIndexerKey(authority)
     const payload = await getJson(fetcher, endpointUrl(baseUrl, 'marketplace/refund', { authority }))
     if (payload === null) return null
     if (!isIndexedMarketplaceRefund(payload)) {
       throw new Error('Dusk Domains indexer returned an invalid marketplace refund response.')
     }
+    assertRequestMatch(matchesIndexerKey(payload.authority, authority), 'marketplace refund')
     return payload
   }
 
@@ -385,12 +415,14 @@ export function createDuskDomainsIndexerClient(options: DuskDomainsIndexerClient
   }
 
   async function getReferralState(referrer: string) {
+    referrer = normalizeIndexerKey(referrer)
     const payload = await getJson(fetcher, endpointUrl(baseUrl, 'referrals', { referrer }))
 
     if (!isIndexedReferralState(payload)) {
       throw new Error('Dusk Domains indexer returned an invalid referral response.')
     }
 
+    assertRequestMatch(matchesIndexerKey(payload.referrer, referrer), 'referral')
     return payload
   }
 
