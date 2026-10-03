@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
+  DUSK_DOMAINS_CONTRACTS,
   coreCompleteRegistrationRuntimeCall,
   coreSetRecordSenderRuntimeCall,
   type DuskConnectAppLike,
   type DuskDomainCallMetadata,
 } from '../contracts/calls'
 import { createPreviewDuskTxHandle, submitDuskDomainWrite, trackDuskDomainTransaction, type DuskDomainTxState } from './transactions'
+
+const contracts = { ...DUSK_DOMAINS_CONTRACTS, core: { ...DUSK_DOMAINS_CONTRACTS.core, contractId: `0x${'11'.repeat(32)}` } }
 
 const call = coreSetRecordSenderRuntimeCall({
   node: `0x${'08'.repeat(32)}`,
@@ -22,6 +25,7 @@ describe('Dusk Domains transaction lifecycle helpers', () => {
   it('prepares, writes, and tracks a Dusk Connect style transaction handle', async () => {
     const updates: DuskDomainTxState[] = []
     const app: DuskConnectAppLike = {
+      chainId: 'dusk:3',
       async readContract() {
         throw new Error('unused')
       },
@@ -35,7 +39,7 @@ describe('Dusk Domains transaction lifecycle helpers', () => {
       },
     }
 
-    await expect(submitDuskDomainWrite(app, call, { onUpdate: (state) => updates.push(state) })).resolves.toMatchObject({
+    await expect(submitDuskDomainWrite(app, call, { contracts, onUpdate: (state) => updates.push(state) })).resolves.toMatchObject({
       status: 'executed',
       txId: 'tx-preview-1',
     })
@@ -67,6 +71,7 @@ describe('Dusk Domains transaction lifecycle helpers', () => {
     })
     const deposits: Array<string | undefined> = []
     const app: DuskConnectAppLike = {
+      chainId: 'dusk:3',
       async readContract() {
         throw new Error('unused')
       },
@@ -81,7 +86,7 @@ describe('Dusk Domains transaction lifecycle helpers', () => {
       },
     }
 
-    await expect(submitDuskDomainWrite(app, paidCall)).resolves.toMatchObject({
+    await expect(submitDuskDomainWrite(app, paidCall, { contracts })).resolves.toMatchObject({
       status: 'executed',
       txId: 'tx-paid-1',
     })
@@ -93,6 +98,7 @@ describe('Dusk Domains transaction lifecycle helpers', () => {
     let prepared = false
     let written = false
     const app: DuskConnectAppLike = {
+      chainId: 'dusk:3',
       async readContract() {
         throw new Error('unused')
       },
@@ -112,7 +118,7 @@ describe('Dusk Domains transaction lifecycle helpers', () => {
       args: { node: `0x${'08'.repeat(32)}` },
     }
 
-    await expect(submitDuskDomainWrite(app, unsafeCall, { onUpdate: (state) => updates.push(state) })).resolves.toMatchObject({
+    await expect(submitDuskDomainWrite(app, unsafeCall, { contracts, onUpdate: (state) => updates.push(state) })).resolves.toMatchObject({
       status: 'failed',
       message: 'This action cannot be submitted safely from the browser yet.',
     })
@@ -126,6 +132,7 @@ describe('Dusk Domains transaction lifecycle helpers', () => {
     const updates: DuskDomainTxState[] = []
     let prepared = false
     const app: DuskConnectAppLike = {
+      chainId: 'dusk:3',
       async readContract() {
         throw new Error('unused')
       },
@@ -144,7 +151,7 @@ describe('Dusk Domains transaction lifecycle helpers', () => {
       args: {},
     }
 
-    await expect(submitDuskDomainWrite(app, mislabeledCall, { onUpdate: (state) => updates.push(state) })).resolves.toMatchObject({
+    await expect(submitDuskDomainWrite(app, mislabeledCall, { contracts, onUpdate: (state) => updates.push(state) })).resolves.toMatchObject({
       status: 'failed',
       message: 'This action cannot be submitted safely from the browser yet.',
     })
@@ -157,6 +164,7 @@ describe('Dusk Domains transaction lifecycle helpers', () => {
     let prepared = false
     let written = false
     const app: DuskConnectAppLike = {
+      chainId: 'dusk:3',
       async readContract() {
         throw new Error('unused')
       },
@@ -177,6 +185,7 @@ describe('Dusk Domains transaction lifecycle helpers', () => {
     }
 
     await expect(submitDuskDomainWrite(app, unsafeCall, {
+      contracts,
       allowUnsafePreviewCall: true,
     })).resolves.toMatchObject({
       status: 'executed',
@@ -212,6 +221,7 @@ describe('Dusk Domains transaction lifecycle helpers', () => {
   it('maps direct wallet submission errors to a terminal failed state', async () => {
     const updates: DuskDomainTxState[] = []
     const app: DuskConnectAppLike = {
+      chainId: 'dusk:3',
       async readContract() {
         throw new Error('unused')
       },
@@ -223,7 +233,7 @@ describe('Dusk Domains transaction lifecycle helpers', () => {
       },
     }
 
-    await expect(submitDuskDomainWrite(app, call, { onUpdate: (state) => updates.push(state) })).resolves.toMatchObject({
+    await expect(submitDuskDomainWrite(app, call, { contracts, onUpdate: (state) => updates.push(state) })).resolves.toMatchObject({
       status: 'failed',
       message: 'This local wallet is read-only. Use a transaction-capable Dusk wallet or the trusted local write bridge to update deployed state.',
     })

@@ -13,7 +13,44 @@ type PoolTarget =
   | { kind: 'primary'; endpointType: string; endpointValue: string }
 
 // Registries never lose a name, so a located registry stays correct for the router's lifetime.
-const locatedRegistries = new Map<string, string>()
+const MAX_LOCATED_REGISTRIES = 256
+let locatedRegistries = new WeakMap<DuskConnectAppLike, Map<string, string>>()
+const routedRegistries = new WeakMap<DuskDomainCallMetadata, { cache: Map<string, string>; key: string; registry: string }>()
+
+function registryCache(app: DuskConnectAppLike, contracts: DuskDomainContractMap, node: string) {
+  const router = poolRouter(contracts)
+  if (!router || !app.chainId) return null
+  let cache = locatedRegistries.get(app)
+  if (!cache) {
+    cache = new Map()
+    locatedRegistries.set(app, cache)
+  }
+  return { cache, key: `${app.chainId}:${router.toLowerCase()}:${node.toLowerCase()}` }
+}
+
+export async function withRoutedDuskDomainCall<T>(
+  app: DuskConnectAppLike,
+  call: DuskDomainCallMetadata,
+  contracts: DuskDomainContractMap,
+  operation: (routed: DuskDomainCallMetadata) => Promise<T>,
+): Promise<T> {
+  const chainId = app.chainId
+  const routed = await routeDuskDomainCall(app, call, contracts)
+  const entry = routedRegistries.get(routed)
+  try {
+    if (app.chainId !== chainId) throw new Error('Dusk Domains chain changed during registry routing.')
+    const result = await operation(routed)
+    if (entry) {
+      entry.cache.delete(entry.key)
+      entry.cache.set(entry.key, entry.registry)
+      if (entry.cache.size > MAX_LOCATED_REGISTRIES) entry.cache.delete(entry.cache.keys().next().value!)
+    }
+    return result
+  } catch (error) {
+    if (entry) entry.cache.delete(entry.key)
+    throw error
+  }
+}
 
 const nameCalls = new Set([
   'renew_runtime',
@@ -43,6 +80,11 @@ export async function routeDuskDomainCall(
   const target = poolTarget(call)
   if (!target) return call
 
+  const chainId = app.chainId
+  const cacheEntry = target.kind === 'name' || target.kind === 'registration'
+    ? registryCache(app, contracts, target.node) : null
+  const located = target.kind === 'name' || target.kind === 'registration'
+    ? await locateNameRegistry(app, contracts, target.node) : null
   const registry = target.kind === 'new_name'
     ? await activeRegistry(app, contracts)
     : target.kind === 'primary'
@@ -52,9 +94,14 @@ export async function routeDuskDomainCall(
         kind: 'read',
         args: { endpointType: target.endpointType, endpointValue: target.endpointValue },
       })
-      : await locateNameRegistry(app, contracts, target.node)
-          ?? (target.kind === 'registration' ? await activeRegistry(app, contracts) : null)
-  return registry ? { ...call, contractId: registry } : call
+      : located ?? (target.kind === 'registration' ? await activeRegistry(app, contracts) : null)
+  if (app.chainId !== chainId) throw new Error('Dusk Domains chain changed during registry routing.')
+  if (!registry) return call
+  const routed = { ...call, contractId: registry }
+  if (located && (target.kind === 'name' || target.kind === 'registration')) {
+    if (cacheEntry) routedRegistries.set(routed, { ...cacheEntry, registry })
+  }
+  return routed
 }
 
 /**
@@ -77,8 +124,8 @@ export async function locateNameRegistry(
 ): Promise<string | null> {
   const router = poolRouter(contracts)
   if (!router) return null
-  const key = `${router.toLowerCase()}:${node.toLowerCase()}`
-  const cached = locatedRegistries.get(key)
+  const entry = registryCache(app, contracts, node)
+  const cached = entry?.cache.get(entry.key)
   if (cached) return cached
   const registry = await readRegistry(app, contracts, {
     contract: 'router',
@@ -86,7 +133,6 @@ export async function locateNameRegistry(
     kind: 'read',
     args: { node },
   })
-  if (registry) locatedRegistries.set(key, registry)
   return registry
 }
 
@@ -147,11 +193,14 @@ export function contractIdFromOutput(value: unknown): string | null {
   if (output == null) return null
   if (typeof output === 'string') {
     const hex = output.toLowerCase().replace(/^0x/u, '')
-    if (!/^[0-9a-f]{64}$/u.test(hex)) throw new Error('Dusk Domains router returned a malformed contract ID.')
+    if (!/^[0-9a-f]{64}$/u.test(hex) || /^0{64}$/u.test(hex)) throw new Error('Dusk Domains router returned a malformed contract ID.')
     return `0x${hex}`
   }
-  if (Array.isArray(output) && output.length === 32 && output.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255)) {
-    return `0x${output.map((byte: number) => byte.toString(16).padStart(2, '0')).join('')}`
+  if (Array.isArray(output) && output.length === 32) {
+    const bytes = Array.from(output)
+    if (bytes.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255) && bytes.some((byte) => byte !== 0)) {
+      return `0x${bytes.map((byte: number) => byte.toString(16).padStart(2, '0')).join('')}`
+    }
   }
   throw new Error('Dusk Domains router returned a malformed contract ID.')
 }
@@ -163,5 +212,5 @@ function poolRouter(contracts: DuskDomainContractMap): string | null {
 
 /** Forgets located registries. Tests use it; apps never need to. */
 export function clearDuskDomainRegistryCache() {
-  locatedRegistries.clear()
+  locatedRegistries = new WeakMap()
 }

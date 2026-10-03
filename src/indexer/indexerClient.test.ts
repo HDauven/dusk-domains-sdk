@@ -1,3 +1,4 @@
+import { forwardResponse } from '../client/client.test-fixtures'
 import { describe, expect, it } from 'vitest'
 import {
   createDuskDomainsIndexerClient,
@@ -26,7 +27,7 @@ describe('Dusk Domains indexer client', () => {
     )
     const response: ForwardResolutionResponse = {
       canonicalName: 'aurora.dusk',
-      node: `0x${'18'.repeat(32)}`,
+      node: namehashHex('aurora.dusk'),
       records: [moonlight],
       resolver: {
         resolverId: `0x${'44'.repeat(32)}`,
@@ -69,7 +70,7 @@ describe('Dusk Domains indexer client', () => {
   })
 
   it('fetches current node records and append-only record history', async () => {
-    const node = `0x${'18'.repeat(32)}`
+    const node = namehashHex('aurora.dusk')
     const record = createResolverRecord(
       'website',
       'https://dusk.domains',
@@ -113,7 +114,7 @@ describe('Dusk Domains indexer client', () => {
       baseUrl: 'https://api.example/names',
       fetch: async (url) => {
         expect(String(url)).toBe('https://api.example/names/reverse?type=moonlight_address&value=dusk1abc')
-        return Response.json({ primaryName: 'aurora.dusk', node })
+        return Response.json({ primaryName: 'aurora.dusk', node, endpoint: { type: 'moonlight_address', value: 'dusk1abc' } })
       },
     })
 
@@ -126,7 +127,9 @@ describe('Dusk Domains indexer client', () => {
   it('keeps legacy reverse lookup responses without node metadata compatible', async () => {
     const client = createDuskDomainsIndexerClient({
       baseUrl: 'https://api.example/names',
-      fetch: async () => Response.json({ primaryName: 'aurora.dusk' }),
+      fetch: async (url) => Response.json(String(url).includes('/reverse?')
+        ? { primaryName: 'aurora.dusk' }
+        : { ...forwardResponse('dusk1abc') }),
     })
 
     await expect(client.getPrimaryName({
@@ -187,7 +190,7 @@ describe('Dusk Domains indexer client', () => {
     })
 
     await expect(client.getCommitment(commitment, controller)).resolves.toBeNull()
-    await expect(client.getCommitment(commitment, '')).resolves.toBeNull()
+    await expect(client.getCommitment(commitment)).resolves.toBeNull()
     expect(seen).toEqual([
       `https://api.example/names/commitment?commitment=${commitment}&controller=${controller}`,
       `https://api.example/names/commitment?commitment=${commitment}`,
@@ -315,7 +318,7 @@ describe('Dusk Domains indexer client', () => {
     await expect(client.getMarketplaceAuction(namehashHex('none.dusk'))).resolves.toBeNull()
   })
 
-  it('treats reverse lookup responses with mismatched node metadata as missing', async () => {
+  it('rejects reverse lookup responses with mismatched node metadata', async () => {
     const client = createDuskDomainsIndexerClient({
       baseUrl: 'https://api.example/names',
       fetch: async () => Response.json({
@@ -327,7 +330,7 @@ describe('Dusk Domains indexer client', () => {
     await expect(client.getPrimaryName({
       type: 'moonlight_address',
       value: 'dusk1abc',
-    })).resolves.toBeNull()
+    })).rejects.toThrow('does not match')
   })
 
   it('treats recognized non-primary reverse endpoint responses as missing', async () => {
@@ -366,8 +369,8 @@ describe('Dusk Domains indexer client', () => {
   })
 
   it('fetches search, lifecycle, activity, and subname read models', async () => {
-    const node = `0x${'18'.repeat(32)}`
-    const subnameNode = `0x${'19'.repeat(32)}`
+    const node = namehashHex('aurora.dusk')
+    const subnameNode = namehashHex('pay.aurora.dusk')
     const search: NameResult = {
       canonical: 'aurora.dusk',
       canonicalRaw: 'aurora.dusk',

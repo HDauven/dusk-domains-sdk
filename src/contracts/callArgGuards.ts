@@ -249,6 +249,8 @@ export function isCoreAcceptMarketplaceOfferRuntimeArgs(
     typeof value.marketplaceContract === 'string' &&
     typeof value.buyerAuthority === 'string' &&
     isNonNegativeSafeInteger(value.expectedAmountLux) &&
+    isNonNegativeSafeInteger(value.expectedOfferId) && value.expectedOfferId > 0 &&
+    isNonNegativeSafeInteger(value.expectedFeeBps) && value.expectedFeeBps <= 1_000 &&
     typeof value.sellerRecipient === 'string'
   )
 }

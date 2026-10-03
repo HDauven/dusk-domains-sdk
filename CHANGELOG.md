@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Return chain- and contract-bound preparation envelopes and reject stale or unbound submissions. ([#239])
+- Require the current wallet chain for call preparation. ([#239])
+- Reject zero contract overrides and configured placeholders at live call boundaries. ([#239])
+- Export dense, non-zero contract ID decoding through the writes entrypoint. ([#239])
+- Bind exact indexer lookups to their requested identities. ([#239])
+- Require canonical authorities and lifecycle status for indexed-name verification. ([#239])
+- Require the caller’s expected name for indexed-resolution verification. ([#239])
+- Scope bounded route caches to successful operations on a transport, chain and router. ([#239])
+- Reject sparse and zero registry contract IDs. ([#239])
+- Expose immutable offer IDs and fees in canonical reads and acceptance payloads. ([#239])
+
 - Document rejection of unchanged ancestor assignments and take-back entries. ([#237])
 - Expose raw on-chain primary mappings for endpoint cleanup after expiry. ([#237])
 - Explain mandatory identity clearing for ancestor owner or manager changes. ([#237])
@@ -22,3 +33,5 @@
 [#235]: https://github.com/HDauven/dusk-domains-protocol/issues/235
 
 [#237]: https://github.com/HDauven/dusk-domains-protocol/issues/237
+
+[#239]: https://github.com/HDauven/dusk-domains-protocol/issues/239

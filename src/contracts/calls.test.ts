@@ -228,6 +228,8 @@ function schemaCalls(): DuskDomainCallMetadata[] {
       marketplaceContract,
       buyerAuthority: owner,
       expectedAmountLux: 30_000_000_000,
+      expectedOfferId: 42,
+      expectedFeeBps: 250,
       sellerRecipient: recipient,
     }),
     coreSetRecordSenderRuntimeCall({
@@ -477,26 +479,37 @@ describe('Dusk Domains contract call helpers', () => {
     })
   })
 
-  it('binds an offer acceptance to the amount the seller saw', () => {
+  it('binds an offer acceptance to the placement and financial terms the seller saw', () => {
     const accept = {
       node,
       marketplaceContract,
       buyerAuthority: owner,
       expectedAmountLux: 30_000_000_000,
+      expectedOfferId: 42,
+      expectedFeeBps: 250,
       sellerRecipient: recipient,
     }
     expect(toDuskDomainWireArgs(coreAcceptMarketplaceOfferRuntimeCall(accept))).toMatchObject({
       node: Array(32).fill(7),
       buyer_authority: Array(32).fill(9),
       expected_amount_lux: 30_000_000_000,
+      expected_offer_id: 42,
+      expected_fee_bps: 250,
     })
-    const { expectedAmountLux: _, ...unbound } = accept
-    expect(() => toDuskDomainWireArgs({
-      contract: 'core',
-      functionName: 'accept_marketplace_offer_runtime',
-      kind: 'write',
-      args: unbound,
-    })).toThrow('Invalid Dusk Domains core.accept_marketplace_offer_runtime arguments')
+    expect(decodedDuskDomainContext(coreAcceptMarketplaceOfferRuntimeCall(accept))).toMatchObject({
+      fields: expect.arrayContaining([
+        { label: 'Offer ID', value: '42' },
+        { label: 'Fee', value: '2.5%' },
+      ]),
+    })
+    for (const field of ['expectedAmountLux', 'expectedOfferId', 'expectedFeeBps'] as const) {
+      const unbound = { ...accept, [field]: undefined }
+      expect(() => toDuskDomainWireArgs(coreAcceptMarketplaceOfferRuntimeCall(unbound as typeof accept)))
+        .toThrow('Invalid Dusk Domains core.accept_marketplace_offer_runtime arguments')
+    }
+    for (const terms of [{ expectedOfferId: 0 }, { expectedOfferId: 1.5 }, { expectedOfferId: Number.MAX_SAFE_INTEGER + 1 }, { expectedFeeBps: 1_001 }, { expectedFeeBps: -1 }]) {
+      expect(() => toDuskDomainWireArgs(coreAcceptMarketplaceOfferRuntimeCall({ ...accept, ...terms }))).toThrow('Invalid')
+    }
   })
 
   it('reads a pending commitment under its controller', () => {
@@ -534,6 +547,7 @@ describe('Dusk Domains contract call helpers', () => {
 
   it('attaches deposits only to calls that transfer value', async () => {
     const app: DuskConnectAppLike = {
+      chainId: 'dusk:3',
       async readContract() {
         throw new Error('unused')
       },
@@ -545,10 +559,14 @@ describe('Dusk Domains contract call helpers', () => {
       },
     }
 
-    await expect(prepareDuskDomainContractCall(app, registrationCall())).resolves.toMatchObject({
-      contract: { name: 'Dusk Domains Core' },
-      functionName: 'complete_registration_runtime',
-      deposit: '50000000000',
+    await expect(prepareDuskDomainContractCall(app, registrationCall(), { ...DUSK_DOMAINS_CONTRACTS, core: { ...DUSK_DOMAINS_CONTRACTS.core, contractId: `0x${'11'.repeat(32)}` } })).resolves.toMatchObject({
+      chainId: 'dusk:3',
+      contractId: `0x${'11'.repeat(32)}`,
+      preparedCall: {
+        contract: { name: 'Dusk Domains Core' },
+        functionName: 'complete_registration_runtime',
+        deposit: '50000000000',
+      },
     })
     expect(duskDomainCallDepositLux(coreRenewRuntimeCall({ node, durationYears: 1, feeLux: 50_000_000_000 }))).toBe('50000000000')
     expect(duskDomainCallDepositLux(marketplaceBuyFixedSaleRuntimeCall({ node, priceLux: 25_000_000_000 }))).toBe('25000000000')

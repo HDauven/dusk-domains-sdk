@@ -42,6 +42,8 @@ export type DuskDataDriverLike = {
 }
 
 export type DuskConnectAppLike = {
+  /** Current chain identity. Required for preparation; reads are uncached when unavailable. */
+  readonly chainId?: string
   readContract: (params: {
     contract: DuskDomainContractPreset
     functionName: string
@@ -178,7 +180,9 @@ export type CoreAcceptMarketplaceOfferRuntimeArgs = {
   node: string
   marketplaceContract: string
   buyerAuthority: string
-  /** The offer's gross amount as shown to the seller; any other offer fails the acceptance. */
+  /** The immutable placement and terms shown to the seller. */
+  expectedOfferId: number
+  expectedFeeBps: number
   expectedAmountLux: number
   sellerRecipient: string
 }
