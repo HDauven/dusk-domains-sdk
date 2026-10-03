@@ -90,6 +90,9 @@ export function fakeIndexer(overrides: Partial<DuskDomainsIndexerClient>): DuskD
 
 export function fakeOnChain(overrides: Partial<DuskDomainsOnChainClient>): DuskDomainsOnChainClient {
   return {
+    async getRegistrationPremium() {
+      throw new Error('not implemented')
+    },
     async getCurrentBlockHeight() {
       throw new Error('not implemented')
     },
@@ -239,6 +242,7 @@ export function releaseManifest() {
           remove_subname_runtime: 'remove_subname_runtime(RemoveSubnameRuntime)',
           take_back_subnames_runtime: 'take_back_subnames_runtime(TakeBackSubnamesRuntime)',
           get_name: 'get_name(GetName)',
+          registration_premium: 'registration_premium(GetName)',
           read_record: 'read_record(ReadRecord)',
           read_primary_name: 'read_primary_name(ReadPrimaryName)',
           pending_commitment: 'pending_commitment(PendingCommitmentQuery)',

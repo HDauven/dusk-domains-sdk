@@ -1,3 +1,5 @@
+import { registrationPremiumSchedule, validateFeeConfigPrices } from './premium.mjs'
+export * from './premium.mjs'
 import { DEFAULT_FEE_CONFIG, LUX_PER_DUSK, getReservedNamePolicy } from './namePolicyData.mjs'
 export { DEFAULT_FEE_CONFIG, RESERVED_NAME_POLICIES, RESERVED_LABELS, getReservedNamePolicy } from './namePolicyData.mjs'
 
@@ -17,6 +19,12 @@ export type NameResult = {
   price: number
   issues: SearchIssue[]
   transactionBlocked: boolean
+  premiumLux?: number
+  premiumEndsAt?: string | null
+  premiumEndsAtBlockHeight?: number | null
+  premiumNextStepAt?: string | null
+  premiumNextStepBlockHeight?: number | null
+  graceEndsAtBlockHeight?: number | null
   reserved?: ReservedNamePolicy
 }
 
@@ -26,6 +34,7 @@ export type CoreFeeConfig = {
   fivePlusYearLux: number
   referralRewardBps: number
   renewalReferralRewardBps: number
+  premiumStartLux: number
   premiumReferralRewardBps: number
   version: number
   updatedAt: number
@@ -200,16 +209,42 @@ export function durationPrice(basePrice: number, years: number): number {
   return basePrice * years
 }
 
-export function registrationFeeLux(label: string, years: number, feeConfig: CoreFeeConfig = DEFAULT_FEE_CONFIG): number {
-  return annualFeeLux(label, feeConfig) * years
+export function registrationFeeLux(label: string, years: number, feeConfig: CoreFeeConfig = DEFAULT_FEE_CONFIG, premiumLux = 0): number {
+  validateFeeConfigPrices(feeConfig)
+  if (!Number.isInteger(years) || years < 1 || years > 10 || !Number.isSafeInteger(premiumLux) || premiumLux < 0) {
+    throw new RangeError('Invalid registration quote.')
+  }
+  const total = annualFeeLux(label, feeConfig) * years + premiumLux
+  if (!Number.isSafeInteger(total)) throw new RangeError('Registration quote exceeds the maximum.')
+  return total
 }
 
-export function registrationPrice(label: string, years: number, feeConfig: CoreFeeConfig = DEFAULT_FEE_CONFIG): number {
-  return registrationFeeLux(label, years, feeConfig) / LUX_PER_DUSK
+/** Quote a public root registration; pass the replaced record's grace end, or null for a new name. */
+export function quoteRegistration(name: string, years: number, feeConfig: CoreFeeConfig, timing: {
+  graceEndsAtBlockHeight: number | null
+  currentBlockHeight: number
+  nowSeconds?: number
+}) {
+  const validation = validateName(name)
+  if (!validation.ok || validation.name.labels.length !== 2 || getReservedNamePolicy(validation.name.registrableLabel)) {
+    throw new Error('Public registration requires an unreserved root name.')
+  }
+  const label = validation.name.registrableLabel
+  const schedule = registrationPremiumSchedule({ ...timing, premiumStartLux: feeConfig.premiumStartLux })
+  return { ...schedule, baseLux: registrationFeeLux(label, years, feeConfig),
+    totalLux: registrationFeeLux(label, years, feeConfig, schedule.premiumLux) }
 }
 
-export function referralRewardLux(feeLux: number, feeConfig: CoreFeeConfig = DEFAULT_FEE_CONFIG): number {
-  return Math.floor((feeLux * feeConfig.referralRewardBps) / 10_000)
+export function registrationPrice(label: string, years: number, feeConfig: CoreFeeConfig = DEFAULT_FEE_CONFIG, premiumLux = 0): number {
+  return registrationFeeLux(label, years, feeConfig, premiumLux) / LUX_PER_DUSK
+}
+
+export function referralRewardLux(feeLux: number, feeConfig: CoreFeeConfig = DEFAULT_FEE_CONFIG, premiumLux = 0): number {
+  if (!Number.isSafeInteger(feeLux) || !Number.isSafeInteger(premiumLux) || premiumLux < 0 || premiumLux > feeLux) {
+    throw new RangeError('Invalid referral fee components.')
+  }
+  return Number(BigInt(feeLux - premiumLux) * BigInt(feeConfig.referralRewardBps) / 10_000n
+    + BigInt(premiumLux) * BigInt(feeConfig.premiumReferralRewardBps) / 10_000n)
 }
 
 export function analyzeName(query: string, feeConfig: CoreFeeConfig = DEFAULT_FEE_CONFIG): NameResult {

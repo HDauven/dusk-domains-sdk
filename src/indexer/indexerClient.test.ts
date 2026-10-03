@@ -264,6 +264,7 @@ describe('Dusk Domains indexer client', () => {
       fivePlusYearLux: 10_000_000_000,
       referralRewardBps: 2_000,
       renewalReferralRewardBps: 1_000,
+      premiumStartLux: 0,
       premiumReferralRewardBps: 0,
       version: 1,
       updatedAt: 0,

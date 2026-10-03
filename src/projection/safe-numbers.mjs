@@ -1,6 +1,11 @@
+import { accountingLux } from './accounting.mjs'
 const maxSafeInteger = BigInt(Number.MAX_SAFE_INTEGER)
 
-export function assertSafeNumericTree(value, label = 'value', key = '') {
+export function assertSafeNumericTree(value, label = 'value', key = '', accounting = false) {
+  if (accounting && value != null && /(?:Lux|_lux)$/.test(key)) {
+    accountingLux(value)
+    return
+  }
   if (typeof value === 'number') {
     safeNonNegativeInteger(value, label)
     return
@@ -16,12 +21,13 @@ export function assertSafeNumericTree(value, label = 'value', key = '') {
     return
   }
   if (Array.isArray(value)) {
-    value.forEach((item) => assertSafeNumericTree(item, label, key))
+    value.forEach((item) => assertSafeNumericTree(item, label, key, accounting))
     return
   }
   if (!value || typeof value !== 'object') return
+  accounting ||= /^(?:treasury_|referral_)/.test(value.type ?? '')
   for (const [childKey, item] of Object.entries(value)) {
-    assertSafeNumericTree(item, label, childKey)
+    assertSafeNumericTree(item, label, childKey, accounting || ['treasury', 'treasuryState', 'referrals', 'referralState', 'referralsByReferrer'].includes(childKey))
   }
 }
 

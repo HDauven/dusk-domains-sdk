@@ -25,6 +25,7 @@ describe('Dusk Domains release manifest helpers', () => {
         driverUrl: 'https://static.example/releases/devnet/contracts/dusk-domains-core.data-driver.wasm',
         methodSigs: {
           get_name: 'get_name(GetName)',
+          registration_premium: 'registration_premium(GetName)',
           read_record: 'read_record(ReadRecord)',
         },
       },
@@ -160,6 +161,7 @@ function releaseManifest(): DuskDomainsReleaseManifest {
           remove_subname_runtime: 'remove_subname_runtime(RemoveSubnameRuntime)',
           take_back_subnames_runtime: 'take_back_subnames_runtime(TakeBackSubnamesRuntime)',
           get_name: 'get_name(GetName)',
+          registration_premium: 'registration_premium(GetName)',
           read_record: 'read_record(ReadRecord)',
           read_primary_name: 'read_primary_name(ReadPrimaryName)',
           pending_commitment: 'pending_commitment(PendingCommitmentQuery)',

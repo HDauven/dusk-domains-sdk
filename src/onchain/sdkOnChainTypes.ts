@@ -106,5 +106,6 @@ export type DuskDomainsOnChainClient = {
     commitment: string,
     name?: string,
   ) => Promise<DuskDomainsResult<DuskDomainsOnChainPendingCommitment>>
+  getRegistrationPremium: (name: string) => Promise<DuskDomainsResult<number>>
   getFeeConfig: () => Promise<DuskDomainsResult<CoreFeeConfig>>
 }

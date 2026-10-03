@@ -78,6 +78,7 @@ export type RouterInitArgs = {
   /** Null when the deployment runs without a marketplace. */
   marketplace: string | null
   referralRewardBps: number
+  premiumStartLux?: number
 }
 
 export type RouterAddPoolMemberArgs = {

@@ -304,6 +304,7 @@ describe('Dusk Domains on-chain SDK reads', () => {
           five_plus_year_lux: 10_000_000_000,
           referral_reward_bps: 2_000,
           renewal_referral_reward_bps: 1_000,
+          premium_start_lux: 0,
           premium_referral_reward_bps: 0,
           version: 3,
           updated_at: 12_000,

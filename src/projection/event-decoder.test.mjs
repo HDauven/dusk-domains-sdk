@@ -108,6 +108,7 @@ describe('Dusk Domains indexer event decoder', () => {
         expiresAtBlockHeight: 5,
         graceEndsAtBlockHeight: 8,
         feeLux: 10_000_000_000,
+        premiumLux: 0,
       },
       meta: {
         txId: null,

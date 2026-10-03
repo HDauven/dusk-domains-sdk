@@ -183,6 +183,7 @@ export function decodeFeeConfig(payload: unknown): DuskDomainsResult<CoreFeeConf
     referralRewardBps: numberField(config.referral_reward_bps),
     renewalReferralRewardBps: numberField(config.renewal_referral_reward_bps),
     premiumReferralRewardBps: numberField(config.premium_referral_reward_bps),
+    premiumStartLux: numberField(config.premium_start_lux),
     version: numberField(config.version),
     updatedAt: numberField(config.updated_at),
   }
@@ -309,7 +310,8 @@ function stringField(value: unknown): string | null {
   return typeof value === 'string' ? value : null
 }
 
-function numberField(value: unknown): number | null {
+export function numberField(value: unknown): number | null {
+  if (typeof value === 'string' && /^\d+$/u.test(value)) value = Number(value)
   if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return value
   if (typeof value === 'bigint' && value <= BigInt(Number.MAX_SAFE_INTEGER) && value >= 0n) return Number(value)
   return null

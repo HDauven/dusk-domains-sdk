@@ -10,3 +10,5 @@ export { RESERVED_LABELS, RESERVED_NAME_POLICIES, RESERVED_REASONS, LUX_PER_DUSK
 export { DEFAULT_FEE_CONFIG } from './projection/constants.mjs'
 export { assertSafeNumericTree, checkedSafeSum, safeNonNegativeInteger } from './projection/safe-numbers.mjs'
 export { eventTimestamp } from './projection/activity.mjs'
+
+export * from './core/premium.mjs'

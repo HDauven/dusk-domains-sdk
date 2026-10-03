@@ -40,6 +40,7 @@ export type NameLifecycleEvent =
       expiresAtBlockHeight?: number | null
       graceEndsAtBlockHeight?: number | null
       feeLux: number
+      premiumLux?: number
     }
   | {
       type: 'name_renewed'
@@ -194,20 +195,20 @@ export type TreasuryEvent =
       sourceContract: string
       reason: TreasuryFeeReason
       node: string
-      amountLux: number
-      totalReceivedLux: number
-      availableLux: number
-      registrationReceivedLux: number
-      renewalReceivedLux: number
-      otherReceivedLux: number
+      amountLux: number | string
+      totalReceivedLux: number | string
+      availableLux: number | string
+      registrationReceivedLux: number | string
+      renewalReceivedLux: number | string
+      otherReceivedLux: number | string
     }
   | {
       type: 'treasury_claimed'
       operator?: DuskPrincipal
       operatorAuthority?: string
       operatorRecipient: string
-      amountLux: number
-      remainingLux: number
+      amountLux: number | string
+      remainingLux: number | string
     }
 
 export type TreasuryFeeReason = 'registration' | 'renewal' | 'other'
@@ -217,18 +218,18 @@ export type ReferralEvent =
       type: 'referral_reward_accrued'
       referrer: DuskPrincipal | string
       buyer: DuskPrincipal | string
-      amountLux: number
-      claimableLux: number
-      claimedLux: number
+      amountLux: number | string
+      claimableLux: number | string
+      claimedLux: number | string
       referralCount: number
     }
   | {
       type: 'referral_reward_claimed'
       referrer: DuskPrincipal | string
       recipient?: string
-      amountLux: number
-      remainingLux: number
-      claimedLux: number
+      amountLux: number | string
+      remainingLux: number | string
+      claimedLux: number | string
       referralCount: number
     }
 

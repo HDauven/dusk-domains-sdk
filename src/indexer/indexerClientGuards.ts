@@ -330,13 +330,15 @@ export function isIndexedTreasuryState(value: unknown): value is IndexedTreasury
     isNullableString(value.operatorRecipient) &&
     Array.isArray(value.allowedFeeSources) &&
     value.allowedFeeSources.every((source) => typeof source === 'string') &&
-    isNonNegativeInteger(value.totalReceivedLux) &&
-    isNonNegativeInteger(value.availableLux) &&
-    isNonNegativeInteger(value.registrationReceivedLux) &&
-    isNonNegativeInteger(value.renewalReceivedLux) &&
-    isNonNegativeInteger(value.otherReceivedLux) &&
-    isNonNegativeInteger(value.referralClaimableLux) &&
-    isNonNegativeInteger(value.referralClaimedLux) &&
+    (value.premiumReceivedLux === undefined || isAccountingLux(value.premiumReceivedLux)) &&
+    (value.premiumAccountingError === undefined || isNullableString(value.premiumAccountingError)) &&
+    isAccountingLux(value.totalReceivedLux) &&
+    isAccountingLux(value.availableLux) &&
+    isAccountingLux(value.registrationReceivedLux) &&
+    isAccountingLux(value.renewalReceivedLux) &&
+    isAccountingLux(value.otherReceivedLux) &&
+    isAccountingLux(value.referralClaimableLux) &&
+    isAccountingLux(value.referralClaimedLux) &&
     isNonNegativeInteger(value.referralCount) &&
     isNullableString(value.lastFeeSourceContract) &&
     (value.lastFeeReason === 'registration' || value.lastFeeReason === 'renewal' || value.lastFeeReason === 'other' || value.lastFeeReason === null) &&
@@ -362,15 +364,15 @@ export function isIndexedReferralState(value: unknown): value is IndexedReferral
     isRecord(value) &&
     typeof value.supported === 'boolean' &&
     isNullableString(value.referrer) &&
-    isNonNegativeInteger(value.claimableLux) &&
-    isNonNegativeInteger(value.claimedLux) &&
+    isAccountingLux(value.claimableLux) &&
+    isAccountingLux(value.claimedLux) &&
     isNonNegativeInteger(value.referralCount) &&
     Array.isArray(value.recentActivity) &&
     value.recentActivity.every((activity) => (
       isRecord(activity) &&
       isNullableString(activity.txId) &&
       (isNonNegativeInteger(activity.blockHeight) || activity.blockHeight === null) &&
-      isNonNegativeInteger(activity.amountLux) &&
+      isAccountingLux(activity.amountLux) &&
       (activity.kind === 'accrual' || activity.kind === 'claim') &&
       isNullableString(activity.counterparty)
     ))
@@ -386,6 +388,7 @@ export function isIndexedFeeConfig(value: unknown): value is IndexedFeeConfig {
     isNonNegativeInteger(value.referralRewardBps) &&
     isNonNegativeInteger(value.renewalReferralRewardBps) &&
     isNonNegativeInteger(value.premiumReferralRewardBps) &&
+    isNonNegativeInteger(value.premiumStartLux) &&
     isNonNegativeInteger(value.version) &&
     isNonNegativeInteger(value.updatedAt) &&
     (value.operator === null || typeof value.operator === 'string' || isDuskPrincipal(value.operator)) &&
@@ -404,8 +407,8 @@ function isIndexedTreasuryClaim(value: unknown) {
     (value.operator === null || value.operator === undefined || isDuskPrincipal(value.operator)) &&
     (typeof value.operatorAuthority === 'string' || value.operatorAuthority === undefined) &&
     typeof value.operatorRecipient === 'string' &&
-    isNonNegativeInteger(value.amountLux) &&
-    isNonNegativeInteger(value.remainingLux) &&
+    isAccountingLux(value.amountLux) &&
+    isAccountingLux(value.remainingLux) &&
     isNullableString(value.txId) &&
     (isNonNegativeInteger(value.blockHeight) || value.blockHeight === null)
   )
@@ -455,4 +458,8 @@ export function isIndexedNamespace(value: unknown): value is import('./indexerSt
     && Array.isArray(value.ancestors) && value.ancestors.length <= 3
     && value.ancestors.every(ancestor => isRecord(ancestor) && ['node', 'name', 'owner', 'manager'].every(key => typeof ancestor[key] === 'string')
       && (ancestor.expiresAtBlockHeight === null || isNonNegativeInteger(ancestor.expiresAtBlockHeight)))
+}
+
+function isAccountingLux(value: unknown) {
+  return isNonNegativeInteger(value) || (typeof value === 'string' && /^(0|[1-9]\d*)$/.test(value))
 }

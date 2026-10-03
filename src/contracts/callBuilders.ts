@@ -230,6 +230,10 @@ export function corePruneSubnameRuntimeCall(args: PoolNodeArgs): DuskDomainCallM
   return { contract: 'core', functionName: 'prune_subname_runtime', kind: 'write', args }
 }
 
+export function coreRegistrationPremiumCall(args: CoreGetNameArgs): DuskDomainCallMetadata<CoreGetNameArgs> {
+  return { contract: 'core', functionName: 'registration_premium', kind: 'read', args }
+}
+
 export function coreGetNameCall(args: CoreGetNameArgs): DuskDomainCallMetadata<CoreGetNameArgs> {
   return {
     contract: 'core',

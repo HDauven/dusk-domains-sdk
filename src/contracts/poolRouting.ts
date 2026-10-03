@@ -67,6 +67,7 @@ const nameCalls = new Set([
   'remove_subname_runtime',
   'take_back_subnames_runtime',
   'get_name',
+  'registration_premium',
   'read_record',
   'record_slot',
 ])

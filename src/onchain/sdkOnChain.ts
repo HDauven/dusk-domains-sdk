@@ -1,5 +1,6 @@
 import {
   coreGetNameCall,
+  coreRegistrationPremiumCall,
   corePendingCommitmentCall,
   coreReadPrimaryNameCall,
   coreReadRecordCall,
@@ -21,6 +22,7 @@ import {
   decodePrimaryNameResponse,
   decodeRecordResponse,
   normalizeBytes32Hex,
+  numberField,
   unwrapReadOutput,
   validateEndpoint,
 } from './sdkOnChainDecoders'
@@ -329,6 +331,18 @@ export function createDuskDomainsOnChainClient(
     return decodePendingCommitmentResponse(response.value)
   }
 
+  async function getRegistrationPremium(name: string): Promise<DuskDomainsResult<number>> {
+    const normalized = normalizeSdkName(name)
+    if (!normalized.ok) return normalized
+    const response = await readCall<unknown>(coreRegistrationPremiumCall({ node: namehash(normalized.value).hex }))
+    if (!response.ok) return response
+    const premium = numberField(response.value)
+    if (premium == null) {
+      return failure('contract_read_failed', 'Core registration_premium returned an invalid price.')
+    }
+    return success(premium)
+  }
+
   async function getFeeConfig(): Promise<DuskDomainsResult<CoreFeeConfig>> {
     const response = await readCall<unknown>(routerFeeConfigCall())
     if (!response.ok) return response
@@ -372,5 +386,6 @@ export function createDuskDomainsOnChainClient(
     verifyPrimaryName,
     getPendingCommitment,
     getFeeConfig,
+    getRegistrationPremium,
   }
 }

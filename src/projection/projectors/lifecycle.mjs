@@ -1,3 +1,4 @@
+import { sumAccountingLux } from '../accounting.mjs'
 import {
   activityEntry,
   lifecycleActivityTarget,
@@ -40,6 +41,14 @@ export function applyLifecycleEvent(store, event, meta, fallbackTimestamp) {
     }),
     ...(store.activityByNode.get(node) ?? []),
   ])
+  if (event.type === 'name_registered') {
+    // Statistics must never discard an otherwise valid lifecycle update.
+    try {
+      store.treasuryState.premiumReceivedLux = sumAccountingLux(store.treasuryState.premiumReceivedLux ?? 0, event.premiumLux ?? 0)
+    } catch (error) {
+      store.treasuryState.premiumAccountingError = error.message
+    }
+  }
 }
 
 // Moved records keep their content; the name now resolves through the resolver holding them.
@@ -148,7 +157,7 @@ function reduceLifecycleEvent(event, current, canonicalName) {
     const retained = event.type === 'name_registered' ? null : base
     return {
       ...base,
-      ...(event.type === 'name_registered' ? { issuedAsReserved: false, reservedIssuance: null, namespacePurchase: null } : {}),
+      ...(event.type === 'name_registered' ? { issuedAsReserved: false, reservedIssuance: null, namespacePurchase: null, registrationPremiumLux: event.premiumLux ?? 0 } : {}),
       ...(event.type === 'name_renewed' ? {} : { canonicalName, owner: event.owner }),
       expiresAt: event.expiresAt,
       graceEndsAt: event.graceEndsAt,

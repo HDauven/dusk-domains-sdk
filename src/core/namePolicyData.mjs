@@ -6,6 +6,7 @@ export const DEFAULT_FEE_CONFIG = {
   referralRewardBps: 2_000,
   renewalReferralRewardBps: 1_000,
   premiumReferralRewardBps: 0,
+  premiumStartLux: 1_000_000 * LUX_PER_DUSK,
   version: 1,
   updatedAt: 0,
 }

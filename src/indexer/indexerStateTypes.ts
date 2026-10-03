@@ -24,8 +24,8 @@ export type IndexedTreasuryClaim = {
   operator: DuskPrincipal | null
   operatorAuthority?: string
   operatorRecipient: string
-  amountLux: number
-  remainingLux: number
+  amountLux: number | string
+  remainingLux: number | string
   txId: string | null
   blockHeight: number | null
 }
@@ -38,13 +38,15 @@ export type IndexedTreasuryState = {
   operatorAuthority: string | null
   operatorRecipient: string | null
   allowedFeeSources: string[]
-  totalReceivedLux: number
-  availableLux: number
-  registrationReceivedLux: number
-  renewalReceivedLux: number
-  otherReceivedLux: number
-  referralClaimableLux: number
-  referralClaimedLux: number
+  totalReceivedLux: number | string
+  availableLux: number | string
+  premiumReceivedLux?: number | string
+  premiumAccountingError?: string | null
+  registrationReceivedLux: number | string
+  renewalReceivedLux: number | string
+  otherReceivedLux: number | string
+  referralClaimableLux: number | string
+  referralClaimedLux: number | string
   referralCount: number
   lastFeeSourceContract: string | null
   lastFeeReason: TreasuryFeeReason | null
@@ -58,7 +60,7 @@ export type IndexedTreasuryState = {
 export type IndexedReferralActivity = {
   txId: string | null
   blockHeight: number | null
-  amountLux: number
+  amountLux: number | string
   kind: 'accrual' | 'claim'
   counterparty: string | null
 }
@@ -66,8 +68,8 @@ export type IndexedReferralActivity = {
 export type IndexedReferralState = {
   supported: boolean
   referrer: string | null
-  claimableLux: number
-  claimedLux: number
+  claimableLux: number | string
+  claimedLux: number | string
   referralCount: number
   recentActivity: IndexedReferralActivity[]
 }
@@ -77,6 +79,12 @@ export type NamespaceAncestor = { node: string; name: string; owner: string; man
 export type IndexedNamespace = NamespaceSummary & { subnames: IndexedSubname[]; ancestors: NamespaceAncestor[] }
 
 export type IndexedLifecycleName = {
+  registrationPremiumLux?: number
+  premiumLux?: number
+  premiumEndsAt?: string | null
+  premiumEndsAtBlockHeight?: number | null
+  premiumNextStepAt?: string | null
+  premiumNextStepBlockHeight?: number | null
   namespacePurchase?: { seller: string; buyer: string } | null
   namespace?: IndexedNamespace
   /** Provenance of this registration; retained through renewal and transfer. */

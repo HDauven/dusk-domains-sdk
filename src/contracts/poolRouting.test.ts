@@ -8,6 +8,7 @@ import {
   coreRemoveSubnameRuntimeCall,
   coreTakeBackSubnamesRuntimeCall,
   coreGetNameCall,
+  coreRegistrationPremiumCall,
   corePendingCommitmentCall,
   coreReadPrimaryNameCall,
   coreRenewRuntimeCall,
@@ -433,4 +434,12 @@ describe.each(['override', 'configured placeholder'])('zero contract ID: %s', so
     await expect(invoke()).rejects.toThrow('non-zero 32-byte hex contract ID')
     expect(run).not.toHaveBeenCalled()
   })
+})
+
+it('reads the premium from the registry retaining the dropped root', async () => {
+  const { app, targets } = poolApp()
+  await readDuskDomainContract(app, coreRegistrationPremiumCall({ node: heldNode }), {
+    ...contracts, core: { ...contracts.core, contractId: newestRegistry },
+  })
+  expect(targets).toEqual([olderRegistry])
 })

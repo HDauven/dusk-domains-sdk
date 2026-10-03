@@ -91,6 +91,7 @@ describe('Dusk Domains economics event projector', () => {
       fivePlusYearLux: 10_000_000_000,
       referralRewardBps: 2_000,
       renewalReferralRewardBps: 1_000,
+      premiumStartLux: 1_000_000_000_000_000,
       premiumReferralRewardBps: 0,
       version: 1,
     })
@@ -104,6 +105,7 @@ describe('Dusk Domains economics event projector', () => {
         fivePlusYearLux: 12_000_000_000,
         referralRewardBps: 1_500,
         renewalReferralRewardBps: 1_000,
+        premiumStartLux: 0,
         premiumReferralRewardBps: 0,
         version: 2,
         updatedAt: 120,
