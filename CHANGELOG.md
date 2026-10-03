@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add validated Bitcoin, Ethereum, Solana and default EVM address records with canonical write values. ([#242])
+- Export shared chain-address validators for plain Node consumers. ([#242])
+- Distinguish primary-name set and cleared activity while retaining legacy activity support. ([#243])
+
 - Return chain- and contract-bound preparation envelopes and reject stale or unbound submissions. ([#239])
 - Require the current wallet chain for call preparation. ([#239])
 - Reject zero contract overrides and configured placeholders at live call boundaries. ([#239])
@@ -35,3 +39,6 @@
 [#237]: https://github.com/HDauven/dusk-domains-protocol/issues/237
 
 [#239]: https://github.com/HDauven/dusk-domains-protocol/issues/239
+
+[#242]: https://github.com/HDauven/dusk-domains-protocol/issues/242
+[#243]: https://github.com/HDauven/dusk-domains-protocol/issues/243

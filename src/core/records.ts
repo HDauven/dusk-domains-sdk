@@ -1,3 +1,11 @@
+import {
+  checksumEthereumAddress,
+  normalizeBitcoinAddress,
+  validateBitcoinAddress,
+  validateEthereumAddress,
+  validateSolanaAddress,
+} from './chainAddresses.mjs'
+
 export const RECORD_VISIBILITIES = ['public', 'sensitive_public'] as const
 
 export type RecordVisibility = (typeof RECORD_VISIBILITIES)[number]
@@ -8,6 +16,10 @@ export type StaticRecordKey =
   | 'dusk_contract'
   | 'dusk_asset'
   | 'evm_address'
+  | 'address.btc'
+  | 'address.eth'
+  | 'address.sol'
+  | 'address.evm'
   | 'website'
   | 'avatar'
   | 'content_pointer'
@@ -34,6 +46,7 @@ export type RecordDefinition = {
   eligibleForPrimaryName: boolean
   eligibleForDefaultDuskRecipient: boolean
   validate: (value: string) => string[]
+  normalize?: (value: string) => string
 }
 
 export type EncodedResolverRecord = {
@@ -100,6 +113,49 @@ const staticDefinitions: Record<StaticRecordKey, RecordDefinition> = {
     eligibleForPrimaryName: false,
     eligibleForDefaultDuskRecipient: false,
     validate: validateEvmAddress,
+  },
+  'address.btc': {
+    key: 'address.btc',
+    label: 'Bitcoin address',
+    visibility: 'public',
+    maxBytes: 90,
+    defaultTtlSeconds: 300,
+    eligibleForPrimaryName: false,
+    eligibleForDefaultDuskRecipient: false,
+    validate: validateBitcoinAddress,
+    normalize: normalizeBitcoinAddress,
+  },
+  'address.eth': {
+    key: 'address.eth',
+    label: 'Ethereum address',
+    visibility: 'public',
+    maxBytes: 42,
+    defaultTtlSeconds: 300,
+    eligibleForPrimaryName: false,
+    eligibleForDefaultDuskRecipient: false,
+    validate: validateEthereumAddress,
+    normalize: checksumEthereumAddress,
+  },
+  'address.sol': {
+    key: 'address.sol',
+    label: 'Solana address',
+    visibility: 'public',
+    maxBytes: 44,
+    defaultTtlSeconds: 300,
+    eligibleForPrimaryName: false,
+    eligibleForDefaultDuskRecipient: false,
+    validate: validateSolanaAddress,
+  },
+  'address.evm': {
+    key: 'address.evm',
+    label: 'EVM address',
+    visibility: 'public',
+    maxBytes: 42,
+    defaultTtlSeconds: 300,
+    eligibleForPrimaryName: false,
+    eligibleForDefaultDuskRecipient: false,
+    validate: validateEthereumAddress,
+    normalize: checksumEthereumAddress,
   },
   website: {
     key: 'website',
@@ -189,7 +245,7 @@ export function createResolverRecord(
 
   return {
     key,
-    value,
+    value: definition.normalize?.(value) ?? value,
     visibility: definition.visibility,
     updatedAt,
     ttlSeconds: definition.defaultTtlSeconds,

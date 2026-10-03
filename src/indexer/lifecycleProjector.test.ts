@@ -343,7 +343,7 @@ describe('Dusk Domains lifecycle event projector', () => {
     expect(projector.getActivity(node).map((entry) => entry.eventType)).toEqual([
       'registration',
       'release',
-      'primary_name',
+      'primary_name_set',
       'record_update',
       'registration',
     ])
@@ -389,8 +389,8 @@ describe('Dusk Domains lifecycle event projector', () => {
 
     expect(projector.getPrimaryNameByEndpoint(endpoint)).toBeNull()
     expect(projector.getActivity(node).map((entry) => entry.eventType)).toEqual([
-      'primary_name',
-      'primary_name',
+      'primary_name_cleared',
+      'primary_name_set',
     ])
   })
 

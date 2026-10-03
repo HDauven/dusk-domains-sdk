@@ -7,6 +7,8 @@ export const ACTIVITY_EVENT_TYPES = [
   'resolver_change',
   'record_update',
   'primary_name',
+  'primary_name_set',
+  'primary_name_cleared',
   'subname_created',
   'subname_pruned',
   'subname_removed',
@@ -76,6 +78,8 @@ export function activityLabel(eventType: ActivityEventType): string {
   if (eventType === 'resolver_change') return 'Record source changed'
   if (eventType === 'record_update') return 'Record updated'
   if (eventType === 'primary_name') return 'Primary domain set'
+  if (eventType === 'primary_name_set') return 'Primary name set'
+  if (eventType === 'primary_name_cleared') return 'Primary name cleared'
   if (eventType === 'subname_created') return 'Subdomain created'
   if (eventType === 'subname_removed') return 'Subname removed'
   if (eventType === 'subname_pruned') return 'Expired subdomain pruned'

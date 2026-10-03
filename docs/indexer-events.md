@@ -69,6 +69,9 @@ Retired revocation/delegation topics are not current subname operations.
   rounded JavaScript values.
 - Primary-name events never replace the caller's typed forward-verification step.
   Phoenix endpoints are excluded from public primary display.
+  A nonempty `primary_name_changed.name` produces `primary_name_set` activity;
+  an empty name produces `primary_name_cleared`, retaining the endpoint target
+  and previous name. Historical `primary_name` activity remains supported.
 
 ## Operator handovers
 

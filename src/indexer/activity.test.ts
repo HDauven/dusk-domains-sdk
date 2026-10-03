@@ -22,6 +22,8 @@ describe('Dusk Domains activity entries', () => {
       ['resolver_change', 'Record source changed'],
       ['record_update', 'Record updated'],
       ['primary_name', 'Primary domain set'],
+      ['primary_name_set', 'Primary name set'],
+      ['primary_name_cleared', 'Primary name cleared'],
       ['subname_created', 'Subdomain created'],
       ['subname_pruned', 'Expired subdomain pruned'],
       ['subname_removed', 'Subname removed'],
