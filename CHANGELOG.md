@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Export action-based gas limits with extra allowance for Moonlight recipient key checks.
+- Forward validated gas prices through both wallet write paths, capping automatic estimates while preserving explicit u64 prices.
+
 - Decode and project auction and fixed-sale IDs. Require reviewed marketplace identities in write helpers and wallet context. Bids carry the chosen amount and auction ID; settlement carries the auction ID.
 - Retain auction duration, start deadline, creation height and fee in canonical reads. Reject missing or inexact IDs in reads, events and writes.
 

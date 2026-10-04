@@ -6,12 +6,14 @@ import type {
   DuskDomainCallMetadata,
   DuskDomainContractMap,
   DuskDomainContractPreset,
+  DuskDomainGas,
 } from './callTypes'
 import { toDuskDomainWireArgs } from './callWireArgs'
 import { withRoutedDuskDomainCall } from './poolRouting'
 import { prepareBoundCall, preparedCallForTarget } from './preparedCalls'
 
 export * from './callBuilders'
+export * from './callGas'
 export { decodedDuskDomainContext } from './callContext'
 export { DUSK_DOMAINS_CONTRACTS, DUSK_DOMAINS_PLACEHOLDER_CONTRACT_ID } from './callContracts'
 export * from './callTypes'
@@ -71,6 +73,7 @@ export async function writeDuskDomainContract(
   call: DuskDomainCallMetadata,
   preparedCall?: unknown,
   contracts: DuskDomainContractMap = DUSK_DOMAINS_CONTRACTS,
+  gas?: DuskDomainGas,
 ) : Promise<unknown> {
   return withRoutedDuskDomainCall(app, call, contracts, async (call) => {
     const deposit = duskDomainCallDepositLux(call)
@@ -82,6 +85,7 @@ export async function writeDuskDomainContract(
       ...(deposit ? { deposit } : {}),
       decodedContext: decodedDuskDomainContext(call),
       preparedCall: preparedCall === undefined ? undefined : preparedCallForTarget(app, contract.contractId, preparedCall),
+      ...(gas ? { gas } : {}),
     })
   })
 }

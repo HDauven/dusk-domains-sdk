@@ -20,6 +20,16 @@ const node = namehashHex('aurora.dusk')
 [Direct reads and primary-name verification](docs/examples/direct-onchain-reads.md)
 show client setup, including the current chain-height reader needed for routing.
 
+For writes, pass `gas.limit = duskDomainCallGasLimit(call, { senderAddress })`
+from `@duskdomains/sdk/writes`. Limits cover the action, with extra allowance for
+subtrees and Moonlight recipient key checks. Passing them keeps failed calls
+from consuming the wallet's default limit; the Connect adapter fills in an omitted
+gas price from the wallet's median, falling back to 1 for invalid or unavailable
+estimates and capping it at `DUSK_DOMAIN_MAX_AUTO_GAS_PRICE` (10 Lux per gas).
+Rusk's sample includes deployments priced at least 2,000 Lux per gas, so their
+median can overprice calls. Explicit u64 prices remain uncapped; users can also
+raise the price in the wallet.
+
 ## Development
 
 Use Node 24. From this repository's root:
