@@ -302,7 +302,7 @@ describe('Dusk Domains indexer client', () => {
       escrowed: true,
       txId: 'tx-auction',
       blockHeight: 42,
-      lastEventType: 'domain_auction_created',
+      auctionId: 1, lastEventType: 'domain_auction_created',
     }
     const responses = new Map<string, unknown>([
       ['https://api.example/names/marketplace/auctions', [auction]],

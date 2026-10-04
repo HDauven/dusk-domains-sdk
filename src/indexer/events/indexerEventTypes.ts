@@ -279,6 +279,7 @@ export type MarketplaceEvent =
     }
   | {
       type: 'domain_fixed_sale_opened'
+      saleId: number
       node: string
       name: string
       sellerAuthority: string
@@ -290,6 +291,7 @@ export type MarketplaceEvent =
     }
   | {
       type: 'domain_fixed_sale_closed'
+      saleId: number
       node: string
       sellerAuthority: string
       expired: boolean
@@ -298,6 +300,7 @@ export type MarketplaceEvent =
     }
   | {
       type: 'domain_fixed_sale_filled'
+      saleId: number
       node: string
       name: string
       sellerAuthority: string
@@ -309,6 +312,7 @@ export type MarketplaceEvent =
     }
   | {
       type: 'domain_auction_created'
+      auctionId: number
       node: string
       name: string
       sellerAuthority: string
@@ -320,6 +324,7 @@ export type MarketplaceEvent =
     }
   | {
       type: 'domain_bid_placed'
+      auctionId: number
       node: string
       bidderAuthority: string
       amountLux: number
@@ -334,6 +339,7 @@ export type MarketplaceEvent =
     }
   | {
       type: 'domain_auction_cancelled'
+      auctionId: number
       node: string
       sellerAuthority: string
       expired: boolean
@@ -342,6 +348,7 @@ export type MarketplaceEvent =
     }
   | {
       type: 'domain_auction_settled'
+      auctionId: number
       node: string
       name: string
       sellerAuthority: string

@@ -16,6 +16,9 @@ export type DuskDomainsMarketplaceReadTransport = {
 
 /** Canonical fixed-price sale stored by the marketplace contract. */
 export type DuskDomainsOnChainFixedSale = {
+  saleId: number
+  feeBps: number
+  openedAtBlockHeight: number
   node: string
   name: string
   sellerAuthority: string
@@ -34,6 +37,11 @@ export type DuskDomainsOnChainAuctionBid = {
 
 /** Canonical reserve auction stored by the marketplace contract. */
 export type DuskDomainsOnChainAuction = {
+  auctionId: number
+  durationBlocks: number
+  startDeadlineBlockHeight: number
+  createdAtBlockHeight: number
+  feeBps: number
   node: string
   name: string
   sellerAuthority: string
@@ -102,6 +110,9 @@ async function readOptional<T>(
 
 function decodeFixedSale(value: Record<string, unknown>): DuskDomainsOnChainFixedSale {
   return {
+    saleId: positiveId(value.sale_id, 'sale ID'),
+    feeBps: safeNumber(value.fee_bps, 'sale fee'),
+    openedAtBlockHeight: safeNumber(value.opened_at, 'sale creation'),
     node: bytes32(value.node, 'sale node'),
     name: text(value.name, 'sale name'),
     sellerAuthority: bytes32(value.seller_authority, 'seller authority'),
@@ -115,6 +126,11 @@ function decodeFixedSale(value: Record<string, unknown>): DuskDomainsOnChainFixe
 function decodeAuction(value: Record<string, unknown>): DuskDomainsOnChainAuction {
   const bid = value.highest_bid == null ? null : record(value.highest_bid, 'highest bid')
   return {
+    auctionId: positiveId(value.auction_id, 'auction ID'),
+    durationBlocks: safeNumber(value.duration_blocks, 'auction duration'),
+    startDeadlineBlockHeight: safeNumber(value.start_deadline, 'auction start deadline'),
+    createdAtBlockHeight: safeNumber(value.created_at, 'auction creation'),
+    feeBps: safeNumber(value.fee_bps, 'auction fee'),
     node: bytes32(value.node, 'auction node'),
     name: text(value.name, 'auction name'),
     sellerAuthority: bytes32(value.seller_authority, 'seller authority'),
@@ -193,4 +209,10 @@ function safeNumber(value: unknown, label: string): number {
 
 function nullableSafeNumber(value: unknown, label: string): number | null {
   return value == null ? null : safeNumber(value, label)
+}
+
+function positiveId(value: unknown, label: string): number {
+  const id = safeNumber(value, label)
+  if (id === 0) throw new Error(`${label} is malformed.`)
+  return id
 }

@@ -39,6 +39,12 @@ export type {
   MarketplacePauseResponse,
   MarketplaceProposeOperatorRuntimeArgs,
   MarketplaceAuctionNodeArgs,
+  MarketplaceFixedSaleArgs,
+  MarketplaceReviewedAuctionArgs,
+  MarketplaceSettleAuctionRuntimeArgs,
+  MarketplaceCancelOfferRuntimeArgs,
+  MarketplaceExpireOfferRuntimeArgs,
+
   MarketplaceBuyFixedSaleRuntimeArgs,
   MarketplaceOfferArgs,
   MarketplacePlaceBidRuntimeArgs,

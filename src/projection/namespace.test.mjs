@@ -49,7 +49,7 @@ it('removes active descendants and identity using explicit removal events', () =
 it.each(['domain_fixed_sale_filled', 'domain_offer_accepted', 'domain_auction_settled'])('remembers the seller after %s for post-purchase take-back', type => {
   const state = namespace()
   applyProjectionEvent(state, transfer(root))
-  applyProjectionEvent(state, { type, node: root, sellerAuthority: 'seller', buyerAuthority: 'buyer', winnerAuthority: 'buyer', domainExpired: false })
+  applyProjectionEvent(state, { type, saleId: 1, auctionId: 1, node: root, sellerAuthority: 'seller', buyerAuthority: 'buyer', winnerAuthority: 'buyer', domainExpired: false })
   expect(state.namesByNode.get(root).namespacePurchase).toEqual({ seller: 'seller', buyer: 'buyer' })
   applyProjectionEvent(state, { ...transfer(root), owner: 'next-owner' })
   expect(state.namesByNode.get(root).namespacePurchase).toBeNull()

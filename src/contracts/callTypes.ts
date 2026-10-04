@@ -307,16 +307,24 @@ export type MarketplaceProposeOperatorRuntimeArgs = {
 }
 
 export type MarketplaceBuyFixedSaleRuntimeArgs = {
+  expectedSaleId: number
   node: string
   priceLux: number
   buyerManager?: string | null
 }
 
 export type MarketplacePlaceBidRuntimeArgs = {
+  expectedAuctionId: number
   node: string
   amountLux: number
   bidderManager?: string | null
 }
+
+export type MarketplaceFixedSaleArgs = MarketplaceAuctionNodeArgs & { expectedSaleId: number }
+export type MarketplaceReviewedAuctionArgs = MarketplaceAuctionNodeArgs & { expectedAuctionId: number }
+export type MarketplaceSettleAuctionRuntimeArgs = MarketplaceReviewedAuctionArgs
+export type MarketplaceCancelOfferRuntimeArgs = MarketplaceAuctionNodeArgs & { expectedOfferId: number }
+export type MarketplaceExpireOfferRuntimeArgs = MarketplaceOfferArgs & { expectedOfferId: number }
 
 export type MarketplaceAuctionNodeArgs = {
   node: string

@@ -1,10 +1,15 @@
 import {
   isPauseRuntimeArgs,
   isMarketplaceAuctionNodeArgs,
+  isMarketplaceFixedSaleArgs,
+  isMarketplaceReviewedAuctionArgs,
+  isMarketplaceSettleAuctionRuntimeArgs,
+  isMarketplaceCancelOfferRuntimeArgs,
+  isMarketplaceExpireOfferRuntimeArgs,
+
   isMarketplaceBuyFixedSaleRuntimeArgs,
   isMarketplaceClaimRefundRuntimeArgs,
   isMarketplaceInitArgs,
-  isMarketplaceOfferArgs,
   isMarketplacePlaceBidRuntimeArgs,
   isMarketplacePlaceOfferRuntimeArgs,
   isMarketplaceSetFeeRuntimeArgs,
@@ -72,6 +77,7 @@ export function decodedMarketplaceDuskDomainContext(
       description: 'Pay the listed price and receive the domain.',
       fields: [
         { label: 'Domain reference', value: call.args.node },
+        { label: 'Sale ID', value: String(call.args.expectedSaleId) },
         { label: 'Price', value: formatLux(call.args.priceLux) + ' DUSK' },
         { label: 'Manager', value: call.args.buyerManager ?? 'Connected wallet' },
       ],
@@ -83,6 +89,7 @@ export function decodedMarketplaceDuskDomainContext(
       description: 'Deposit this bid in the marketplace contract.',
       fields: [
         { label: 'Domain reference', value: call.args.node },
+        { label: 'Auction ID', value: String(call.args.expectedAuctionId) },
         { label: 'Bid', value: formatLux(call.args.amountLux) + ' DUSK' },
         { label: 'Manager', value: call.args.bidderManager ?? 'Connected wallet' },
       ],
@@ -99,11 +106,11 @@ export function decodedMarketplaceDuskDomainContext(
       ],
     }
   }
-  if (isMarketplaceOfferArgs(call.args) && call.functionName === 'expire_offer_runtime') {
+  if (isMarketplaceExpireOfferRuntimeArgs(call.args) && call.functionName === 'expire_offer_runtime') {
     return {
       title: 'Expire offer',
       description: 'Close an expired offer and make its deposit refundable.',
-      fields: [{ label: 'Domain reference', value: call.args.node }],
+      fields: [{ label: 'Domain reference', value: call.args.node }, { label: 'Offer ID', value: String(call.args.expectedOfferId) }],
     }
   }
   if (isMarketplaceAuctionNodeArgs(call.args)) {
@@ -139,7 +146,19 @@ export function decodedMarketplaceDuskDomainContext(
         fields: [{ label: 'Domain reference', value: call.args.node }],
       },
     }
-    if (contexts[call.functionName]) return contexts[call.functionName]
+    const context = contexts[call.functionName]
+    if (context) {
+      if (['cancel_fixed_sale_runtime', 'expire_fixed_sale_runtime'].includes(call.functionName) && isMarketplaceFixedSaleArgs(call.args)) {
+        context.fields.push({ label: 'Sale ID', value: String(call.args.expectedSaleId) })
+      } else if (['cancel_auction_runtime', 'expire_auction_runtime'].includes(call.functionName) && isMarketplaceReviewedAuctionArgs(call.args)) {
+        context.fields.push({ label: 'Auction ID', value: String(call.args.expectedAuctionId) })
+      } else if (call.functionName === 'settle_auction_runtime' && isMarketplaceSettleAuctionRuntimeArgs(call.args)) {
+        context.fields.push({ label: 'Auction ID', value: String(call.args.expectedAuctionId) })
+      } else if (call.functionName === 'cancel_offer_runtime' && isMarketplaceCancelOfferRuntimeArgs(call.args)) {
+        context.fields.push({ label: 'Offer ID', value: String(call.args.expectedOfferId) })
+      } else return null
+      return context
+    }
   }
   if (call.functionName === 'claim_refund_runtime' && isMarketplaceClaimRefundRuntimeArgs(call.args)) {
     return {

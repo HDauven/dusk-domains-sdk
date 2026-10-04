@@ -239,6 +239,7 @@ export function isIndexedMarketplaceConfig(value: unknown): value is IndexedMark
 export function isIndexedMarketplaceFixedSale(value: unknown): value is IndexedMarketplaceFixedSale {
   return (
     isRecord(value) &&
+    isNonNegativeInteger(value.saleId) && Number(value.saleId) > 0 &&
     (value.namespace === undefined || isNamespaceSummary(value.namespace)) &&
     typeof value.node === 'string' &&
     typeof value.name === 'string' &&
@@ -259,6 +260,7 @@ export function isIndexedMarketplaceFixedSale(value: unknown): value is IndexedM
 export function isIndexedMarketplaceAuction(value: unknown): value is IndexedMarketplaceAuction {
   return (
     isRecord(value) &&
+    isNonNegativeInteger(value.auctionId) && Number(value.auctionId) > 0 &&
     (value.namespace === undefined || isNamespaceSummary(value.namespace)) &&
     typeof value.node === 'string' &&
     typeof value.name === 'string' &&

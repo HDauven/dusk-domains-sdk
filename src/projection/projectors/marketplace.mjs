@@ -66,6 +66,12 @@ export function applyMarketplaceEvent(store, event, meta, fallbackTimestamp) {
     return null
   }
 
+  const identity = event.type.startsWith('domain_fixed_sale_') ? 'saleId'
+    : ['domain_auction_created', 'domain_bid_placed', 'domain_auction_cancelled', 'domain_auction_settled'].includes(event.type) ? 'auctionId' : null
+  if (identity && (!Number.isSafeInteger(event[identity]) || event[identity] <= 0)) {
+    throw new Error(`${identity} must be a positive safe integer.`)
+  }
+
   const node = normalizeNode(event.node)
   const name = event.name
     ?? store.marketplaceFixedSalesByNode.get(node)?.name
@@ -98,6 +104,7 @@ export function applyMarketplaceEvent(store, event, meta, fallbackTimestamp) {
   if (event.type === 'domain_fixed_sale_opened') {
     const marketplaceContractId = normalizedHex(meta.contractId)
     store.marketplaceFixedSalesByNode.set(node, {
+      saleId: event.saleId,
       node,
       name: event.name,
       sellerAuthority: normalizedHex(event.sellerAuthority),
@@ -123,6 +130,7 @@ export function applyMarketplaceEvent(store, event, meta, fallbackTimestamp) {
   if (event.type === 'domain_auction_created') {
     const marketplaceContractId = normalizedHex(meta.contractId)
     store.marketplaceAuctionsByNode.set(node, {
+      auctionId: event.auctionId,
       node,
       name: event.name,
       sellerAuthority: normalizedHex(event.sellerAuthority),

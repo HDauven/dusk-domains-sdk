@@ -141,7 +141,7 @@ describe('Dusk Domains indexer event decoder', () => {
   it('keeps polled height separate and uses event heights only when present', () => {
     const bid = normalizeObservedEvent({
       contract: marketplaceContract, eventName: 'domain_bid_placed', observedAt,
-      observedBlockHeight: 95, event: { node: bytes(1), placed_at: 100 },
+      observedBlockHeight: 95, event: { auction_id: 1, node: bytes(1), placed_at: 100 },
     })
     expect(bid.meta).toMatchObject({ blockHeight: 100, observedBlockHeight: 95, timeSource: 'observation' })
     const record = normalizeObservedEvent({
@@ -389,7 +389,7 @@ function collectedEventFixtures() {
       fee_bps: 300,
       updated_at: 45,
     }, 'marketplace_config_updated', marketplaceContract],
-    ['domain_fixed_sale_opened', {
+    ['domain_fixed_sale_opened', { sale_id: 1,
       node,
       name: 'aurora.dusk',
       seller_authority: owner,
@@ -399,14 +399,14 @@ function collectedEventFixtures() {
       expires_at: 100,
       opened_at: 46,
     }, 'domain_fixed_sale_opened', marketplaceContract],
-    ['domain_fixed_sale_closed', {
+    ['domain_fixed_sale_closed', { sale_id: 1,
       node,
       seller_authority: owner,
       expired: false,
       domain_expired: false,
       closed_at: 47,
     }, 'domain_fixed_sale_closed', marketplaceContract],
-    ['domain_fixed_sale_filled', {
+    ['domain_fixed_sale_filled', { sale_id: 1,
       node,
       name: 'aurora.dusk',
       seller_authority: owner,
@@ -416,7 +416,7 @@ function collectedEventFixtures() {
       seller_proceeds_lux: 9,
       filled_at: 48,
     }, 'domain_fixed_sale_filled', marketplaceContract],
-    ['domain_auction_created', {
+    ['domain_auction_created', { auction_id: 1,
       node,
       name: 'aurora.dusk',
       seller_authority: owner,
@@ -426,7 +426,7 @@ function collectedEventFixtures() {
       fee_bps: 300,
       created_at: 49,
     }, 'domain_auction_created', marketplaceContract],
-    ['domain_bid_placed', {
+    ['domain_bid_placed', { auction_id: 1,
       node,
       bidder_authority: actor,
       amount_lux: 10,
@@ -439,14 +439,14 @@ function collectedEventFixtures() {
       bid_count: 1,
       placed_at: 50,
     }, 'domain_bid_placed', marketplaceContract],
-    ['domain_auction_cancelled', {
+    ['domain_auction_cancelled', { auction_id: 1,
       node,
       seller_authority: owner,
       expired: true,
       domain_expired: false,
       cancelled_at: 51,
     }, 'domain_auction_cancelled', marketplaceContract],
-    ['domain_auction_settled', {
+    ['domain_auction_settled', { auction_id: 1,
       node,
       name: 'aurora.dusk',
       seller_authority: owner,
@@ -521,3 +521,10 @@ function utf8Bytes(value) {
 function hex(byte) {
   return `0x${byte.toString(16).padStart(2, '0').repeat(32)}`
 }
+
+it.each(['domain_auction_created', 'domain_bid_placed', 'domain_auction_cancelled', 'domain_auction_settled', 'domain_fixed_sale_opened', 'domain_fixed_sale_closed', 'domain_fixed_sale_filled'])('preserves and validates the identity in %s', eventName => {
+  const [wire, field] = eventName.includes('fixed_sale') ? ['sale_id', 'saleId'] : ['auction_id', 'auctionId']
+  const decode = id => normalizeObservedEvent({ contract: marketplaceContract, observedAt, eventName, event: { [wire]: id, node: bytes(1) } })
+  expect(decode('42').event[field]).toBe(42)
+  for (const id of [undefined, null, 0, -1, true, [], 1.5, '9007199254740993']) expect(() => decode(id)).toThrow()
+})

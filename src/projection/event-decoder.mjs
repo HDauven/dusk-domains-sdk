@@ -529,6 +529,7 @@ export function normalizeObservedEvent({
     return {
       event: {
         type: 'domain_fixed_sale_opened',
+        saleId: positiveEventId(event.sale_id, 'sale_id'),
         node: bytesToHex(event.node),
         name: event.name,
         sellerAuthority: bytesToHex(event.seller_authority),
@@ -546,6 +547,7 @@ export function normalizeObservedEvent({
     return {
       event: {
         type: 'domain_fixed_sale_closed',
+        saleId: positiveEventId(event.sale_id, 'sale_id'),
         node: bytesToHex(event.node),
         sellerAuthority: bytesToHex(event.seller_authority),
         expired: Boolean(event.expired),
@@ -560,6 +562,7 @@ export function normalizeObservedEvent({
     return {
       event: {
         type: 'domain_fixed_sale_filled',
+        saleId: positiveEventId(event.sale_id, 'sale_id'),
         node: bytesToHex(event.node),
         name: event.name,
         sellerAuthority: bytesToHex(event.seller_authority),
@@ -577,6 +580,7 @@ export function normalizeObservedEvent({
     return {
       event: {
         type: 'domain_auction_created',
+        auctionId: positiveEventId(event.auction_id, 'auction_id'),
         node: bytesToHex(event.node),
         name: event.name,
         sellerAuthority: bytesToHex(event.seller_authority),
@@ -594,6 +598,7 @@ export function normalizeObservedEvent({
     return {
       event: {
         type: 'domain_bid_placed',
+        auctionId: positiveEventId(event.auction_id, 'auction_id'),
         node: bytesToHex(event.node),
         bidderAuthority: bytesToHex(event.bidder_authority),
         amountLux: Number(event.amount_lux ?? 0),
@@ -614,6 +619,7 @@ export function normalizeObservedEvent({
     return {
       event: {
         type: 'domain_auction_cancelled',
+        auctionId: positiveEventId(event.auction_id, 'auction_id'),
         node: bytesToHex(event.node),
         sellerAuthority: bytesToHex(event.seller_authority),
         expired: Boolean(event.expired),
@@ -628,6 +634,7 @@ export function normalizeObservedEvent({
     return {
       event: {
         type: 'domain_auction_settled',
+        auctionId: positiveEventId(event.auction_id, 'auction_id'),
         node: bytesToHex(event.node),
         name: event.name,
         sellerAuthority: bytesToHex(event.seller_authority),
@@ -738,7 +745,7 @@ function assertSafeEventNumbers(value, path = 'event', accounting = false) {
 
 function isNumericEventField(key) {
   return /(?:^|_)(?:lux|bps|at|height|block|blocks|count|seconds|years|deadline)$/u.test(key)
-    || ['version', 'index', 'offer_id'].includes(key)
+    || ['version', 'index', 'offer_id', 'auction_id', 'sale_id'].includes(key)
 }
 
 function recordValueFromEvent(key, value) {
@@ -747,4 +754,13 @@ function recordValueFromEvent(key, value) {
 
 function endpointValueFromEvent(kind, value) {
   return endpointKindToRecordKey(kind) === 'moonlight_address' ? bytesToBase58(value) : bytesToUtf8(value)
+}
+
+function positiveEventId(value, label) {
+  if (typeof value !== 'number' && typeof value !== 'bigint' && !(typeof value === 'string' && /^\d+$/u.test(value))) {
+    throw new Error(`${label} must be a positive safe integer.`)
+  }
+  const id = Number(value)
+  if (!Number.isSafeInteger(id) || id <= 0) throw new Error(`${label} must be a positive safe integer.`)
+  return id
 }

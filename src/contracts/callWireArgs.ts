@@ -24,6 +24,12 @@ import {
   isCoreTakeBackSubnamesRuntimeArgs,
   isDuskPrincipal,
   isMarketplaceAuctionNodeArgs,
+  isMarketplaceFixedSaleArgs,
+  isMarketplaceReviewedAuctionArgs,
+  isMarketplaceSettleAuctionRuntimeArgs,
+  isMarketplaceCancelOfferRuntimeArgs,
+  isMarketplaceExpireOfferRuntimeArgs,
+
   isMarketplaceBuyFixedSaleRuntimeArgs,
   isMarketplaceClaimRefundRuntimeArgs,
   isMarketplaceInitArgs,
@@ -364,7 +370,39 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
   ) {
     return {
       node: bytes32(args.node, 'node'),
+      expected_sale_id: args.expectedSaleId,
       buyer_manager: args.buyerManager ? bytes32(args.buyerManager, 'buyerManager') : null,
+    }
+  }
+  if (call.contract === 'marketplace' && (call.functionName === 'cancel_fixed_sale_runtime' || call.functionName === 'expire_fixed_sale_runtime') && isMarketplaceFixedSaleArgs(args)) {
+    return {
+      node: bytes32(args.node, 'node'),
+      expected_sale_id: args.expectedSaleId,
+    }
+  }
+  if (call.contract === 'marketplace' && (call.functionName === 'cancel_auction_runtime' || call.functionName === 'expire_auction_runtime') && isMarketplaceReviewedAuctionArgs(args)) {
+    return {
+      node: bytes32(args.node, 'node'),
+      expected_auction_id: args.expectedAuctionId,
+    }
+  }
+  if (call.contract === 'marketplace' && call.functionName === 'settle_auction_runtime' && isMarketplaceSettleAuctionRuntimeArgs(args)) {
+    return {
+      node: bytes32(args.node, 'node'),
+      expected_auction_id: args.expectedAuctionId,
+    }
+  }
+  if (call.contract === 'marketplace' && call.functionName === 'cancel_offer_runtime' && isMarketplaceCancelOfferRuntimeArgs(args)) {
+    return {
+      node: bytes32(args.node, 'node'),
+      expected_offer_id: args.expectedOfferId,
+    }
+  }
+  if (call.contract === 'marketplace' && call.functionName === 'expire_offer_runtime' && isMarketplaceExpireOfferRuntimeArgs(args)) {
+    return {
+      node: bytes32(args.node, 'node'),
+      expected_offer_id: args.expectedOfferId,
+      buyer_authority: bytes32(args.buyerAuthority, 'buyerAuthority'),
     }
   }
   if (
@@ -375,18 +413,13 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
     return {
       node: bytes32(args.node, 'node'),
       amount_lux: args.amountLux,
+      expected_auction_id: args.expectedAuctionId,
       bidder_manager: args.bidderManager ? bytes32(args.bidderManager, 'bidderManager') : null,
     }
   }
   if (
     call.contract === 'marketplace' &&
     (
-      call.functionName === 'cancel_auction_runtime' ||
-      call.functionName === 'expire_auction_runtime' ||
-      call.functionName === 'settle_auction_runtime' ||
-      call.functionName === 'cancel_fixed_sale_runtime' ||
-      call.functionName === 'expire_fixed_sale_runtime' ||
-      call.functionName === 'cancel_offer_runtime' ||
       call.functionName === 'read_fixed_sale' ||
       call.functionName === 'read_auction'
     ) &&
@@ -410,7 +443,7 @@ export function toDuskDomainWireArgs(call: DuskDomainCallMetadata): unknown {
   }
   if (
     call.contract === 'marketplace' &&
-    (call.functionName === 'expire_offer_runtime' || call.functionName === 'read_offer') &&
+    call.functionName === 'read_offer' &&
     isMarketplaceOfferArgs(args)
   ) {
     return {

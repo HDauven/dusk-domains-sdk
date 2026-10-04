@@ -309,20 +309,20 @@ function schemaCalls(): DuskDomainCallMetadata[] {
     routerSetRegistrationsPausedRuntimeCall({ paused: false }),
     marketplaceSetFeeRuntimeCall({ feeBps: 300 }),
     marketplaceProposeOperatorRuntimeCall({ operator: owner }),
-    marketplaceBuyFixedSaleRuntimeCall({ node, priceLux: 25_000_000_000, buyerManager: owner }),
-    marketplaceCancelFixedSaleRuntimeCall({ node }),
-    marketplaceExpireFixedSaleRuntimeCall({ node }),
-    marketplacePlaceBidRuntimeCall({
+    marketplaceBuyFixedSaleRuntimeCall({ expectedSaleId: 1, node, priceLux: 25_000_000_000, buyerManager: owner }),
+    marketplaceCancelFixedSaleRuntimeCall({ expectedSaleId: 1, node }),
+    marketplaceExpireFixedSaleRuntimeCall({ expectedSaleId: 1, node }),
+    marketplacePlaceBidRuntimeCall({ expectedAuctionId: 1,
       node,
       amountLux: 25_000_000_000,
       bidderManager: owner,
     }),
-    marketplaceCancelAuctionRuntimeCall({ node }),
-    marketplaceExpireAuctionRuntimeCall({ node }),
-    marketplaceSettleAuctionRuntimeCall({ node }),
+    marketplaceCancelAuctionRuntimeCall({ expectedAuctionId: 1, node }),
+    marketplaceExpireAuctionRuntimeCall({ expectedAuctionId: 1, node }),
+    marketplaceSettleAuctionRuntimeCall({ expectedAuctionId: 1, node }),
     marketplacePlaceOfferRuntimeCall({ node, amountLux: 30_000_000_000, expiresAt: 20_000, buyerManager: owner }),
-    marketplaceCancelOfferRuntimeCall({ node }),
-    marketplaceExpireOfferRuntimeCall({ node, buyerAuthority: owner }),
+    marketplaceCancelOfferRuntimeCall({ expectedOfferId: 1, node }),
+    marketplaceExpireOfferRuntimeCall({ expectedOfferId: 1, node, buyerAuthority: owner }),
     marketplaceClaimRefundRuntimeCall(),
     marketplaceReadConfigCall(),
     marketplaceReadFixedSaleCall({ node }),
@@ -572,10 +572,10 @@ describe('Dusk Domains contract call helpers', () => {
       },
     })
     expect(duskDomainCallDepositLux(coreRenewRuntimeCall({ node, durationYears: 1, feeLux: 50_000_000_000 }))).toBe('50000000000')
-    expect(duskDomainCallDepositLux(marketplaceBuyFixedSaleRuntimeCall({ node, priceLux: 25_000_000_000 }))).toBe('25000000000')
-    expect(duskDomainCallDepositLux(marketplacePlaceBidRuntimeCall({ node, amountLux: 40_000_000_000 }))).toBe('40000000000')
+    expect(duskDomainCallDepositLux(marketplaceBuyFixedSaleRuntimeCall({ expectedSaleId: 1, node, priceLux: 25_000_000_000 }))).toBe('25000000000')
+    expect(duskDomainCallDepositLux(marketplacePlaceBidRuntimeCall({ expectedAuctionId: 1, node, amountLux: 40_000_000_000 }))).toBe('40000000000')
     expect(duskDomainCallDepositLux(marketplacePlaceOfferRuntimeCall({ node, amountLux: 30_000_000_000, expiresAt: 20_000 }))).toBe('30000000000')
-    expect(() => duskDomainCallDepositLux(marketplaceBuyFixedSaleRuntimeCall({
+    expect(() => duskDomainCallDepositLux(marketplaceBuyFixedSaleRuntimeCall({ expectedSaleId: 1,
       node,
       priceLux: Number.MAX_SAFE_INTEGER + 1,
     }))).toThrow('safe integer Lux fee')

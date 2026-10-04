@@ -41,7 +41,7 @@ describe('public marketplace SDK surface', () => {
 
     expect(auction).toMatchObject({ contract: 'core', functionName: 'escrow_auction_runtime', kind: 'write' })
     expect(offer).toMatchObject({ contract: 'marketplace', functionName: 'place_offer_runtime', kind: 'write' })
-    expect(marketplaceSettleAuctionRuntimeCall({ node })).toMatchObject({
+    expect(marketplaceSettleAuctionRuntimeCall({ expectedAuctionId: 1, node })).toMatchObject({
       contract: 'marketplace',
       functionName: 'settle_auction_runtime',
       kind: 'write',

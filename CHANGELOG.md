@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Decode and project auction and fixed-sale IDs. Require reviewed marketplace identities in write helpers and wallet context. Bids carry the chosen amount and auction ID; settlement carries the auction ID.
+- Retain auction duration, start deadline, creation height and fee in canonical reads. Reject missing or inexact IDs in reads, events and writes.
+
 - Accept decimal-string integers in driver events and outputs, including scalar premium reads. ([#124])
 
 - Expose dropped-name premiums in registration quotes. ([#124])
