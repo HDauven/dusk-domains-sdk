@@ -21,7 +21,7 @@ describe('Dusk Domains marketplace projector', () => {
       feeLux: 10_000_000_000,
     })
     projector.applyMarketplace({
-      type: 'domain_auction_created',
+      type: 'domain_auction_created', auctionId: 1,
       node,
       name: 'aurora.dusk',
       sellerAuthority: seller,
@@ -33,6 +33,7 @@ describe('Dusk Domains marketplace projector', () => {
     }, { txId: 'tx-create', blockHeight: 1_020, contractId: marketplace })
 
     expect(projector.getMarketplaceAuctionByNode(node)?.escrowed).toBe(false)
+    expect(projector.getMarketplaceAuctionByNode(node)?.auctionId).toBe(1)
 
     projector.apply({
       type: 'name_owner_changed',
@@ -53,7 +54,7 @@ describe('Dusk Domains marketplace projector', () => {
     registerAndEscrow(projector)
 
     expect(() => projector.applyMarketplace({
-      type: 'domain_fixed_sale_opened',
+      type: 'domain_fixed_sale_opened', saleId: 1,
       node,
       name: 'aurora.dusk',
       sellerAuthority: seller,
@@ -65,7 +66,7 @@ describe('Dusk Domains marketplace projector', () => {
     }, { blockHeight: 1_000, contractId: marketplace })).toThrow('unsafe numeric value')
 
     expect(() => projector.applyMarketplace({
-      type: 'domain_fixed_sale_opened',
+      type: 'domain_fixed_sale_opened', saleId: 1,
       node,
       name: 'aurora.dusk',
       sellerAuthority: seller,
@@ -104,7 +105,7 @@ describe('Dusk Domains marketplace projector', () => {
     registerAndEscrow(projector)
 
     projector.applyMarketplace({
-      type: 'domain_fixed_sale_opened',
+      type: 'domain_fixed_sale_opened', saleId: 1,
       node,
       name: 'aurora.dusk',
       sellerAuthority: seller,
@@ -119,7 +120,7 @@ describe('Dusk Domains marketplace projector', () => {
       escrowed: true,
     })
     projector.applyMarketplace({
-      type: 'domain_fixed_sale_closed',
+      type: 'domain_fixed_sale_closed', saleId: 1,
       node,
       sellerAuthority: seller,
       expired: false,
@@ -129,7 +130,7 @@ describe('Dusk Domains marketplace projector', () => {
     expect(projector.getMarketplaceFixedSaleByNode(node)).toBeNull()
 
     projector.applyMarketplace({
-      type: 'domain_auction_created',
+      type: 'domain_auction_created', auctionId: 1,
       node,
       name: 'aurora.dusk',
       sellerAuthority: seller,
@@ -140,7 +141,7 @@ describe('Dusk Domains marketplace projector', () => {
       createdAtBlockHeight: 1_020,
     }, { txId: 'tx-create', blockHeight: 1_020, contractId: marketplace })
     projector.applyMarketplace({
-      type: 'domain_bid_placed',
+      type: 'domain_bid_placed', auctionId: 1,
       node,
       bidderAuthority: bidder,
       amountLux: 50_000_000_000,
@@ -154,7 +155,7 @@ describe('Dusk Domains marketplace projector', () => {
       placedAtBlockHeight: 1_030,
     }, { txId: 'tx-bid-one', blockHeight: 1_030 })
     projector.applyMarketplace({
-      type: 'domain_bid_placed',
+      type: 'domain_bid_placed', auctionId: 1,
       node,
       bidderAuthority: nextBidder,
       amountLux: 52_500_000_000,
@@ -183,7 +184,7 @@ describe('Dusk Domains marketplace projector', () => {
     })
 
     projector.applyMarketplace({
-      type: 'domain_auction_settled',
+      type: 'domain_auction_settled', auctionId: 1,
       node,
       name: 'aurora.dusk',
       sellerAuthority: seller,

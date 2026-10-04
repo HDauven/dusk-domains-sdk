@@ -10,6 +10,7 @@ describe('canonical marketplace reads', () => {
     const read = vi.fn(async (call: { functionName: string }) => JSON.parse(JSON.stringify({
       output: call.functionName === 'read_fixed_sale' ? {
         sale: {
+          sale_id: 1, fee_bps: 250, opened_at: 50,
           node,
           name: 'example.dusk',
           seller_authority: seller,
@@ -20,6 +21,7 @@ describe('canonical marketplace reads', () => {
         },
       } : call.functionName === 'read_auction' ? {
         auction: {
+          auction_id: 1, fee_bps: 250, duration_blocks: 100, start_deadline: 150, created_at: 50,
           node,
           name: 'example.dusk',
           seller_authority: seller,
@@ -60,4 +62,29 @@ it.each([{ offer_id: undefined }, { offer_id: 0 }, { offer_id: Number.MAX_SAFE_I
     node, buyer_authority: buyer, amount_lux: 10, expires_at: 100, offer_id: 1, fee_bps: 250, ...changed,
   } }) })
   expect(await client.getOffer(node, buyer)).toMatchObject({ ok: false, error: { code: 'contract_read_failed' } })
+})
+
+it('retains auction identity and every immutable reviewed term', async () => {
+  const auction = {
+    auction_id: '42', node, name: 'example.dusk', seller_authority: seller,
+    reserve_price_lux: 10, duration_blocks: '8640', start_deadline: '900', created_at: '100',
+    fee_bps: 250, start_block: null, end_block: null, highest_bid: null, bid_count: 0,
+  }
+  const client = createDuskDomainsMarketplaceOnChainClient({ read: async () => ({ auction }) })
+  expect(await client.getAuction(node)).toMatchObject({ ok: true, value: {
+    auctionId: 42, durationBlocks: 8640, startDeadlineBlockHeight: 900, createdAtBlockHeight: 100, feeBps: 250,
+  } })
+  for (const field of ['auction_id', 'duration_blocks', 'start_deadline', 'created_at', 'fee_bps']) {
+    const malformed = createDuskDomainsMarketplaceOnChainClient({ read: async () => ({ auction: { ...auction, [field]: undefined } }) })
+    expect(await malformed.getAuction(node)).toMatchObject({ ok: false })
+  }
+})
+
+it.each([undefined, 0, -1, 1.5, '9007199254740993', true])('rejects malformed listing identity %s', async id => {
+  const client = createDuskDomainsMarketplaceOnChainClient({ read: async () => ({
+    sale: { sale_id: id, node, name: 'example.dusk', seller_authority: seller, price_lux: 10, private_buyer: null, expires_at: 200, domain_expires_at: 300, fee_bps: 250, opened_at: 100 },
+    auction: { auction_id: id, node, name: 'example.dusk', seller_authority: seller, reserve_price_lux: 10, duration_blocks: 100, start_deadline: 200, created_at: 100, fee_bps: 250, start_block: null, end_block: null, highest_bid: null, bid_count: 0 },
+  }) })
+  expect(await client.getAuction(node)).toMatchObject({ ok: false })
+  expect(await client.getFixedSale(node)).toMatchObject({ ok: false })
 })

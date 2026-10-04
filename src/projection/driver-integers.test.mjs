@@ -27,7 +27,7 @@ it.each([
   ['fee_config_updated', { config: { three_char_year_lux: 150000000000, four_char_year_lux: 50000000000,
     five_plus_year_lux: 10000000000, referral_reward_bps: 2000, renewal_referral_reward_bps: 1000,
     premium_referral_reward_bps: 0, premium_start_lux: 1000000000000000, version: 2, updated_at: 10 } }],
-  ['domain_auction_created', { reserve_price_lux: 100, duration_blocks: 10, start_deadline: 20, fee_bps: 250, created_at: 10 }],
+  ['domain_auction_created', { auction_id: 1, reserve_price_lux: 100, duration_blocks: 10, start_deadline: 20, fee_bps: 250, created_at: 10 }],
   ['referral_reward_accrued', { amount_lux: 100, claimable_lux: 200, claimed_lux: 0, referral_count: 2 }],
 ])('accepts string integers throughout a %s event', (eventName, event) => {
   const decode = event => normalizeObservedEvent({ contract, eventName, event, observedAt, observedBlockHeight: 10 })

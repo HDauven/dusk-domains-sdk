@@ -24,6 +24,12 @@ import type {
   CoreUpdateAuthoritiesRuntimeArgs,
   CoreTakeBackSubnamesRuntimeArgs,
   MarketplaceAuctionNodeArgs,
+  MarketplaceFixedSaleArgs,
+  MarketplaceReviewedAuctionArgs,
+  MarketplaceSettleAuctionRuntimeArgs,
+  MarketplaceCancelOfferRuntimeArgs,
+  MarketplaceExpireOfferRuntimeArgs,
+
   MarketplaceBuyFixedSaleRuntimeArgs,
   MarketplaceClaimRefundRuntimeArgs,
   MarketplaceInitArgs,
@@ -317,6 +323,7 @@ export function isMarketplaceBuyFixedSaleRuntimeArgs(
   return (
     isRecord(value) &&
     typeof value.node === 'string' &&
+    isPositiveSafeInteger(value.expectedSaleId) &&
     isNonNegativeSafeInteger(value.priceLux) &&
     (value.buyerManager == null || typeof value.buyerManager === 'string')
   )
@@ -334,6 +341,7 @@ export function isMarketplacePlaceBidRuntimeArgs(
   return (
     isRecord(value) &&
     typeof value.node === 'string' &&
+    isPositiveSafeInteger(value.expectedAuctionId) &&
     isNonNegativeSafeInteger(value.amountLux) &&
     (
       value.bidderManager == null ||
@@ -425,4 +433,28 @@ export function isRouterProposeOperatorRuntimeArgs(value: unknown): value is Rou
 
 export function isPauseRuntimeArgs(value: unknown): value is { paused: boolean } {
   return isRecord(value) && typeof value.paused === 'boolean'
+}
+
+function isPositiveSafeInteger(value: unknown): value is number {
+  return isNonNegativeSafeInteger(value) && value > 0
+}
+
+export function isMarketplaceFixedSaleArgs(value: unknown): value is MarketplaceFixedSaleArgs {
+  return isMarketplaceAuctionNodeArgs(value) && 'expectedSaleId' in value && isPositiveSafeInteger(value.expectedSaleId)
+}
+
+export function isMarketplaceReviewedAuctionArgs(value: unknown): value is MarketplaceReviewedAuctionArgs {
+  return isMarketplaceAuctionNodeArgs(value) && 'expectedAuctionId' in value && isPositiveSafeInteger(value.expectedAuctionId)
+}
+
+export function isMarketplaceSettleAuctionRuntimeArgs(value: unknown): value is MarketplaceSettleAuctionRuntimeArgs {
+  return isMarketplaceReviewedAuctionArgs(value)
+}
+
+export function isMarketplaceCancelOfferRuntimeArgs(value: unknown): value is MarketplaceCancelOfferRuntimeArgs {
+  return isMarketplaceAuctionNodeArgs(value) && 'expectedOfferId' in value && isPositiveSafeInteger(value.expectedOfferId)
+}
+
+export function isMarketplaceExpireOfferRuntimeArgs(value: unknown): value is MarketplaceExpireOfferRuntimeArgs {
+  return isMarketplaceOfferArgs(value) && 'expectedOfferId' in value && isPositiveSafeInteger(value.expectedOfferId)
 }

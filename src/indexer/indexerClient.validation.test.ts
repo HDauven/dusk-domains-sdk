@@ -160,7 +160,7 @@ function marketplaceAuctionPayload(overrides: Record<string, unknown> = {}) {
     escrowed: true,
     txId: null,
     blockHeight: 1_000,
-    lastEventType: 'domain_auction_created',
+    auctionId: 1, lastEventType: 'domain_auction_created',
     ...overrides,
   }
 }
@@ -179,7 +179,7 @@ function marketplaceFixedSalePayload(overrides: Record<string, unknown> = {}) {
     escrowed: true,
     txId: null,
     blockHeight: 1_000,
-    lastEventType: 'domain_fixed_sale_opened',
+    saleId: 1, lastEventType: 'domain_fixed_sale_opened',
     ...overrides,
   }
 }

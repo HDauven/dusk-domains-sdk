@@ -203,6 +203,7 @@ export type IndexedMarketplaceConfig = {
 }
 
 export type IndexedMarketplaceFixedSale = {
+  saleId: number
   namespace?: NamespaceSummary
   node: string
   name: string
@@ -226,6 +227,7 @@ export type IndexedMarketplaceBid = {
 }
 
 export type IndexedMarketplaceAuction = {
+  auctionId: number
   namespace?: NamespaceSummary
   node: string
   name: string

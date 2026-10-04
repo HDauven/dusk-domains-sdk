@@ -93,3 +93,27 @@ normalization. An indexed warning or balance is not authorization to mutate or c
 See [examples](examples/direct-onchain-reads.md), [events](indexer-events.md),
 [HTTP contract](https://github.com/HDauven/dusk-domains-indexer/blob/main/docs/indexer-api.md) and
 [artifact tooling](https://github.com/HDauven/dusk-domains-protocol/blob/main/docs/public-integration-release.md).
+
+## Marketplace review bindings
+
+Canonical auction reads expose `auctionId`, `durationBlocks`,
+`startDeadlineBlockHeight`, `createdAtBlockHeight`, `feeBps` and the current
+bidding state. Compare the auction ID and immutable terms against the indexer
+before review, then retain the reviewed identity and chosen bid amount through
+signing. Display the canonical highest bid and end height as current information;
+an intervening bid does not invalidate the review. The contract accepts the exact
+chosen amount if it meets the current minimum and the auction remains open.
+`marketplacePlaceBidRuntimeCall`, settlement, auction cancellation and expiry
+require `expectedAuctionId`. Settlement is available only after the auction ends,
+when further bids cannot change its outcome.
+
+Fixed-sale reads expose `saleId`, `feeBps` and `openedAtBlockHeight`. Purchase,
+cancellation and expiry require `expectedSaleId`. Offer cancellation and expiry
+require the `expectedOfferId` returned by the canonical offer read. Do not replace
+reviewed IDs with newly read IDs during confirmation.
+
+The helpers encode these fields into the contract call and display them in wallet
+context. Auction and sale IDs are also retained in all corresponding decoded
+events and indexed rows. IDs use positive JavaScript safe integers, matching
+offer IDs; missing, zero or inexact IDs fail closed. The ABI requires the
+coordinated marketplace redeploy.

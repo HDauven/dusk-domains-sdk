@@ -67,7 +67,7 @@ describe('shared projection behavior', () => {
     projector.applyMarketplace({ type: 'domain_offer_placed', node, buyerAuthority: owner, amountLux: '5', feeBps: 0,
       expiresAtBlockHeight: 100, placedAtBlockHeight: 1 } as unknown as MarketplaceEvent)
     expect(projector.getMarketplaceOffer(node, owner)?.amountLux).toBe(5)
-    projector.applyMarketplace({ type: 'domain_bid_placed', node, bidderAuthority: owner, amountLux: 10,
+    projector.applyMarketplace({ type: 'domain_bid_placed', auctionId: 1, node, bidderAuthority: owner, amountLux: 10,
       previousBidderAuthority: null, previousBidLux: 0, startBlock: 1, endBlock: 100, started: true, extended: false,
       bidCount: 1, placedAtBlockHeight: 1 })
     expect(projector.getActivity(node)[0].eventType).toBe('domain_bid_placed')
@@ -95,7 +95,7 @@ it('deduplicates pool members across hex encodings', () => {
 
 it('normalizes marketplace authorities and preserves listing names for offers', () => {
   const projector = createLifecycleEventProjector()
-  projector.applyMarketplace({ type: 'domain_fixed_sale_opened', node, name: 'aurora.dusk', sellerAuthority: owner,
+  projector.applyMarketplace({ type: 'domain_fixed_sale_opened', saleId: 1, node, name: 'aurora.dusk', sellerAuthority: owner,
     privateBuyer: null, priceLux: 10, feeBps: 0, expiresAtBlockHeight: 100, openedAtBlockHeight: 1 })
   projector.applyMarketplace({ type: 'domain_offer_placed', node, buyerAuthority: owner.slice(2).toUpperCase(),
     amountLux: 5, feeBps: 0, expiresAtBlockHeight: 100, placedAtBlockHeight: 1 })
@@ -110,7 +110,7 @@ it('derives legacy referral totals when the payload omits aggregate counters', (
 
 it('records observed bids even if replay starts after auction creation', () => {
   const projector = createLifecycleEventProjector()
-  projector.applyMarketplace({ type: 'domain_bid_placed', node, bidderAuthority: owner, amountLux: 10,
+  projector.applyMarketplace({ type: 'domain_bid_placed', auctionId: 1, node, bidderAuthority: owner, amountLux: 10,
     previousBidderAuthority: null, previousBidLux: 0, startBlock: 1, endBlock: 100, started: true, extended: false,
     bidCount: 1, placedAtBlockHeight: 1 })
   expect(projector.getActivity(node).map(row => row.eventType)).toEqual(['domain_bid_placed'])
