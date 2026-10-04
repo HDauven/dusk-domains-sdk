@@ -2,8 +2,10 @@ import type {
   DuskConnectAppLike,
   DuskDomainContractPreset,
   DuskDomainDecodedContext,
+  DuskDomainGas,
 } from '../contracts/calls'
 import { prepareBoundCall, preparedCallForTarget } from '../contracts/preparedCalls'
+import { DUSK_DOMAIN_MAX_AUTO_GAS_PRICE } from '../contracts/callGas'
 
 export type DuskDomainsContractCallParams = {
   contract: DuskDomainContractPreset
@@ -15,11 +17,13 @@ export type DuskDomainsContractCallParams = {
 
 export type DuskDomainsWriteContractCallParams = DuskDomainsContractCallParams & {
   preparedCall?: unknown
+  gas?: { limit: string; price: string }
 }
 
 export type DuskDomainsConnectAppTransport = {
   readonly chainId?: string
   readonly state?: { readonly chainId: string | null }
+  wallet?: { request: (method: string, params?: unknown) => Promise<unknown> }
   readContract?: (params: DuskDomainsContractCallParams) => Promise<unknown>
   prepareContractCall?: (params: DuskDomainsContractCallParams) => Promise<unknown>
   writeContract?: (params: DuskDomainsWriteContractCallParams) => Promise<unknown>
@@ -39,6 +43,8 @@ const defaultRequestMethods = {
   prepareContractCall: 'dusk_prepareContractCall',
   writeContract: 'dusk_sendTransaction',
 } as const
+
+const GAS_PRICE_TIMEOUT_MS = 1_000
 
 export function createDuskDomainsConnectApp(
   transport: DuskDomainsConnectAppTransport,
@@ -63,13 +69,18 @@ export function createDuskDomainsConnectApp(
       })
     },
     async writeContract(params) {
-      if (params.preparedCall !== undefined) {
-        params = { ...params, preparedCall: preparedCallForTarget(chain, params.contract.contractId, params.preparedCall) }
+      const { gas, ...callParams } = params
+      const writeParams: DuskDomainsWriteContractCallParams = {
+        ...callParams,
+        ...(gas ? { gas: await resolveGas(transport, gas) } : {}),
       }
-      if (transport.writeContract) return await transport.writeContract(connectWriteContractParams(params))
+      if (writeParams.preparedCall !== undefined) {
+        writeParams.preparedCall = preparedCallForTarget(chain, writeParams.contract.contractId, writeParams.preparedCall)
+      }
+      if (transport.writeContract) return await transport.writeContract(connectWriteContractParams(writeParams))
       const requestParams = requestMethods.writeContract === defaultRequestMethods.writeContract
-        ? connectSendTransactionParams(params)
-        : connectContractParams(params)
+        ? connectSendTransactionParams(writeParams)
+        : connectContractParams(writeParams)
       return await requestTransport(transport, requestMethods.writeContract, requestParams)
     },
   }
@@ -111,7 +122,48 @@ function connectSendTransactionParams(params: DuskDomainsWriteContractCallParams
     ...params.preparedCall,
     deposit: params.preparedCall.deposit ?? params.deposit,
     display: params.preparedCall.display ?? params.decodedContext,
+    ...(params.gas ? { gas: params.gas } : {}),
   }
+}
+
+async function resolveGas(transport: DuskDomainsConnectAppTransport, gas: DuskDomainGas) {
+  const limit = BigInt(gas.limit).toString()
+  const price = gas.price === undefined ? await estimateGasPrice(transport) : gasPriceU64(gas.price).toString()
+  return { limit, price }
+}
+
+async function estimateGasPrice(transport: DuskDomainsConnectAppTransport): Promise<string> {
+  if (!transport.request && !transport.wallet) return '1'
+  let timeout: ReturnType<typeof globalThis.setTimeout> | undefined
+  try {
+    const stats = await Promise.race([
+      transport.request
+        ? transport.request({ method: 'dusk_estimateGas', params: {} })
+        : transport.wallet!.request('dusk_estimateGas', {}),
+      new Promise<undefined>(resolve => { timeout = globalThis.setTimeout(() => resolve(undefined), GAS_PRICE_TIMEOUT_MS) }),
+    ])
+    const median = isObjectRecord(stats) ? stats.median : undefined
+    const price = gasPriceU64(median)
+    return price < 1n ? '1' : (price > DUSK_DOMAIN_MAX_AUTO_GAS_PRICE ? DUSK_DOMAIN_MAX_AUTO_GAS_PRICE : price).toString()
+  } catch {
+    return '1'
+  } finally {
+    globalThis.clearTimeout(timeout)
+  }
+}
+
+function gasPriceU64(value: unknown): bigint {
+  const price = typeof value === 'bigint'
+    ? value
+    : typeof value === 'number' && Number.isSafeInteger(value)
+      ? BigInt(value)
+      : typeof value === 'string' && /^\d+$/u.test(value)
+        ? BigInt(value)
+        : null
+  if (price === null || price < 0n || price > 18_446_744_073_709_551_615n) {
+    throw new Error('Gas price must be a u64 integer.')
+  }
+  return price
 }
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {

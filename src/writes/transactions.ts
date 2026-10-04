@@ -7,6 +7,7 @@ import {
   type DuskDomainCallMetadata,
   type DuskDomainContractMap,
   type DuskDomainDecodedContext,
+  type DuskDomainGas,
 } from '../contracts/calls'
 
 export type DuskDomainTxStatus =
@@ -58,6 +59,7 @@ export type DuskTxHandleLike = {
 }
 
 export type SubmitDuskDomainWriteOptions = {
+  gas?: DuskDomainGas
   onUpdate?: (state: DuskDomainTxState) => void
   timeoutMs?: number
   contracts?: DuskDomainContractMap
@@ -80,7 +82,7 @@ export async function submitDuskDomainWrite(
     const preparedCall = await prepareDuskDomainContractCall(app, call, options.contracts)
 
     emit(options, { status: 'awaiting_approval', context, call: txCall })
-    const result = await writeDuskDomainContract(app, call, preparedCall, options.contracts)
+    const result = await writeDuskDomainContract(app, call, preparedCall, options.contracts, options.gas)
 
     if (isTxHandleLike(result)) {
       return await trackDuskDomainTransaction(result, context, { ...options, call: txCall })

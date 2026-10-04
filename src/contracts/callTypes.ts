@@ -41,6 +41,11 @@ export type DuskDataDriverLike = {
   decodeOutputFn: (fnName: string, rkyvBytes: Uint8Array) => unknown
 }
 
+export type DuskDomainGas = {
+  limit: bigint | string
+  price?: bigint | string
+}
+
 export type DuskConnectAppLike = {
   /** Current chain identity. Required for preparation; reads are uncached when unavailable. */
   readonly chainId?: string
@@ -64,6 +69,7 @@ export type DuskConnectAppLike = {
     deposit?: string
     decodedContext?: DuskDomainDecodedContext
     preparedCall?: unknown
+    gas?: DuskDomainGas
   }) => Promise<unknown>
 }
 
