@@ -1,4 +1,4 @@
-import { registrationPremiumSchedule, validateFeeConfigPrices } from './premium.mjs'
+import { registrationPremiumSchedule, validateFeeConfigPrices, type PremiumSchedule } from './premium.mjs'
 export * from './premium.mjs'
 import { DEFAULT_FEE_CONFIG, LUX_PER_DUSK, getReservedNamePolicy } from './namePolicyData.mjs'
 export { DEFAULT_FEE_CONFIG, RESERVED_NAME_POLICIES, RESERVED_LABELS, getReservedNamePolicy } from './namePolicyData.mjs'
@@ -224,7 +224,7 @@ export function quoteRegistration(name: string, years: number, feeConfig: CoreFe
   graceEndsAtBlockHeight: number | null
   currentBlockHeight: number
   nowSeconds?: number
-}) {
+}): PremiumSchedule & { baseLux: number, totalLux: number } {
   const validation = validateName(name)
   if (!validation.ok || validation.name.labels.length !== 2 || getReservedNamePolicy(validation.name.registrableLabel)) {
     throw new Error('Public registration requires an unreserved root name.')

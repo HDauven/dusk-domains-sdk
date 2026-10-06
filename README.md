@@ -6,10 +6,14 @@ history and dashboards.
 
 ## Use
 
-The package is `@duskdomains/sdk`. Pin a version or exact source revision
-compatible with the deployment.
-The package exports TypeScript sources; plain Node projection and event catalog
-entrypoints are also available.
+The package is [`@duskdomains/sdk`](https://jsr.io/@duskdomains/sdk) on JSR:
+
+```sh
+npx jsr add @duskdomains/sdk    # Node, Vite and other npm projects
+deno add jsr:@duskdomains/sdk   # Deno
+```
+
+Pin the version that matches the deployment you integrate with.
 
 ```ts
 import { namehashHex } from '@duskdomains/sdk'
@@ -53,7 +57,6 @@ check for missing npm scripts in tracked Markdown.
 - [Shared event schema and projection](docs/indexer-events.md)
 - [Registration quotes and premiums](docs/registration.md)
 - [Operator handover](docs/operator-handover.md)
-- [Protocol standard](https://github.com/HDauven/dusk-domains-protocol/blob/main/docs/dusk-domains-standard.md)
 - [Indexer API and pagination](https://github.com/HDauven/dusk-domains-indexer/blob/main/docs/indexer-api.md)
 
 Licensed under [MIT](LICENSE).

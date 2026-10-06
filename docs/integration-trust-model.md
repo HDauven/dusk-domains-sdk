@@ -90,9 +90,8 @@ to in-memory state. The operator supplies finalized order, deduplication,
 provenance, persistence and HTTP serving. Raw data-driver/RKYV decoding precedes
 normalization. An indexed warning or balance is not authorization to mutate or claim.
 
-See [examples](examples/direct-onchain-reads.md), [events](indexer-events.md),
-[HTTP contract](https://github.com/HDauven/dusk-domains-indexer/blob/main/docs/indexer-api.md) and
-[artifact tooling](https://github.com/HDauven/dusk-domains-protocol/blob/main/docs/public-integration-release.md).
+See [examples](examples/direct-onchain-reads.md), [events](indexer-events.md) and the
+[HTTP contract](https://github.com/HDauven/dusk-domains-indexer/blob/main/docs/indexer-api.md).
 
 ## Marketplace review bindings
 

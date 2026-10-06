@@ -1,0 +1,24 @@
+name: Publish
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Tag matches jsr.json and package.json
+        run: |
+          test "$GITHUB_REF_NAME" = "v$(node -p "require('./jsr.json').version")"
+          test "$GITHUB_REF_NAME" = "v$(node -p "require('./package.json').version")"
+      - run: npm test
+      - run: npm run build && npm run typecheck
+      - run: npx jsr publish
