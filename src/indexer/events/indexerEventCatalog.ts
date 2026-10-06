@@ -106,8 +106,10 @@ export const duskDomainsIndexedEventTypes = [
   ...poolEventTypes,
 ] as const
 
+type ContractEventTopics = Readonly<Record<'router' | 'core' | 'treasury' | 'marketplace', readonly string[]>>
+
 /** Data-driver topics emitted by each deployed contract, excluding legacy synthetic lifecycle events. */
-export const duskDomainsContractEventTopics = Object.freeze({
+export const duskDomainsContractEventTopics: ContractEventTopics = Object.freeze({
   router: Object.freeze([
     ...poolEventTypes.filter((type) => type !== 'records_moved'),
     ...lifecycleEventTypes.filter((type) => type === 'reserved_name_issued'),
@@ -126,7 +128,7 @@ export const duskDomainsContractEventTopics = Object.freeze({
 })
 
 /** Historical topics collectors may skip, scoped to the contract that stopped emitting them. */
-export const duskDomainsRetiredContractEventTopics = Object.freeze({
+export const duskDomainsRetiredContractEventTopics: ContractEventTopics = Object.freeze({
   router: Object.freeze([] as string[]),
   core: Object.freeze([
     'core_referral_config_changed',

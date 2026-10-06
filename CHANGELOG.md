@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-10-06)
+
+First release since 0.1.6. Entrypoints changed: `./connect` and `./local-dev` are gone; `./writes`,
+`./write-proof`, `./marketplace`, `./connect-app`, `./event-catalog` and `./projection` are new.
+Clients route through the contract-pool router.
 
 - Export action-based gas limits with extra allowance for Moonlight recipient key checks.
 - Forward validated gas prices through both wallet write paths, capping automatic estimates while preserving explicit u64 prices.
