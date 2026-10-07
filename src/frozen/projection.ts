@@ -1245,10 +1245,14 @@ export function projectedPrimary(
 ): { store: string; primary: T.Primary; name: T.Name } | null {
   let result: { store: string; primary: T.Primary; name: T.Name } | null =
     null
-  for (const [key, p] of Object.entries(state.primaries)) {
-    if (!equalBytes(p.endpoint, endpoint)) continue
-    const store = key.slice(0, 64),
-      n = state.names[nameStateKey(store, p.name.key)]
+  // Primary keys already include the endpoint. Probe each admitted store
+  // (at most 64) instead of enumerating every stored primary.
+  const endpointKey = hex(endpoint)
+  for (const [store, role] of Object.entries(state.scope)) {
+    if (role !== 'store') continue
+    const p = state.primaries[`${store}:${endpointKey}`]
+    if (!p || !equalBytes(p.endpoint, endpoint)) continue
+    const n = state.names[nameStateKey(store, p.name.key)]
     if (
       !n ||
       !sameRef(refOf(n), p.name) ||
@@ -1318,13 +1322,17 @@ export function projectedHome(
   const forward = state.forwards[rootStateKey(store, root)]
   if (forward) return { Forwarded: structuredClone(forward) }
   if (state.names[nameStateKey(store, { root, node: root })]) return 'Local'
-  for (const group of Object.values(state.imports))
+  for (const key of Object.keys(
+    state.indexes.imports[rootStateKey(store, root)] ?? {},
+  )) {
+    const group = state.imports[key]
     if (
       !group.activated &&
       contractId(group.status.ticket.destination) === contractId(store) &&
       equalBytes(group.status.ticket.root.key.root, root)
     )
       return { Staged: [...group.status.ticket.id] }
+  }
   return 'Absent'
 }
 /** Canonical lifecycle from event state and a caller's block snapshot. */
@@ -1338,7 +1346,10 @@ export function projectedName(
   if (typeof home === 'object' && 'Forwarded' in home) return home
   const row = state.names[nameStateKey(store, key)]
   if (!row) return 'Absent'
-  const pending = Object.values(state.moves).find(
+  const root = state.names[nameStateKey(store, { root: key.root, node: key.root })]
+  const pending = Object.keys(
+    root ? (state.indexes.openMoves[refStateKey(store, refOf(root))] ?? {}) : {},
+  ).map((id) => state.moves[id]).find(
     (m) =>
       contractId(m.ticket.source) === contractId(store) &&
       equalBytes(m.ticket.root.key.root, key.root) &&
