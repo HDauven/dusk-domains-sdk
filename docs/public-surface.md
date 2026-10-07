@@ -1,6 +1,9 @@
 # Public surface in 0.3.0
 
-The npm and JSR export maps contain the same eight entrypoints and target files.
+The npm and JSR export maps contain the same eight entrypoints. npm resolves
+runtime imports to compiled JavaScript and types to declarations in `dist`; its
+`event-catalog` export uses the generated standalone `.mjs` catalog. Plain Node
+consumers need no TypeScript loader. JSR continues to export TypeScript sources.
 
 | Import                             | Public API                                                                                                                                                                                  |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

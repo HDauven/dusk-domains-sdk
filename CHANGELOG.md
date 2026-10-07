@@ -8,6 +8,8 @@
 - Separate retained event payloads from mutable projection state.
 - Keep directory revisions synchronized through delay changes and role handovers.
 - Preserve store admission roles when projecting `SetAcceptsMoves`.
+- Publish compiled npm runtime entrypoints usable by plain Node while keeping
+  the same TypeScript source entrypoints for JSR.
 
 Breaking release for ADR 0004's fresh frozen deployment. No legacy state migration.
 

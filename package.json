@@ -4,43 +4,44 @@
   "license": "MIT",
   "type": "module",
   "description": "TypeScript SDK and integration helpers for Dusk Domains.",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./src/index.ts",
-      "import": "./src/index.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./writes": {
-      "types": "./src/writes.ts",
-      "import": "./src/writes.ts"
+      "types": "./dist/writes.d.ts",
+      "import": "./dist/writes.js"
     },
     "./marketplace": {
-      "types": "./src/marketplace.ts",
-      "import": "./src/marketplace.ts"
+      "types": "./dist/marketplace.d.ts",
+      "import": "./dist/marketplace.js"
     },
     "./connect-app": {
-      "types": "./src/wallet/duskConnectApp.ts",
-      "import": "./src/wallet/duskConnectApp.ts"
+      "types": "./dist/wallet/duskConnectApp.d.ts",
+      "import": "./dist/wallet/duskConnectApp.js"
     },
     "./event-catalog": {
-      "types": "./src/indexer/events/indexerEventCatalog.ts",
-      "import": "./src/indexer/events/indexerEventCatalog.ts"
+      "types": "./dist/indexer/events/indexerEventCatalog.d.ts",
+      "import": "./src/indexer/events/indexerEventCatalog.mjs"
     },
     "./projection": {
-      "types": "./src/projection.ts",
-      "import": "./src/projection.ts"
+      "types": "./dist/projection.d.ts",
+      "import": "./dist/projection.js"
     },
     "./chain-addresses": {
-      "types": "./src/chain-addresses.ts",
-      "import": "./src/chain-addresses.ts"
+      "types": "./dist/chain-addresses.d.ts",
+      "import": "./dist/chain-addresses.js"
     },
     "./indexer": {
-      "types": "./src/indexer.ts",
-      "import": "./src/indexer.ts"
+      "types": "./dist/indexer.d.ts",
+      "import": "./dist/indexer.js"
     }
   },
   "files": [
+    "dist",
     "src",
     "docs",
     "README.md",

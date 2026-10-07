@@ -5,8 +5,10 @@ import {
   validateBitcoinAddress,
 } from '../src/chain-addresses.ts'
 const root = new URL('../', import.meta.url)
-it('npm and JSR export maps and versions agree, including chain-addresses', () => {
-  const npm = JSON.parse(readFileSync(new URL('package.json', root), 'utf8')),
+it('npm and JSR expose the same entrypoints with platform-appropriate runtime files', () => {
+  const npm = JSON.parse(
+      readFileSync(new URL('package.json', root), 'utf8'),
+    ),
     jsr = JSON.parse(readFileSync(new URL('jsr.json', root), 'utf8'))
   expect(npm.version).toBe('0.3.0')
   expect(jsr.version).toBe(npm.version)
@@ -14,9 +16,21 @@ it('npm and JSR export maps and versions agree, including chain-addresses', () =
     Object.keys(jsr.exports).sort(),
   )
   for (const [key, path] of Object.entries(jsr.exports)) {
-    expect(npm.exports[key]).toEqual({ types: path, import: path })
+    const compiled = (path as string)
+      .replace('./src/', './dist/')
+      .replace(/\.ts$/u, '')
+    expect(npm.exports[key]).toEqual({
+      types: `${compiled}.d.ts`,
+      import:
+        key === './event-catalog'
+          ? (path as string).replace(/\.ts$/u, '.mjs')
+          : `${compiled}.js`,
+    })
     expect(existsSync(new URL(path as string, root))).toBe(true)
   }
+  expect(npm.main).toBe('./dist/index.js')
+  expect(npm.types).toBe('./dist/index.d.ts')
+  expect(npm.files).toContain('dist')
   expect(jsr.exports['./chain-addresses']).toBeDefined()
   expect(jsr.exports['./internal']).toBeUndefined()
 })

@@ -83,6 +83,7 @@ queries. Runtime allocator capacity and actual unsolicited vault surplus are
 node observations, not recoverable from domain events.
 
 The TypeScript catalog is the source for the committed standalone
-`src/indexer/events/indexerEventCatalog.mjs`. `npm run build` regenerates it;
+`src/indexer/events/indexerEventCatalog.mjs`, exposed by the npm `event-catalog`
+entrypoint. `npm run build` regenerates it;
 CI checks it for drift. Frozen projection schemas replace all legacy event rows:
 rebuild the index from the fresh deployment's first block.
