@@ -303,3 +303,29 @@ it('primary verification requires matching incarnation, active lifecycle and for
   t.n.name.expires_at = 100n
   expect(await t.client.verifyPrimary(endpoint)).toBeNull()
 })
+
+it('admits directory actions under the role their admission belongs to', async () => {
+  const t = await setup()
+  const applied = (action: object, admission: Admission | null) => ({
+    version: 1,
+    body: { ...sample('ActionApplied'), action, admission },
+  })
+  const store = t.admissions[0]
+  // Disabling moves on an existing store re-admits that store, not a policy.
+  await t.client.admitDirectoryEvent(
+    'action_applied',
+    applied({ SetAcceptsMoves: { store: store.id, expected: true, value: false } }, store) as never,
+  )
+  await expect(
+    t.client.admitDirectoryEvent(
+      'action_applied',
+      applied({ SetPolicy: { expected_version: 1n, admission: store } }, store) as never,
+    ),
+  ).rejects.toThrow('Contract role mismatch')
+  await expect(
+    t.client.admitDirectoryEvent(
+      'action_applied',
+      applied({ SetRenewal: { expected_version: 1n, annual_lux: [], referral_bps: 0 } }, store) as never,
+    ),
+  ).rejects.toThrow('Unexpected admission for SetRenewal')
+})

@@ -918,6 +918,7 @@ it('replays all directory configuration, proposals and effective admissions', ()
   let s = createProjectionState(options)
   const initialized = sample('DirectoryInitialized')
   initialized.config.binding.directory = bytes(1)
+  initialized.config.revision = initialized.config.registration.revision = 1n
   initialized.args.initial_store.id = bytes(4)
   initialized.args.initial_resolver.id = bytes(5)
   initialized.args.policy.id = bytes(3)
@@ -977,6 +978,7 @@ it('replays all directory configuration, proposals and effective admissions', ()
       interface_version: 1,
     },
     config = structuredClone(s.directory!)
+  config.revision = config.registration.revision = 2n
   s = projectReceipt(
     s,
     receipt(3n, [
@@ -1028,17 +1030,17 @@ it('replays all directory configuration, proposals and effective admissions', ()
       [
         1,
         'registration_pause_changed',
-        { paused: false, revision: 3n, actor: config.operator.principal },
+        { paused: false, revision: 5n, actor: config.operator.principal },
       ],
       [
         1,
         'policy_suspension_changed',
-        { suspended: true, revision: 4n, actor: config.guardian },
+        { suspended: true, revision: 6n, actor: config.guardian },
       ],
       [
         1,
         'delays_changed',
-        { proposal_delay: 17280n, guardian_delay: 60480n, revision: 5n },
+        { proposal_delay: 17280n, guardian_delay: 60480n, revision: 7n },
       ],
       [1, 'proposal_pruned', { id: second.id, final_status: 'Cancelled' }],
     ]),
@@ -1344,4 +1346,365 @@ it('projects marketplace configuration and retains audited trade/escrow/refund e
   expect(state.effects.slice(-3).map((e) => e.topic)).toEqual(
     effects.map((e) => e[1]),
   )
+})
+
+function initializedDirectory(): T.DirectoryInitialized {
+  const event = sample('DirectoryInitialized')
+  event.config.binding.directory = bytes(1)
+  event.config.revision = event.config.registration.revision = 1n
+  event.config.registration.operator_paused = true
+  event.args.initial_store.id = bytes(4)
+  event.args.initial_resolver.id = bytes(5)
+  event.args.policy.id = bytes(3)
+  event.args.initial_market = null
+  return event
+}
+function addStore(): T.ActionApplied {
+  const admission = {
+    ...sample('Admission'),
+    id: bytes(9),
+    ordinal: 2,
+    interface_version: 1,
+  }
+  const config = initializedDirectory().config
+  config.revision = config.registration.revision = 2n
+  return {
+    id: { operator_epoch: 1n, nonce: 1n },
+    action: { AddStore: { expected_allocation_version: 1n, admission } },
+    config,
+    admission,
+    market: null,
+  }
+}
+function commitment(hash = 1): T.CommitmentCreated {
+  return {
+    commitment: {
+      key: { actor: bytes(10), hash: bytes(hash) },
+      created_at: 2n,
+    },
+  }
+}
+
+it('projects a store admitted earlier in a receipt exactly once and replays after rollback', () => {
+  const projector = createProjector(options)
+  const init = receipt(1n, [
+    [1, 'directory_initialized', initializedDirectory()],
+  ])
+  projector.apply(init)
+  const tx = receipt(2n, [
+    [9, 'commitment_created', commitment(1)], // Before admission: ignored.
+    [1, 'action_applied', addStore()],
+    [9, 'commitment_created', commitment(2)],
+    [10, 'commitment_created', commitment(3)], // Never admitted: ignored.
+  ])
+  const result = projector.apply(tx)
+  expect(result.scope[id(9)]).toBe('store')
+  expect(result.commitments).toEqual({
+    [`${id(9)}:${id(10)}:${id(2)}`]: commitment(2).commitment,
+  })
+  expect(
+    result.effects.slice(1).map((e) => [e.emitter, e.topic, e.ordinal]),
+  ).toEqual([
+    [id(1), 'action_applied', 4],
+    [id(9), 'commitment_created', 7],
+  ])
+  expect(projectReceipt(result, tx)).toBe(result)
+  expect(projector.apply(tx)).toEqual(result)
+  expect(projector.rollbackTo(1n).scope[id(9)]).toBeUndefined()
+  expect(projector.apply(tx)).toEqual(result)
+})
+
+it('includes store, resolver, policy and marketplace emitters admitted by initialization', () => {
+  const initial = initializedDirectory()
+  initial.args.initial_market = { ...sample('Market'), id: bytes(6) }
+  const binding = { directory: bytes(1), vault: bytes(2), network: 1 }
+  const marketConfigured = fixtures('market-v1')['event:market_configured']
+    .json as T.Event<T.MarketConfigured>
+  const tx = receipt(1n, [
+    [1, 'directory_initialized', initial],
+    [4, 'store_initialized', { args: { binding } }],
+    [5, 'resolver_initialized', { args: { binding } }],
+    [
+      3,
+      'policy_initialized',
+      { args: { ...sample('InitPolicy'), binding } },
+    ],
+    [6, 'market_configured', marketConfigured.body],
+  ])
+  const result = projectReceipt(
+    createProjectionState({
+      directoryId: id(1),
+      contracts: { [id(1)]: 'directory' },
+    }),
+    tx,
+  )
+  expect(result.effects.map((e) => e.topic)).toEqual([
+    'directory_initialized',
+    'store_initialized',
+    'resolver_initialized',
+    'policy_initialized',
+    'market_configured',
+  ])
+  expect(Object.keys(result.initializations).sort()).toEqual([
+    id(1),
+    id(3),
+    id(4),
+    id(5),
+  ])
+  expect(result.marketConfigs[id(6)]).toBeDefined()
+  expect(projectReceipt(result, tx)).toBe(result)
+})
+
+it.each(['reverted', 'unfinished', 'failed'] as const)(
+  'does not admit a store through a %s operation',
+  (failure) => {
+    const before = projectReceipt(
+      createProjectionState(options),
+      receipt(1n, [[1, 'directory_initialized', initializedDirectory()]]),
+    )
+    const tx = receipt(2n, [
+      [1, 'action_applied', addStore()],
+      [9, 'commitment_created', commitment()],
+    ])
+    if (failure === 'reverted') tx.events[1].reverted = true
+    if (failure === 'unfinished') tx.events.splice(2, 1)
+    if (failure === 'failed') tx.success = false
+    const result = projectReceipt(before, tx)
+    expect(result.scope[id(9)]).toBeUndefined()
+    expect(result.commitments).toEqual({})
+    expect(result.effects).toEqual(before.effects)
+  },
+)
+
+it('keeps newly admitted nested effects atomic with their enclosing journal frame', () => {
+  const before = projectReceipt(
+    createProjectionState(options),
+    receipt(1n, [[1, 'directory_initialized', initializedDirectory()]]),
+  )
+  const tx = receipt(2n, [
+    [1, 'action_applied', addStore()],
+    [9, 'commitment_created', commitment()],
+  ])
+  // Both operations share an already trusted enclosing marketplace call.
+  tx.events = tx.events.map((e) => ({
+    ...e,
+    data: e.topic.startsWith('operation_')
+      ? {
+          ...(e.data as T.OperationBegin),
+          call_path: [bytes(6), ...(e.data as T.OperationBegin).call_path],
+        }
+      : e.data,
+  }))
+  tx.events.unshift({
+    emitter: id(6),
+    topic: 'operation_begin',
+    ordinal: 0,
+    data: { op_seq: 999n, height: 2n, call_path: [bytes(6)] },
+  })
+  tx.events.push({
+    emitter: id(6),
+    topic: 'operation_end',
+    ordinal: 0,
+    data: { op_seq: 999n, call_path: [bytes(6)] },
+  })
+  tx.events.forEach((e, i) => {
+    e.ordinal = i
+  })
+  expect(Object.keys(projectReceipt(before, tx).commitments)).toHaveLength(
+    1,
+  )
+  tx.events.pop()
+  expect(projectReceipt(before, tx).effects).toEqual(before.effects)
+})
+
+it('retains original directory and proposal history after later mutations', () => {
+  const initialized = initializedDirectory()
+  const proposal = { ...sample('Proposal'), status: 'Pending' as const }
+  const tx = receipt(1n, [
+    [1, 'directory_initialized', initialized],
+    [1, 'proposal_created', { proposal }],
+  ])
+  const before = projectReceipt(createProjectionState(options), tx)
+  const historical = structuredClone(before.effects)
+  const after = projectReceipt(
+    before,
+    receipt(2n, [
+      [
+        1,
+        'registration_pause_changed',
+        {
+          paused: false,
+          revision: 2n,
+          actor: initialized.config.operator.principal,
+        },
+      ],
+      [
+        1,
+        'proposal_cancelled',
+        { id: proposal.id, actor: initialized.config.operator.principal },
+      ],
+    ]),
+  )
+  expect(after.directory?.registration.operator_paused).toBe(false)
+  expect(
+    after.proposals[`${proposal.id.operator_epoch}:${proposal.id.nonce}`]
+      .status,
+  ).toBe('Cancelled')
+  expect(after.effects.slice(0, historical.length)).toEqual(historical)
+  expect(before.effects).toEqual(historical)
+  expect(after.effects[0].data).toEqual(tx.events[1].data)
+  // Mutation of returned state and original input must not rewrite retained evidence.
+  after.directory!.operator.recipient[0] ^= 1
+  initialized.config.operator.recipient[0] ^= 1
+  expect(after.effects.slice(0, historical.length)).toEqual(historical)
+})
+
+it('preserves the store role and initial admission history for SetAcceptsMoves', () => {
+  const initialized = initializedDirectory()
+  const before = projectReceipt(
+    createProjectionState(options),
+    receipt(1n, [[1, 'directory_initialized', initialized]]),
+  )
+  const historical = structuredClone(before.effects)
+  const after = projectReceipt(
+    before,
+    receipt(2n, [
+      [
+        1,
+        'action_applied',
+        {
+          ...addStore(),
+          config: {
+            ...initialized.config,
+            revision: 2n,
+            registration: {
+              ...initialized.config.registration,
+              revision: 2n,
+            },
+          },
+          action: {
+            SetAcceptsMoves: {
+              store: bytes(4),
+              expected: true,
+              value: false,
+            },
+          },
+          admission: {
+            ...initialized.args.initial_store,
+            accepts_moves: false,
+          },
+        },
+      ],
+    ]),
+  )
+  expect(after.admissions[id(4)].accepts_moves).toBe(false)
+  expect(after.scope[id(4)]).toBe('store')
+  expect(after.effects.slice(0, historical.length)).toEqual(historical)
+})
+
+it('synchronizes both revisions when only directory delays change', () => {
+  const before = projectReceipt(
+    createProjectionState(options),
+    receipt(1n, [[1, 'directory_initialized', initializedDirectory()]]),
+  )
+  const after = projectReceipt(
+    before,
+    receipt(2n, [
+      [
+        1,
+        'delays_changed',
+        {
+          proposal_delay: 17280n,
+          guardian_delay: 60480n,
+          revision: 2n,
+        },
+      ],
+    ]),
+  )
+  expect(after.directory?.revision).toBe(2n)
+  expect(after.directory?.registration.revision).toBe(2n)
+})
+
+it('retains ImportPrepared payloads through staging, readiness and same-receipt mutation', () => {
+  const m = moving(true),
+    historical = structuredClone(m.s.effects)
+  const after = stageAll(m)
+  expect(
+    after.imports[`${id(8)}:${hex(m.ticket.id)}`].status.staged_count,
+  ).toBe(2)
+  expect(after.imports[`${id(8)}:${hex(m.ticket.id)}`].status.ready).toBe(
+    true,
+  )
+  expect(after.effects.slice(0, historical.length)).toEqual(historical)
+  expect(m.s.effects).toEqual(historical)
+  const plain = moving(),
+    tx = receipt(30n, [
+      [8, 'import_prepared', { status: plain.status }],
+      [8, 'import_row_staged', plain.staged[0]],
+    ])
+  const together = projectReceipt(createProjectionState(options), tx)
+  expect(
+    together.imports[`${id(8)}:${hex(plain.ticket.id)}`].status
+      .staged_count,
+  ).toBe(1)
+  expect(
+    (together.effects[0].data as T.Event<T.ImportPrepared>).body.status,
+  ).toEqual(plain.status)
+  expect(together.effects[0].data).toEqual(tx.events[1].data)
+})
+
+it('keeps both directory revisions current after every configuration event', () => {
+  const initialized = initializedDirectory()
+  let state = projectReceipt(
+    createProjectionState(options),
+    receipt(1n, [[1, 'directory_initialized', initialized]]),
+  )
+  const events: [string, unknown][] = [
+    ['action_applied', addStore()],
+    [
+      'operator_changed',
+      {
+        ...sample('OperatorChanged'),
+        current: initialized.config.operator,
+        operator_epoch: 2n,
+      },
+    ],
+    [
+      'guardian_changed',
+      {
+        ...sample('GuardianChanged'),
+        current: initialized.config.guardian,
+        guardian_epoch: 2n,
+        suspended: false,
+      },
+    ],
+    [
+      'registration_pause_changed',
+      {
+        paused: false,
+        revision: 5n,
+        actor: initialized.config.operator.principal,
+      },
+    ],
+    [
+      'policy_suspension_changed',
+      {
+        suspended: true,
+        revision: 6n,
+        actor: initialized.config.guardian,
+      },
+    ],
+    [
+      'delays_changed',
+      { proposal_delay: 17280n, guardian_delay: 60480n, revision: 7n },
+    ],
+  ]
+  for (const [index, [topic, body]] of events.entries()) {
+    const revision = BigInt(index + 2),
+      tx = receipt(revision, [[1, topic, body]])
+    state = projectReceipt(state, tx)
+    expect(state.directory?.revision, topic).toBe(revision)
+    expect(state.directory?.registration.revision, topic).toBe(revision)
+    expect(projectReceipt(state, tx)).toBe(state)
+  }
 })

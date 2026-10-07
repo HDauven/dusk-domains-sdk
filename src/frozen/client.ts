@@ -339,12 +339,19 @@ export class FrozenClient {
     } else {
       const body = (event as EventTypes['action_applied']).body
       if (body.admission) {
+        // SetAcceptsMoves carries the updated store admission, like AddStore.
         const role =
-          'AddStore' in body.action
+          'AddStore' in body.action || 'SetAcceptsMoves' in body.action
             ? 'store'
             : 'AddResolver' in body.action
               ? 'resolver'
-              : 'policy'
+              : 'SetPolicy' in body.action
+                ? 'policy'
+                : null
+        if (!role)
+          throw new Error(
+            `Unexpected admission for ${Object.keys(body.action)[0]}`,
+          )
         await this.verifyContract(
           role,
           contractId(body.admission.id),

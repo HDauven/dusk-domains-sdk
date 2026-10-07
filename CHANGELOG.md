@@ -4,6 +4,10 @@
 
 - Require the observed commit height in `registrationCalls` and accept a separately
   reviewed reveal deadline bounded by the commitment window.
+- Project emitters admitted earlier in the same committed receipt in event order.
+- Separate retained event payloads from mutable projection state.
+- Keep directory revisions synchronized through delay changes and role handovers.
+- Preserve store admission roles when projecting `SetAcceptsMoves`.
 
 Breaking release for ADR 0004's fresh frozen deployment. No legacy state migration.
 

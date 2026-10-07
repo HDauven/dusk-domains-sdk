@@ -1,7 +1,7 @@
 /** Transaction-atomic event projection for the frozen layer. @module */
 import type * as T from './types.ts'
 import { contractId, equalBytes, hex, fromHex } from './bytes.ts'
-import { stringifyJson } from './json.ts'
+import { stringifyJson, u64 } from './json.ts'
 import { assertRecordsDigest, moveManifestDigest } from './digests.ts'
 import {
   committedEvents,
@@ -230,6 +230,15 @@ function directory(s: ProjectionState): T.DirectoryConfig {
   requireHistory(s.directory, 'directory initialization')
   return s.directory
 }
+function setDirectoryRevision(d: T.DirectoryConfig, revision: bigint): void {
+  d.revision = d.registration.revision = u64(revision)
+}
+function actionAdmissionRole(action: T.Action): ContractRole {
+  if ('AddStore' in action || 'SetAcceptsMoves' in action) return 'store'
+  if ('AddResolver' in action) return 'resolver'
+  if ('SetPolicy' in action) return 'policy'
+  throw new Error('Unexpected directory admission')
+}
 function moveKey(store: string, id: T.Digest): string {
   return `${store}:${hex(id)}`
 }
@@ -396,11 +405,7 @@ function apply(
       if (e.body.admission)
         admit(
           s,
-          'AddStore' in e.body.action
-            ? 'store'
-            : 'AddResolver' in e.body.action
-              ? 'resolver'
-              : 'policy',
+          actionAdmissionRole(e.body.action),
           e.body.admission,
         )
       if (e.body.market) {
@@ -420,6 +425,7 @@ function apply(
       d.operator = e.body.current
       d.operator_epoch = e.body.operator_epoch
       d.registration.operator = e.body.current.principal
+      setDirectoryRevision(d, d.revision + 1n)
       break
     }
     case 'guardian_changed': {
@@ -427,6 +433,7 @@ function apply(
       d.guardian = e.body.current
       d.guardian_epoch = e.body.guardian_epoch
       d.registration.guardian_suspended = e.body.suspended
+      setDirectoryRevision(d, d.revision + 1n)
       break
     }
     case 'proposals_invalidated':
@@ -440,22 +447,20 @@ function apply(
     case 'registration_pause_changed': {
       const d = directory(s)
       d.registration.operator_paused = e.body.paused
-      d.registration.revision = e.body.revision
-      d.revision = e.body.revision
+      setDirectoryRevision(d, e.body.revision)
       break
     }
     case 'policy_suspension_changed': {
       const d = directory(s)
       d.registration.guardian_suspended = e.body.suspended
-      d.registration.revision = e.body.revision
-      d.revision = e.body.revision
+      setDirectoryRevision(d, e.body.revision)
       break
     }
     case 'delays_changed': {
       const d = directory(s)
       d.proposal_delay = e.body.proposal_delay
       d.guardian_delay = e.body.guardian_delay
-      d.revision = e.body.revision
+      setDirectoryRevision(d, e.body.revision)
       break
     }
     case 'commitment_created': {
@@ -906,6 +911,51 @@ function apply(
     }
   }
 }
+/** Discover only journal-committed admissions, then include later events from their emitters. */
+function receiptEffects(
+  previous: ProjectionState,
+  receipt: Receipt,
+): CommittedEvent[] {
+  const effects = committedEvents(receipt, previous.scope),
+    scope = { ...previous.scope },
+    admittedAt = new Map<string, number>()
+  function add(id: T.Contract, role: ContractRole, ordinal: number): void {
+    const emitter = contractId(id)
+    if (scope[emitter]) return
+    scope[emitter] = role
+    admittedAt.set(emitter, ordinal)
+  }
+  for (const event of effects) {
+    if (event.emitter !== previous.directoryId) continue
+    if (event.topic === 'directory_initialized') {
+      const { args } = (event.data as T.Event<T.DirectoryInitialized>).body
+      add(args.initial_store.id, 'store', event.ordinal)
+      add(args.initial_resolver.id, 'resolver', event.ordinal)
+      add(args.policy.id, 'policy', event.ordinal)
+      if (args.initial_market)
+        add(args.initial_market.id, 'marketplace', event.ordinal)
+    } else if (event.topic === 'action_applied') {
+      const body = (event.data as T.Event<T.ActionApplied>).body
+      if (body.admission)
+        add(body.admission.id, actionAdmissionRole(body.action), event.ordinal)
+      if (body.market) add(body.market.id, 'marketplace', event.ordinal)
+    }
+  }
+  if (!admittedAt.size) return effects
+  // Earlier operations from a newly admitted emitter remain out of scope.
+  // Re-run journal framing as well as effect decoding for the expanded scope.
+  return committedEvents(
+    {
+      ...receipt,
+      events: receipt.events.filter((event) => {
+        const emitter = event.emitter.replace(/^0x/u, '').toLowerCase(),
+          ordinal = admittedAt.get(emitter)
+        return ordinal === undefined || event.ordinal > ordinal
+      }),
+    },
+    scope,
+  )
+}
 /** Apply a receipt to a clone and publish the whole result, or throw without changing the input. */
 export function projectReceipt(
   previous: ProjectionState,
@@ -914,11 +964,12 @@ export function projectReceipt(
   if (previous.receipts.includes(receipt.id)) return previous
   if (receipt.height < previous.height)
     throw new Error('Rollback before replaying an older block')
-  const effects = committedEvents(receipt, previous.scope),
+  const effects = receiptEffects(previous, receipt),
     next = structuredClone(previous),
     activated = new Set<string>(),
     forwarded = new Set<string>()
   for (const event of effects) {
+    if (!next.scope[event.emitter]) continue
     requireHistory(
       event.topic !== 'operation_begin' && event.topic !== 'operation_end',
       'framing event leaked',
@@ -927,9 +978,11 @@ export function projectReceipt(
       topic: event.topic,
       emitter: event.emitter,
       height: event.height,
-      body: (event.data as T.Event<unknown>).body,
+      // State may retain and mutate any nested field; the effects log must not share it.
+      body: structuredClone((event.data as T.Event<unknown>).body),
     } as Effect
     apply(next, effect, activated, forwarded)
+    next.effects.push(event)
   }
   requireHistory(
     activated.size === forwarded.size &&
@@ -971,7 +1024,6 @@ export function projectReceipt(
         config.next_order_id = o.terms.id + 1n
   }
   next.height = receipt.height
-  next.effects.push(...effects)
   next.receipts.push(receipt.id)
   return next
 }

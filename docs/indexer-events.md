@@ -54,6 +54,10 @@ The projection maintains directory configuration, admissions, proposals, source
 mirrors, stored commitments, names/counters/incarnations, raw primaries, physical
 resolver slots, custody, move preparation/imports/forwards/cooldowns, vault
 reservations/liabilities, orders, refunds and a complete committed effect log.
+Payloads in that log are copied separately from mutable state, so later state
+changes preserve historical events. Committed directory admissions take effect
+in receipt order; later events from the admitted emitter in the same receipt
+are included. Reverted or unfinished admissions do not expand the scope.
 Market cancellation retains ReturnPending until the subsequent return closes it.
 Vault effects are authoritative for money; policy/marketplace assertions do not
 accrue vault funds.
