@@ -11,18 +11,22 @@ ordinal, transaction success and per-event `reverted` flag. Never pass raw JSON
 through a parser that rounds u64 fields.
 
 ```ts
-import { createProjector } from '@duskdomains/sdk/projection'
+import { createProjector, snapshotProjection } from '@duskdomains/sdk/projection'
 
 // `client` comes from createClientFromManifest; start at deployment receipts.
 const projector = createProjector({
   directoryId: client.directoryId,
+  retainEffects: false, // The indexer stores its own committed event history.
   contracts: Object.fromEntries(
     [...client.release.contracts.values()].map(c => [c.contractId, c.role]),
   ),
 })
 // A receipt is { id, height: bigint, success, events }.
 // Each event is { emitter, topic, data: decodedWireValue, ordinal, reverted? }.
-// const state = projector.apply(receipt)
+// const state = projector.apply(receipt) // Live state; same object on success.
+// After ALL receipts in a complete block:
+// projector.checkpoint()
+// const stableView = snapshotProjection(projector.state)
 ```
 
 The initial scope must be release-verified. Subsequent admissions come from
@@ -39,24 +43,88 @@ abandoned unfinished journals and their children are discarded; a reused sequenc
 after rollback cannot inherit the failed occurrence's effects. A child commits
 only when its own End and every enclosing frozen End succeeded.
 
-`projectReceipt` applies to a cloned state and returns it only after the entire
-receipt validates. Missing move rows, resolver snapshots or readiness seals
-throw. `RootImported` and `RootForwarded` must appear together, so no partially
-moved tree or duplicate endpoint is externally visible. `createProjector` adds
-idempotent receipt application and `rollbackTo(height)` checkpoints. Roll back
-the replaced block as a whole before replaying a same-height fork. Persist
-checkpoints and prune retained history at your application's finality boundary;
-the convenience projector keeps them in memory.
+`projectReceipt(state, receipt)` mutates and returns **the same state object**.
+A receipt-scoped undo journal covers nested fields, map writes/deletions, indexes
+and effect appends. Missing move rows, resolver snapshots or readiness seals
+throw; rollback preserves the previous values, references and property order,
+including height, receipt membership and the effects log. A rejected receipt is
+never marked applied and can be retried. `RootImported` and `RootForwarded` must
+appear together, so a partially moved tree is never published.
+
+Application cost depends on the receipt and the entities affected by its implicit
+effects (such as descendants renewed or removed), rather than all indexed history.
+Child/primary membership, pending proposals, open moves, import groups and market
+balances are indexed incrementally. Receipt membership uses a serializable
+`Record<string, true>`: use `Object.hasOwn(state.receipts, receipt.id)`, not
+`includes`, `length`, or array iteration. Reapplying a known receipt returns the
+same object without decoding or applying it. Failed chain transactions retain the
+existing behavior: they contribute no effects but their receipt ID and height are
+recorded. This differs from projection validation failure, which changes nothing.
+
+## Explicit checkpoints and indexer migration
+
+Retaining the result of `projectReceipt` or `projector.apply` no longer retains a
+historical view. `projector.state` is also live; read it without cloning in the
+replay loop. Consumers must not mutate projection maps or indexes themselves.
+Use `snapshotProjection(state)` for an independent full copy and
+`restoreProjection(snapshot)` to create a new live state from an independent copy
+of that checkpoint. Both are intentionally O(total state), including retained
+history; call them at chosen checkpoint boundaries, never for every receipt.
+After restore, replace the indexer's live state reference. Old references still
+refer to the abandoned fork.
+
+```ts
+import {
+  createProjectionState, projectReceipt, snapshotProjection, restoreProjection,
+} from '@duskdomains/sdk/projection'
+
+let state = createProjectionState({ directoryId, contracts, retainEffects: false })
+for (const receipt of completeBlock.receipts) projectReceipt(state, receipt)
+const checkpoint = snapshotProjection(state) // Associate with this block's hash.
+for (const receipt of nextBlock.receipts) projectReceipt(state, receipt)
+// Reorg: discard the replaced block and replay from its completed parent.
+state = restoreProjection(checkpoint)
+for (const receipt of replacementBlock.receipts) projectReceipt(state, receipt)
+```
+
+`createProjector` no longer creates automatic receipt checkpoints or clones on
+reads/returns. Call `projector.checkpoint()` after a complete block to retain that
+height in memory. `rollbackTo(height)` requires an **exact retained checkpoint**,
+restores a fresh live state and discards newer checkpoints; a missing checkpoint
+throws without changing state. Height zero is retained initially. Checkpoints at
+the same height replace each other. Roll back to the completed parent block before
+replaying a same-height fork; checkpoints taken midway through a block are unsafe.
+
+The state format is now `schemaVersion: 2`. Persist the whole snapshot, including
+`indexes`, `receipts`, `retainEffects` and import `retainedRows`, using storage that
+preserves bigint and number types. These are plain serializable objects/arrays;
+there are no process-local caches to rebuild after restore. Plain JSON round trips
+need a bigint-preserving codec; the wire JSON parser alone does not preserve these
+runtime type distinctions. Old receipt-array snapshots cannot be restored; replay
+from deployment receipts to populate the new indexes. The HTTP read resource
+payloads remain unchanged; the full internal checkpoint format is not an HTTP DTO.
+
+Persist checkpoints with block hashes and prune them at the application's finality
+boundary. For long histories, manage snapshots externally with the standalone
+helpers; the convenience projector retains explicitly requested checkpoints in
+memory until rollback or disposal.
 
 ## State semantics
 
 The projection maintains directory configuration, admissions, proposals, source
 mirrors, stored commitments, names/counters/incarnations, raw primaries, physical
 resolver slots, custody, move preparation/imports/forwards/cooldowns, vault
-reservations/liabilities, orders, refunds and a complete committed effect log.
-Payloads in that log are copied separately from mutable state, so later state
-changes preserve historical events. Committed directory admissions take effect
-in receipt order; later events from the admitted emitter in the same receipt
+reservations/liabilities, orders and refunds. `retainEffects` defaults to `true`
+for compatibility: `state.effects` is a chronological array, appended in amortized
+O(1), never copied during replay. Only the current receipt's retained bodies are
+copied separately from mutable entities; later state or input changes preserve
+historical event payloads. Retention consumes memory proportional to history.
+Set `retainEffects: false` at creation when the indexer stores its own history:
+`effects` stays empty and receipts still apply atomically and deduplicate normally.
+Persist the original execution receipt alongside your external event history;
+`committedEvents` by itself uses the supplied static scope, whereas projection also
+discovers directory admissions earlier in the same receipt. Committed admissions
+take effect in receipt order; later events from the admitted emitter in the same receipt
 are included. Reverted or unfinished admissions do not expand the scope.
 Market cancellation retains ReturnPending until the subsequent return closes it.
 Vault effects are authoritative for money; policy/marketplace assertions do not

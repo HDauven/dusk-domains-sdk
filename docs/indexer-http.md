@@ -71,8 +71,11 @@ filters and snapshot identity. Reorgs require rollback/replay before publishing
 responses; do not serve replaced transactions as current confirmations.
 
 Store the source transaction ID/block hash/success alongside projection receipts;
-`ProjectionState.receipts` alone is not an execution-receipt database. Failed
-transactions can be reported by `transaction`, but their effects never appear in
+`ProjectionState.receipts` is a `Record<string, true>` membership index, not an
+execution-receipt database. Projection application and `projector.state` now expose
+live state; publish stable HTTP views from explicit snapshots. See the
+[checkpoint and migration API notes](./indexer-events.md#explicit-checkpoints-and-indexer-migration).
+Failed transactions can be reported by `transaction`, but their effects never appear in
 `events` or the projected tables. Event data has no activity labels/descriptions.
 
 ```ts

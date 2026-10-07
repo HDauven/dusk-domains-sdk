@@ -4,6 +4,7 @@ import { committedEvents, type Receipt } from '../src/frozen/journal.ts'
 import {
   createProjectionState,
   projectReceipt,
+  snapshotProjection,
 } from '../src/frozen/projection.ts'
 import { fixtures, id, bytes } from './helpers.ts'
 import { wireValue } from '../src/frozen/wire.ts'
@@ -51,9 +52,11 @@ for (const [topic, spec] of Object.entries(indexerEventCatalog)) {
         ? { directoryId: id(2), contracts: { [id(2)]: spec.role } }
         : { directoryId: id(1), contracts: scope }
     const before = createProjectionState(options),
+      checkpoint = snapshotProjection(before),
       after = projectReceipt(before, tx)
     expect(committedEvents(tx, scope)).toEqual([])
-    expect(after).toEqual({ ...before, height: 9n, receipts: [topic] })
+    expect(after).toBe(before)
+    expect(after).toEqual({ ...checkpoint, height: 9n, receipts: { [topic]: true } })
   })
   it(`${topic}: unsuccessful or unfinished receipts cannot publish effects`, () => {
     expect(committedEvents({ ...receipt(), success: false }, scope)).toEqual([])

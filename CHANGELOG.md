@@ -2,6 +2,14 @@
 
 ## 0.3.0 (2026-10-07)
 
+- Apply projection receipts in place with atomic undo, constant-time receipt
+  membership and incremental indexes/accounting; remove history-wide replay copies.
+- Add explicit `snapshotProjection`/`restoreProjection` and projector checkpoints.
+  Projection returns/getters are live, receipt IDs are a record, and checkpoint
+  schema version 2 requires replaying old snapshots. See the indexer event guide.
+- Make effect history retention optional with `retainEffects: false` for indexers
+  that persist their own history; retained logs append without replay copies.
+
 - Require the observed commit height in `registrationCalls` and accept a separately
   reviewed reveal deadline bounded by the commitment window.
 - Project emitters admitted earlier in the same committed receipt in event order.

@@ -3,6 +3,8 @@ import {
   createProjector,
   createProjectionState,
   projectReceipt,
+  snapshotProjection,
+  restoreProjection,
   nameStateKey,
   rootStateKey,
   primaryStateKey,
@@ -18,6 +20,7 @@ import {
   type ReceiptEvent,
 } from '../src/frozen/journal.ts'
 import { recordsDigest, moveManifestDigest } from '../src/frozen/digests.ts'
+import { stringifyJson } from '../src/frozen/json.ts'
 import { hex, nameKey } from '../src/frozen/bytes.ts'
 import type * as T from '../src/frozen/types.ts'
 import type { ProjectionState } from '../src/frozen/projection.ts'
@@ -207,9 +210,13 @@ it('filters reverted effects, unfinished ancestors, reused sequences and unrelat
   const r = { id: 'nested', height: h, success: true, events },
     committed = committedEvents(r, scope)
   expect(committed).toHaveLength(1)
-  expect((committed[0].data as any).body.commitment.key.hash).toEqual(bytes(2))
+  expect((committed[0].data as any).body.commitment.key.hash).toEqual(
+    bytes(2),
+  )
   expect(
-    Object.keys(projectReceipt(createProjectionState(options), r).commitments),
+    Object.keys(
+      projectReceipt(createProjectionState(options), r).commitments,
+    ),
   ).toHaveLength(1)
   expect(committedEvents({ ...r, success: false }, scope)).toEqual([])
 })
@@ -337,7 +344,10 @@ it('raw primaries resolve only through current records and old cleanup cannot er
       [
         5,
         'resolver_slot_written',
-        { slot, snapshot: { records, count: 1, digest: root.records.digest } },
+        {
+          slot,
+          snapshot: { records, count: 1, digest: root.records.digest },
+        },
       ],
       [
         4,
@@ -669,13 +679,21 @@ it('atomically activates staged tree, reconciles renewals and suppressed primari
 })
 it('preserves surviving raw primaries and rejects missing seal/row/slot history without publishing half a move', () => {
   const m = moving()
+  const unprepared = snapshotProjection(m.s)
   const s = stageAll(m)
-  const moved = projectReceipt(s, receipt(30n, finalize(m)))
+  const moved = projectReceipt(
+    restoreProjection(s),
+    receipt(30n, finalize(m)),
+  )
   expect(moved.primaries[primaryStateKey(id(8), m.endpoint)].mapping_id).toBe(
     50n,
   )
-  for (const broken of [m.s, { ...s, imports: {} }, structuredClone(s)]) {
-    if (broken !== m.s && Object.keys(broken.imports).length)
+  for (const broken of [
+    unprepared,
+    { ...s, imports: {} },
+    restoreProjection(s),
+  ]) {
+    if (broken !== unprepared && Object.keys(broken.imports).length)
       broken.imports[`${id(8)}:${hex(m.ticket.id)}`].ready = null
     expect(() => projectReceipt(broken, receipt(30n, finalize(m)))).toThrow(
       'history',
@@ -766,9 +784,9 @@ it('first import cleanup cancels the entire inactive group and stale slots never
       ],
     ]),
   )
-  expect(s.imports[`${id(8)}:${hex(m.ticket.id)}`].status.reserved_bytes).toBe(
-    0n,
-  )
+  expect(
+    s.imports[`${id(8)}:${hex(m.ticket.id)}`].status.reserved_bytes,
+  ).toBe(0n)
   expect(
     projectedSlotLiveness(s, id(5), {
       registry: bytes(8),
@@ -776,7 +794,9 @@ it('first import cleanup cancels the entire inactive group and stale slots never
       epoch: 101n,
     }),
   ).toBe('Stale')
-  expect(() => projectReceipt(s, receipt(501n, finalize(m)))).toThrow('history')
+  expect(() => projectReceipt(s, receipt(501n, finalize(m)))).toThrow(
+    'history',
+  )
   expect(s.rootCooldowns).toEqual({})
 })
 it('vault balance and referral reservations replay from vault effects, independently of stop flags', () => {
@@ -894,7 +914,9 @@ it('market cancellation retains ReturnPending and refund claims remain independe
   expect(s.refunds[`${id(6)}:${hex(bytes(12))}`].amount_lux).toBe('0')
   s = projectReceipt(
     s,
-    receipt(12n, [[6, 'order_closed', { order: pending, reason: 'Returned' }]]),
+    receipt(12n, [
+      [6, 'order_closed', { order: pending, reason: 'Returned' }],
+    ]),
   )
   expect(s.orders[`${id(6)}:1`]).toBeUndefined()
 })
@@ -904,8 +926,9 @@ it('reorg rollback restores full transactions and replay is idempotent', () => {
     a = receipt(10n, [[4, 'root_registered', registered(root)]]),
     b = receipt(11n, [[4, 'root_renewed', renewal(root, 4000n)]])
   projector.apply(a)
+  projector.checkpoint()
   projector.apply(b)
-  expect(projector.apply(b).receipts).toHaveLength(2)
+  expect(Object.keys(projector.apply(b).receipts)).toHaveLength(2)
   expect(
     projector.rollbackTo(10n).names[nameStateKey(id(4), root.key)].expires_at,
   ).toBe(1000n)
@@ -914,6 +937,368 @@ it('reorg rollback restores full transactions and replay is idempotent', () => {
   ).toBe(4000n)
   expect(projector.rollbackTo(0n).names).toEqual({})
 })
+
+it.each([true, false])(
+  'restores byte-for-byte state after a late failure with retainEffects=%s',
+  (retainEffects) => {
+    const m = moving(true),
+      s = stageAll(m)
+    s.retainEffects = retainEffects
+    const before = stringifyJson(s),
+      names = s.names,
+      effects = s.effects,
+      oldRoot = s.names[nameStateKey(id(4), m.root.key)]
+    // Activation mutates nested status, counters, names and primary indexes;
+    // forwarding deletes source names/primaries before the final effect fails.
+    const tx = receipt(
+      30n,
+      [...finalize(m), [4, 'root_renewed', renewal(m.root, 4000n)]],
+      'retry-after-rollback',
+    )
+    expect(() => projectReceipt(s, tx)).toThrow('name incarnation')
+    expect(stringifyJson(s)).toBe(before)
+    expect(s.names).toBe(names)
+    expect(s.effects).toBe(effects)
+    expect(s.names[nameStateKey(id(4), m.root.key)]).toBe(oldRoot)
+    expect(Object.hasOwn(s.receipts, tx.id)).toBe(false)
+    expect(projectReceipt(s, receipt(30n, finalize(m), tx.id))).toBe(s)
+    expect(Object.hasOwn(s.receipts, tx.id)).toBe(true)
+  },
+)
+
+it('rolls back an incomplete atomic move after all of its effects have applied', () => {
+  const m = moving(),
+    s = stageAll(m),
+    before = stringifyJson(s),
+    tx = receipt(30n, [finalize(m)[0]])
+  expect(() => projectReceipt(s, tx)).toThrow('incomplete atomic move')
+  expect(stringifyJson(s)).toBe(before)
+  expect(Object.hasOwn(s.receipts, tx.id)).toBe(false)
+})
+
+it('restores staged rows, bitmap bytes and reservations when later progress fails', () => {
+  const m = moving(),
+    s = m.s,
+    key = `${id(8)}:${hex(m.ticket.id)}`,
+    bitmap = s.imports[key].status.staged,
+    before = stringifyJson(s),
+    tx = receipt(21n, [
+      [8, 'import_row_staged', m.staged[0]],
+      [
+        4,
+        'move_progressed',
+        { id: m.ticket.id, staged_count: 2, last_progress_at: 21n },
+      ],
+    ])
+  expect(() => projectReceipt(s, tx)).toThrow('move progress')
+  expect(stringifyJson(s)).toBe(before)
+  expect(s.imports[key].status.staged).toBe(bitmap)
+  expect(Object.hasOwn(s.receipts, tx.id)).toBe(false)
+  ;(tx.events[4].data as T.Event<T.MoveProgressed>).body.staged_count = 1
+  projectReceipt(s, tx)
+  expect(s.imports[key].retainedRows).toBe(1)
+  expect(s.imports[key].status.staged[0]).toBe(1)
+  expect(bitmap[0]).toBe(0)
+})
+
+it('snapshots and restores a same-height fork, including indexes, effects and deduplication', () => {
+  const m = moving(),
+    state = stageAll(m),
+    checkpoint = snapshotProjection(state),
+    checkpointBytes = stringifyJson(checkpoint),
+    fork = receipt(30n, finalize(m))
+  projectReceipt(state, fork)
+  expect(stringifyJson(checkpoint)).toBe(checkpointBytes)
+  const restored = restoreProjection(checkpoint)
+  expect(restored).not.toBe(checkpoint)
+  expect(Object.hasOwn(restored.receipts, fork.id)).toBe(false)
+  const renewalTx = receipt(30n, [
+    [4, 'root_renewed', renewal(m.root, 4000n)],
+  ])
+  projectReceipt(restored, renewalTx)
+  expect(restored.names[nameStateKey(id(4), m.c.key)].expires_at).toBe(4000n)
+  expect(restored.names[nameStateKey(id(8), m.c.key)]).toBeUndefined()
+  expect(stringifyJson(checkpoint)).toBe(checkpointBytes)
+  const replay = restoreProjection(checkpoint)
+  projectReceipt(replay, fork)
+  expect(stringifyJson(replay)).toBe(stringifyJson(state))
+  expect(projectReceipt(replay, fork)).toBe(replay)
+  expect(() =>
+    restoreProjection({ ...checkpoint, schemaVersion: 1 } as never),
+  ).toThrow('snapshot')
+})
+
+it('requires explicit checkpoints and leaves live state unchanged when rollback is unavailable', () => {
+  const projector = createProjector(options),
+    root = makeName(),
+    tx = receipt(10n, [[4, 'root_registered', registered(root)]])
+  expect(projector.apply(tx)).toBe(projector.state)
+  const before = stringifyJson(projector.state)
+  expect(() => projector.rollbackTo(10n)).toThrow('checkpoint')
+  expect(stringifyJson(projector.state)).toBe(before)
+  projector.checkpoint()
+  projectReceipt(
+    projector.state,
+    receipt(11n, [[4, 'root_renewed', renewal(root, 4000n)]]),
+  )
+  projector.checkpoint()
+  projector.rollbackTo(10n)
+  expect(() => projector.rollbackTo(11n)).toThrow('checkpoint')
+  expect(
+    projector.state.names[nameStateKey(id(4), root.key)].expires_at,
+  ).toBe(1000n)
+})
+
+it('can omit the effect log while retaining isolated state and serializable receipt membership', () => {
+  const state = createProjectionState({ ...options, retainEffects: false }),
+    body = commitment(),
+    tx = receipt(1n, [[4, 'commitment_created', body]], '__proto__')
+  projectReceipt(state, tx)
+  expect(state.effects).toEqual([])
+  expect(JSON.parse(JSON.stringify(state.receipts))).toEqual({
+    ['__proto__']: true,
+  })
+  expect(projectReceipt(state, tx)).toBe(state)
+  body.commitment.key.actor[0] ^= 1
+  expect(Object.values(state.commitments)[0].key.actor).toEqual(bytes(10))
+  const next = restoreProjection(snapshotProjection(state))
+  expect(projectReceipt(next, tx)).toBe(next)
+  expect(next.effects).toEqual([])
+  for (const identifier of ['constructor', 'toString'])
+    projectReceipt(
+      next,
+      receipt(2n, [[4, 'commitment_created', commitment()]], identifier),
+    )
+  expect(Object.keys(next.receipts)).toHaveLength(3)
+})
+
+it('maintains market totals incrementally across replacements, closes, refunds and reconfiguration', () => {
+  const rows = fixtures('market-v1'),
+    configured = (
+      rows['event:market_configured'].json as T.Event<T.MarketConfigured>
+    ).body,
+    config = { ...configured.config, next_order_id: 1n },
+    original = rows['input:cancel_order'].json as T.Order,
+    offer: T.Order = {
+      ...original,
+      status: 'Open',
+      terms: { ...original.terms, id: 3n, kind: 'Offer', amount_lux: '100' },
+    },
+    auction: T.Order = {
+      ...offer,
+      terms: { ...offer.terms, id: 8n, kind: 'Auction' },
+      highest: {
+        payer: { kind: 'Contract', bytes: bytes(10) },
+        manager: bytes(10),
+        amount_lux: '40',
+      },
+    },
+    s = createProjectionState({
+      ...options,
+      contracts: { ...scope, [id(7)]: 'marketplace' },
+    })
+  const batches: [number, string, unknown][][] = [
+    [[6, 'order_changed', { order: offer }]], // Before configuration.
+    [
+      [6, 'market_configured', { ...configured, config }],
+      [7, 'market_configured', { ...configured, config }],
+    ],
+    [
+      [7, 'order_changed', { order: auction }],
+      [
+        6,
+        'refund_changed',
+        { refund: { authority: bytes(12), amount_lux: '50' } },
+      ],
+    ],
+    [
+      [
+        6,
+        'order_changed',
+        { order: { ...offer, terms: { ...offer.terms, amount_lux: '90' } } },
+      ],
+      [
+        7,
+        'refund_changed',
+        { refund: { authority: bytes(13), amount_lux: '25' } },
+      ],
+    ],
+    [
+      [
+        6,
+        'order_closed',
+        { order: { ...offer, status: 'ReturnPending' }, reason: 'Cancelled' },
+      ],
+      [
+        6,
+        'refund_changed',
+        { refund: { authority: bytes(12), amount_lux: '0' } },
+      ],
+    ],
+    [
+      [
+        6,
+        'order_closed',
+        { order: { ...offer, status: 'ReturnPending' }, reason: 'Returned' },
+      ],
+    ],
+    [
+      [6, 'market_configured', { ...configured, config }],
+      [7, 'market_configured', { ...configured, config }],
+    ],
+  ]
+  for (const [i, batch] of batches.entries()) {
+    projectReceipt(s, receipt(BigInt(i + 1), batch))
+    // Independent full recount is the oracle, never part of production replay.
+    for (const [market, actual] of Object.entries(s.marketConfigs)) {
+      const orders = Object.entries(s.orders)
+          .filter(([k]) => k.startsWith(`${market}:`))
+          .map(([, v]) => v),
+        refunds = Object.entries(s.refunds)
+          .filter(([k]) => k.startsWith(`${market}:`))
+          .map(([, v]) => v),
+        closed = Object.entries(s.closedOrders)
+          .filter(([k]) => k.startsWith(`${market}:`))
+          .map(([, v]) => v.order),
+        refundable = refunds.reduce(
+          (sum, r) => sum + BigInt(r.amount_lux),
+          0n,
+        ),
+        escrow = orders
+          .filter((o) => o.status === 'Open')
+          .reduce(
+            (sum, o) =>
+              sum +
+              BigInt(
+                o.terms.kind === 'Offer'
+                  ? o.terms.amount_lux
+                  : (o.highest?.amount_lux ?? '0'),
+              ),
+            0n,
+          )
+      expect(actual.unsettled_orders).toBe(BigInt(orders.length))
+      expect(actual.refund_accounts).toBe(BigInt(refunds.length))
+      expect(actual.refundable_lux).toBe(String(refundable))
+      expect(actual.held_lux).toBe(String(refundable + escrow))
+      expect(actual.next_order_id).toBe(
+        [...orders, ...closed].reduce(
+          (max, o) => (o.terms.id >= max ? o.terms.id + 1n : max),
+          1n,
+        ),
+      )
+    }
+  }
+  const before = stringifyJson(s)
+  expect(() =>
+    projectReceipt(
+      s,
+      receipt(10n, [
+        [6, 'order_changed', { order: auction }],
+        [
+          6,
+          'refund_changed',
+          { refund: { authority: bytes(12), amount_lux: '999' } },
+        ],
+        [4, 'root_renewed', renewal(makeName(), 4000n)],
+      ]),
+    ),
+  ).toThrow('name incarnation')
+  expect(stringifyJson(s)).toBe(before)
+})
+
+it('scales roughly linearly from 10000 to 20000 receipts over 1000 names', () => {
+  const names = Array.from({ length: 1000 }, (_, i) =>
+      makeName(`name${i}.dusk`),
+    ),
+    registration = registered(names[0]),
+    rows = fixtures('market-v1'),
+    configured = (
+      rows['event:market_configured'].json as T.Event<T.MarketConfigured>
+    ).body,
+    order = rows['input:cancel_order'].json as T.Order,
+    seed: [number, string, unknown][] = [
+      [6, 'market_configured', configured],
+    ],
+    transactions: Receipt[] = []
+  for (const [i, n] of names.entries())
+    seed.push(
+      [4, 'root_registered', { ...registration, name: n }],
+      [
+        6,
+        'order_changed',
+        { order: { ...order, terms: { ...order.terms, id: BigInt(i + 1) } } },
+      ],
+      [
+        6,
+        'refund_changed',
+        { refund: { authority: n.key.node, amount_lux: '1' } },
+      ],
+    )
+  const initial = projectReceipt(
+    createProjectionState(options),
+    receipt(1n, seed),
+  )
+  for (let i = 0; i < 20000; i++) {
+    const n = names[i % names.length],
+      effect: [number, string, unknown] =
+        i % 3 === 0
+          ? [
+              4,
+              'slot_changed',
+              {
+                name: ref(n),
+                previous: null,
+                current: null,
+                reason: 'Mutation',
+              },
+            ]
+          : i % 3 === 1
+            ? [
+                6,
+                'order_changed',
+                {
+                  order: {
+                    ...order,
+                    terms: {
+                      ...order.terms,
+                      id: BigInt((i % 1000) + 1),
+                      amount_lux: String(i + 1),
+                    },
+                  },
+                },
+              ]
+            : [
+                6,
+                'refund_changed',
+                {
+                  refund: {
+                    authority: n.key.node,
+                    amount_lux: String(i + 1),
+                  },
+                },
+              ]
+    transactions.push(receipt(BigInt(i + 2), [effect]))
+  }
+  function run(count: number): number {
+    // Snapshot and fixture construction are deliberately outside the measured loop.
+    const s = restoreProjection(initial),
+      start = performance.now()
+    for (let i = 0; i < count; i++) projectReceipt(s, transactions[i])
+    const elapsed = performance.now() - start
+    expect(Object.keys(s.names)).toHaveLength(1000)
+    expect(Object.keys(s.receipts)).toHaveLength(count + 1)
+    expect(s.effects).toHaveLength(seed.length + count)
+    return elapsed
+  }
+  run(1000) // Warm decoding, journaling and mutation paths before either measurement.
+  const small = run(10000),
+    large = run(20000),
+    ratio = large / small
+  console.info(
+    `Projection scaling: 10000=${small.toFixed(0)}ms, 20000=${large.toFixed(0)}ms, ratio=${ratio.toFixed(2)}`,
+  )
+  expect(ratio).toBeLessThan(3.3)
+}, 20000)
 it('replays all directory configuration, proposals and effective admissions', () => {
   let s = createProjectionState(options)
   const initialized = sample('DirectoryInitialized')
@@ -992,7 +1377,9 @@ it('replays all directory configuration, proposals and effective admissions', ()
         'action_applied',
         {
           id: proposal.id,
-          action: { AddStore: { expected_allocation_version: 1n, admission } },
+          action: {
+            AddStore: { expected_allocation_version: 1n, admission },
+          },
           config,
           admission,
           market: null,
@@ -1104,7 +1491,11 @@ it('replays logical slot changes, custody end, watermarks, commitment removal an
         'custody_started',
         { name: ref(root), custody, callback_data_hash: bytes(1) },
       ],
-      [4, 'custody_ended', { name: ref(root), nonce: 1n, reason: 'Returned' }],
+      [
+        4,
+        'custody_ended',
+        { name: ref(root), nonce: 1n, reason: 'Returned' },
+      ],
       [
         4,
         'store_watermarks_changed',
@@ -1188,7 +1579,12 @@ it('replays a maximum 257-row tree with independent primary endpoints', () => {
           [
             4,
             'primary_changed',
-            { endpoint: p.endpoint, previous: null, current: p, reason: 'Set' },
+            {
+              endpoint: p.endpoint,
+              previous: null,
+              current: p,
+              reason: 'Set',
+            },
           ] as [number, string, unknown],
       ),
     ]),
@@ -1278,7 +1674,9 @@ it('replays a maximum 257-row tree with independent primary endpoints', () => {
       ],
     ]),
   )
-  expect(s.imports[`${id(8)}:${hex(ticket.id)}`].status.reserved_bytes).toBe(0n)
+  expect(s.imports[`${id(8)}:${hex(ticket.id)}`].status.reserved_bytes).toBe(
+    0n,
+  )
   const live: T.MoveLiveState = {
     revision: 5n,
     rows: nodes.map((n, i) => ({
@@ -1291,7 +1689,11 @@ it('replays a maximum 257-row tree with independent primary endpoints', () => {
   s = projectReceipt(
     s,
     receipt(279n, [
-      [8, 'root_imported', { ticket, counters: { ...cs, revision: 6n }, live }],
+      [
+        8,
+        'root_imported',
+        { ticket, counters: { ...cs, revision: 6n }, live },
+      ],
       [
         4,
         'root_forwarded',
@@ -1391,6 +1793,7 @@ it('projects a store admitted earlier in a receipt exactly once and replays afte
     [1, 'directory_initialized', initializedDirectory()],
   ])
   projector.apply(init)
+  projector.checkpoint()
   const tx = receipt(2n, [
     [9, 'commitment_created', commitment(1)], // Before admission: ignored.
     [1, 'action_applied', addStore()],
@@ -1424,11 +1827,7 @@ it('includes store, resolver, policy and marketplace emitters admitted by initia
     [1, 'directory_initialized', initial],
     [4, 'store_initialized', { args: { binding } }],
     [5, 'resolver_initialized', { args: { binding } }],
-    [
-      3,
-      'policy_initialized',
-      { args: { ...sample('InitPolicy'), binding } },
-    ],
+    [3, 'policy_initialized', { args: { ...sample('InitPolicy'), binding } }],
     [6, 'market_configured', marketConfigured.body],
   ])
   const result = projectReceipt(
@@ -1510,11 +1909,12 @@ it('keeps newly admitted nested effects atomic with their enclosing journal fram
   tx.events.forEach((e, i) => {
     e.ordinal = i
   })
-  expect(Object.keys(projectReceipt(before, tx).commitments)).toHaveLength(
-    1,
-  )
+  const checkpoint = snapshotProjection(before)
+  expect(Object.keys(projectReceipt(before, tx).commitments)).toHaveLength(1)
   tx.events.pop()
-  expect(projectReceipt(before, tx).effects).toEqual(before.effects)
+  expect(projectReceipt(restoreProjection(checkpoint), tx).effects).toEqual(
+    checkpoint.effects,
+  )
 })
 
 it('retains original directory and proposal history after later mutations', () => {
@@ -1551,7 +1951,7 @@ it('retains original directory and proposal history after later mutations', () =
       .status,
   ).toBe('Cancelled')
   expect(after.effects.slice(0, historical.length)).toEqual(historical)
-  expect(before.effects).toEqual(historical)
+  expect(before).toBe(after)
   expect(after.effects[0].data).toEqual(tx.events[1].data)
   // Mutation of returned state and original input must not rewrite retained evidence.
   after.directory!.operator.recipient[0] ^= 1
@@ -1636,7 +2036,7 @@ it('retains ImportPrepared payloads through staging, readiness and same-receipt 
     true,
   )
   expect(after.effects.slice(0, historical.length)).toEqual(historical)
-  expect(m.s.effects).toEqual(historical)
+  expect(m.s).toBe(after)
   const plain = moving(),
     tx = receipt(30n, [
       [8, 'import_prepared', { status: plain.status }],
@@ -1644,8 +2044,7 @@ it('retains ImportPrepared payloads through staging, readiness and same-receipt 
     ])
   const together = projectReceipt(createProjectionState(options), tx)
   expect(
-    together.imports[`${id(8)}:${hex(plain.ticket.id)}`].status
-      .staged_count,
+    together.imports[`${id(8)}:${hex(plain.ticket.id)}`].status.staged_count,
   ).toBe(1)
   expect(
     (together.effects[0].data as T.Event<T.ImportPrepared>).body.status,

@@ -106,3 +106,17 @@ All of these are also exported from the root entrypoint:
 Balance, transaction and confirmation helpers are also in `./writes`. Activity
 labels/descriptions, user-facing error mapping and record-edit drafts are not
 SDK exports. Validation returns codes and protocol state; the app owns wording.
+
+### Projection checkpoint API
+
+The `@duskdomains/sdk/projection` entrypoint exports `snapshotProjection(state)`
+and `restoreProjection(snapshot)`. `projectReceipt` and `createProjector().apply`
+mutate and return live state; the projector's `state` getter also returns that live
+object. `checkpoint()` explicitly retains a completed block height, and
+`rollbackTo(height)` requires an exact checkpoint (zero is retained initially).
+`ProjectionState.receipts` is now a serializable `Record<string, true>`, and
+`ProjectionOptions.retainEffects` controls history retention (default `true`).
+Checkpoint schema version 2 includes incremental indexes and import row counts;
+old snapshots must be rebuilt from receipts. See the
+[indexer migration notes](./indexer-events.md#explicit-checkpoints-and-indexer-migration)
+for persistence and reorg ordering.

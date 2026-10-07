@@ -1,5 +1,6 @@
 /** Transaction-atomic event projection for the frozen layer. @module */
 import type * as T from './types.ts'
+import { ProjectionJournal, copyEntity } from './projection-journal.ts'
 import { contractId, equalBytes, hex, fromHex } from './bytes.ts'
 import { stringifyJson, u64 } from './json.ts'
 import { assertRecordsDigest, moveManifestDigest } from './digests.ts'
@@ -32,11 +33,32 @@ export interface ProjectedMove {
 export interface ProjectedImport {
   status: T.ImportStatus
   rows: Record<number, T.ImportRowStaged>
+  retainedRows: number
   ready: T.ImportReady | null
   activated: boolean
   cancelled: boolean
 }
+type MembershipIndex = Record<string, Record<string, true>>
+interface MarketTotals {
+  unsettledOrders: bigint
+  refundAccounts: bigint
+  refundableLux: bigint
+  escrowLux: bigint
+  nextOrderId: bigint
+}
 export interface ProjectionState {
+  schemaVersion: 2
+  /** Disable effect retention when the indexer persists its own event history. */
+  retainEffects: boolean
+  /** Serializable incremental indexes; keep these with every checkpoint. */
+  indexes: {
+    children: MembershipIndex
+    primaries: MembershipIndex
+    pendingProposals: MembershipIndex
+    openMoves: MembershipIndex
+    imports: MembershipIndex
+    marketTotals: Record<string, MarketTotals>
+  }
   height: bigint
   directoryId: string
   scope: Record<string, ContractRole>
@@ -72,11 +94,13 @@ export interface ProjectionState {
   closedOrders: Record<string, T.OrderClosed>
   refunds: Record<string, T.Refund>
   effects: CommittedEvent[]
-  receipts: string[]
+  receipts: Record<string, true>
 }
 export interface ProjectionOptions {
   directoryId: string
   contracts: Record<string, ContractRole>
+  /** Defaults to true; false keeps effects empty for external history storage. */
+  retainEffects?: boolean
 }
 export function nameStateKey(store: string, key: T.NameKey): string {
   return `${contractId(store)}:${hex(key.root)}:${hex(key.node)}`
@@ -130,6 +154,16 @@ export function createProjectionState(
   )
     throw new Error('Projection needs one release-verified directory')
   return {
+    schemaVersion: 2,
+    retainEffects: options.retainEffects ?? true,
+    indexes: {
+      children: {},
+      primaries: {},
+      pendingProposals: {},
+      openMoves: {},
+      imports: {},
+      marketTotals: {},
+    },
     height: 0n,
     directoryId,
     scope,
@@ -165,7 +199,7 @@ export function createProjectionState(
     closedOrders: {},
     refunds: {},
     effects: [],
-    receipts: [],
+    receipts: {},
   }
 }
 function name(s: ProjectionState, store: string, ref: T.NameRef): T.Name {
@@ -173,11 +207,49 @@ function name(s: ProjectionState, store: string, ref: T.NameRef): T.Name {
   requireHistory(n && sameRef(refOf(n), ref), 'name incarnation')
   return n
 }
+function addIndex(index: MembershipIndex, group: string, key: string): void {
+  index[group] ??= {}
+  index[group][key] = true
+}
+function removeIndex(
+  index: MembershipIndex,
+  group: string,
+  key: string,
+): void {
+  if (index[group]) delete index[group][key]
+}
+function refStateKey(store: string, ref: T.NameRef): string {
+  return `${nameStateKey(store, ref.key)}:${ref.incarnation.generation}:${ref.incarnation.serial}`
+}
+function parentKey(store: string, n: T.Name): string | null {
+  return n.subname
+    ? nameStateKey(store, { root: n.key.root, node: n.subname.parent })
+    : null
+}
 function putName(s: ProjectionState, store: string, n: T.Name): void {
-  const key = nameStateKey(store, n.key)
-  s.names[key] = structuredClone(n)
-  s.history[`${key}:${n.incarnation.generation}:${n.incarnation.serial}`] =
-    structuredClone(n)
+  const key = nameStateKey(store, n.key),
+    prior = s.names[key],
+    parent = parentKey(store, n),
+    oldParent = prior ? parentKey(store, prior) : null
+  if (oldParent && oldParent !== parent)
+    removeIndex(s.indexes.children, oldParent, key)
+  if (parent) addIndex(s.indexes.children, parent, key)
+  s.names[key] = copyEntity(n)
+  s.history[refStateKey(store, refOf(n))] = copyEntity(n)
+}
+function removeName(s: ProjectionState, store: string, n: T.Name): void {
+  const key = nameStateKey(store, n.key),
+    parent = parentKey(store, n)
+  if (parent) removeIndex(s.indexes.children, parent, key)
+  delete s.names[key]
+}
+function putPrimary(s: ProjectionState, store: string, p: T.Primary): void {
+  const key = primaryStateKey(store, p.endpoint),
+    previous = s.primaries[key]
+  if (previous)
+    removeIndex(s.indexes.primaries, refStateKey(store, previous.name), key)
+  s.primaries[key] = p
+  addIndex(s.indexes.primaries, refStateKey(store, p.name), key)
 }
 function clearPrimary(
   s: ProjectionState,
@@ -190,28 +262,25 @@ function clearPrimary(
     current &&
     current.mapping_id === previous.mapping_id &&
     sameRef(current.name, previous.name)
-  )
+  ) {
+    removeIndex(s.indexes.primaries, refStateKey(store, current.name), key)
     delete s.primaries[key]
+  }
 }
 function clearNamePrimaries(
   s: ProjectionState,
   store: string,
   n: T.Name,
 ): void {
-  for (const p of Object.values(s.primaries))
-    if (sameRef(p.name, refOf(n))) clearPrimary(s, store, p)
+  for (const key of Object.keys(
+    s.indexes.primaries[refStateKey(store, refOf(n))] ?? {},
+  ))
+    clearPrimary(s, store, s.primaries[key])
 }
 function children(s: ProjectionState, store: string, n: T.Name): T.Name[] {
-  return Object.entries(s.names)
-    .filter(
-      ([k, v]) =>
-        k.startsWith(`${store}:`) &&
-        equalBytes(v.key.root, n.key.root) &&
-        v.subname &&
-        equalBytes(v.subname.parent, n.key.node),
-    )
-    .map(([, v]) => v)
-    .sort((a, b) => hex(a.key.node).localeCompare(hex(b.key.node)))
+  return Object.keys(s.indexes.children[nameStateKey(store, n.key)] ?? {})
+    .sort()
+    .map((key) => s.names[key])
 }
 function tree(s: ProjectionState, store: string, n: T.Name): T.Name[] {
   const rows: T.Name[] = [],
@@ -339,6 +408,54 @@ function assertImportPair(
   }
 }
 
+function marketTotals(s: ProjectionState, store: string): MarketTotals {
+  return (s.indexes.marketTotals[store] ??= {
+    unsettledOrders: 0n,
+    refundAccounts: 0n,
+    refundableLux: 0n,
+    escrowLux: 0n,
+    nextOrderId: 0n,
+  })
+}
+function orderEscrow(order: T.Order | undefined): bigint {
+  return order?.status === 'Open'
+    ? BigInt(
+        order.terms.kind === 'Offer'
+          ? order.terms.amount_lux
+          : (order.highest?.amount_lux ?? '0'),
+      )
+    : 0n
+}
+function syncMarket(s: ProjectionState, store: string): void {
+  const config = s.marketConfigs[store]
+  if (!config) return
+  const totals = marketTotals(s, store)
+  config.unsettled_orders = totals.unsettledOrders
+  config.refund_accounts = totals.refundAccounts
+  config.refundable_lux = totals.refundableLux.toString()
+  config.held_lux = (totals.refundableLux + totals.escrowLux).toString()
+  if (totals.nextOrderId > config.next_order_id)
+    config.next_order_id = totals.nextOrderId
+}
+function putOrder(
+  s: ProjectionState,
+  store: string,
+  order: T.Order,
+  retain: boolean,
+): void {
+  const key = `${store}:${order.terms.id}`,
+    previous = s.orders[key],
+    totals = marketTotals(s, store)
+  totals.unsettledOrders += (retain ? 1n : 0n) - (previous ? 1n : 0n)
+  totals.escrowLux +=
+    (retain ? orderEscrow(order) : 0n) - orderEscrow(previous)
+  if (order.terms.id >= totals.nextOrderId)
+    totals.nextOrderId = order.terms.id + 1n
+  if (retain) s.orders[key] = order
+  else delete s.orders[key]
+  syncMarket(s, store)
+}
+
 function apply(
   s: ProjectionState,
   e: Effect,
@@ -379,12 +496,27 @@ function apply(
           s.sources[contractId(source.id)] = source
       break
     }
-    case 'proposal_created':
-      s.proposals[proposalKey(e.body.proposal.id)] = e.body.proposal
+    case 'proposal_created': {
+      const p = e.body.proposal,
+        key = proposalKey(p.id)
+      removeIndex(
+        s.indexes.pendingProposals,
+        String(p.id.operator_epoch),
+        key,
+      )
+      s.proposals[key] = p
+      if (p.status === 'Pending')
+        addIndex(s.indexes.pendingProposals, String(p.id.operator_epoch), key)
       break
+    }
     case 'proposal_cancelled': {
       const p = s.proposals[proposalKey(e.body.id)]
       requireHistory(p, 'proposal cancellation')
+      removeIndex(
+        s.indexes.pendingProposals,
+        String(p.id.operator_epoch),
+        proposalKey(p.id),
+      )
       p.status = 'Cancelled'
       break
     }
@@ -394,20 +526,26 @@ function apply(
         p && equalBytes(p.action_hash, e.body.action_hash),
         'proposal execution',
       )
+      removeIndex(
+        s.indexes.pendingProposals,
+        String(p.id.operator_epoch),
+        proposalKey(p.id),
+      )
       p.status = 'Executed'
       break
     }
     case 'proposal_pruned':
+      removeIndex(
+        s.indexes.pendingProposals,
+        String(e.body.id.operator_epoch),
+        proposalKey(e.body.id),
+      )
       delete s.proposals[proposalKey(e.body.id)]
       break
     case 'action_applied': {
       s.directory = e.body.config
       if (e.body.admission)
-        admit(
-          s,
-          actionAdmissionRole(e.body.action),
-          e.body.admission,
-        )
+        admit(s, actionAdmissionRole(e.body.action), e.body.admission)
       if (e.body.market) {
         const m = e.body.market
         s.markets[contractId(m.id)] = m
@@ -436,14 +574,13 @@ function apply(
       setDirectoryRevision(d, d.revision + 1n)
       break
     }
-    case 'proposals_invalidated':
-      for (const p of Object.values(s.proposals))
-        if (
-          p.id.operator_epoch === e.body.previous_operator_epoch &&
-          p.status === 'Pending'
-        )
-          p.status = 'Invalidated'
+    case 'proposals_invalidated': {
+      const epoch = String(e.body.previous_operator_epoch)
+      for (const key of Object.keys(s.indexes.pendingProposals[epoch] ?? {}))
+        s.proposals[key].status = 'Invalidated'
+      delete s.indexes.pendingProposals[epoch]
       break
+    }
     case 'registration_pause_changed': {
       const d = directory(s)
       d.registration.operator_paused = e.body.paused
@@ -486,17 +623,17 @@ function apply(
           n.grace_end === b.old_grace_end,
         'renewal baseline',
       )
-      for (const m of Object.values(s.moves))
-        if (
-          contractId(m.ticket.source) === store &&
-          sameRef(m.ticket.root, b.root) &&
-          !m.cancelled &&
-          !m.forwarded
-        ) {
-          const end = moveLockEndsAt(m)
-          if (e.height < end) m.lifecycleDeadline = b.expires_at
-          else m.terminalDeadline = end
+      for (const key of Object.keys(
+        s.indexes.openMoves[refStateKey(store, b.root)] ?? {},
+      )) {
+        const m = s.moves[key],
+          end = moveLockEndsAt(m)
+        if (e.height < end) m.lifecycleDeadline = b.expires_at
+        else {
+          m.terminalDeadline = end
+          removeIndex(s.indexes.openMoves, refStateKey(store, b.root), key)
         }
+      }
       function renew(row: T.Name): void {
         row.expires_at = b.expires_at
         row.grace_end = b.grace_end
@@ -514,7 +651,7 @@ function apply(
       requireHistory(rows.length === b.removed_count, 'subtree removed count')
       for (const row of rows) {
         clearNamePrimaries(s, store, row)
-        delete s.names[nameStateKey(store, row.key)]
+        removeName(s, store, row)
       }
       break
     }
@@ -545,7 +682,7 @@ function apply(
       if (b.previous) clearPrimary(s, store, b.previous)
       if (b.current) {
         name(s, store, b.current.name)
-        s.primaries[primaryStateKey(store, b.endpoint)] = b.current
+        putPrimary(s, store, b.current)
       }
       break
     }
@@ -630,6 +767,11 @@ function apply(
         cancelled: null,
         forwarded: null,
       }
+      addIndex(
+        s.indexes.openMoves,
+        refStateKey(store, b.ticket.root),
+        moveKey(store, b.ticket.id),
+      )
       const rootKey = rootStateKey(store, b.ticket.root.key.root),
         actorKey = `${store}:${hex(b.ticket.initiator)}`
       if (
@@ -666,10 +808,16 @@ function apply(
       s.imports[moveKey(store, status.ticket.id)] = {
         status,
         rows: {},
+        retainedRows: 0,
         ready: null,
         activated: false,
         cancelled: false,
       }
+      addIndex(
+        s.indexes.imports,
+        rootStateKey(store, status.ticket.root.key.root),
+        moveKey(store, status.ticket.id),
+      )
       break
     }
     case 'import_row_staged': {
@@ -677,15 +825,18 @@ function apply(
         g = s.imports[moveKey(store, b.id)]
       requireHistory(g && !g.cancelled && !g.activated, 'import group')
       requireHistory(
-        b.index === Object.keys(g.rows).length && b.index === b.original.index,
+        b.index === g.retainedRows && b.index === b.original.index,
         'import row index',
       )
       assertImportPair(s, store, b)
       g.rows[b.index] = b
+      g.retainedRows++
       g.status.staged_count++
       g.status.staged_primaries += b.imported_primary ? 1 : 0
       g.status.last_progress_at = e.height
-      g.status.staged[b.index >> 3] |= 1 << b.index % 8
+      g.status.staged = g.status.staged.map((value, index) =>
+        index === b.index >> 3 ? value | (1 << (b.index % 8)) : value,
+      )
       requireHistory(g.status.reserved_bytes >= 2048n, 'import reservation')
       g.status.reserved_bytes -= 2048n
       if (
@@ -739,7 +890,8 @@ function apply(
           b.counters.revision === b.live.revision + 1n,
         'activation live vector/revision',
       )
-      const counters = s.counters[rootStateKey(source, b.ticket.root.key.root)]
+      const counters =
+        s.counters[rootStateKey(source, b.ticket.root.key.root)]
       const preparation = s.moves[moveKey(source, b.ticket.id)]
       requireHistory(
         counters &&
@@ -758,7 +910,7 @@ function apply(
       )
       for (const [i, row] of rows.entries()) {
         const live = b.live.rows[i],
-          n = structuredClone(row.imported),
+          n = copyEntity(row.imported),
           src = name(s, source, refOf(row.original.name))
         requireHistory(
           src.expires_at === live.expires_at &&
@@ -796,7 +948,7 @@ function apply(
           )
           const existing = s.primaries[primaryStateKey(store, imp.endpoint)]
           requireHistory(!existing, 'destination primary conflict')
-          s.primaries[primaryStateKey(store, imp.endpoint)] = imp
+          putPrimary(s, store, imp)
         }
       }
       s.counters[rootStateKey(store, b.ticket.root.key.root)] = b.counters
@@ -821,9 +973,14 @@ function apply(
       const root = name(s, store, b.ticket.root)
       for (const row of tree(s, store, root)) {
         clearNamePrimaries(s, store, row)
-        delete s.names[nameStateKey(store, row.key)]
+        removeName(s, store, row)
       }
       s.forwards[rootStateKey(store, b.forward.root)] = b.forward
+      removeIndex(
+        s.indexes.openMoves,
+        refStateKey(store, m.ticket.root),
+        moveKey(store, m.ticket.id),
+      )
       m.forwarded = b.forward
       forwarded.add(id)
       break
@@ -833,9 +990,15 @@ function apply(
         m = s.moves[moveKey(store, b.ticket.id)]
       requireHistory(m && equal(m.ticket, b.ticket), 'move cancellation')
       requireHistory(
-        b.cooldown_applied === (b.reason === 'Owner' || b.reason === 'Idle') &&
+        b.cooldown_applied ===
+          (b.reason === 'Owner' || b.reason === 'Idle') &&
           b.cancelled_at === e.height,
         'move cooldown reason/height',
+      )
+      removeIndex(
+        s.indexes.openMoves,
+        refStateKey(store, m.ticket.root),
+        moveKey(store, m.ticket.id),
       )
       m.cancelled = b
       m.terminalDeadline = moveLockEndsAt(m)
@@ -858,12 +1021,19 @@ function apply(
       g.cancelled = true
       g.status.cancelled = true
       g.status.reserved_bytes = 0n
-      for (const i of b.indices) delete g.rows[i]
-      requireHistory(
-        Object.keys(g.rows).length === b.remaining,
-        'import prune remainder',
-      )
-      if (b.remaining === 0) delete s.imports[key]
+      for (const i of b.indices) {
+        if (g.rows[i]) g.retainedRows--
+        delete g.rows[i]
+      }
+      requireHistory(g.retainedRows === b.remaining, 'import prune remainder')
+      if (b.remaining === 0) {
+        removeIndex(
+          s.indexes.imports,
+          rootStateKey(store, g.status.ticket.root.key.root),
+          key,
+        )
+        delete s.imports[key]
+      }
       break
     }
     case 'forwarded_rows_pruned': {
@@ -871,36 +1041,47 @@ function apply(
         s.forwards[rootStateKey(store, e.body.root)],
         'permanent forward cleanup',
       )
-      if (e.body.remaining === 0)
-        for (const [key, g] of Object.entries(s.imports))
-          if (
-            g.activated &&
-            contractId(g.status.ticket.destination) === store &&
-            equalBytes(g.status.ticket.root.key.root, e.body.root)
-          )
+      if (e.body.remaining === 0) {
+        const group = rootStateKey(store, e.body.root)
+        for (const key of Object.keys(s.indexes.imports[group] ?? {})) {
+          if (s.imports[key].activated) {
+            removeIndex(s.indexes.imports, group, key)
             delete s.imports[key]
+          }
+        }
+      }
       break
     }
     case 'market_configured':
       s.marketConfigs[store] = e.body.config
+      syncMarket(s, store)
       break
     case 'order_changed':
-      s.orders[`${store}:${e.body.order.terms.id}`] = e.body.order
+      putOrder(s, store, e.body.order, true)
       break
     case 'order_closed': {
-      const key = `${store}:${e.body.order.terms.id}`
-      s.closedOrders[key] = e.body
-      if (
-        e.body.order.status === 'ReturnPending' &&
-        (e.body.reason === 'Cancelled' || e.body.reason === 'Expired')
+      const b = e.body
+      s.closedOrders[`${store}:${b.order.terms.id}`] = b
+      putOrder(
+        s,
+        store,
+        b.order,
+        b.order.status === 'ReturnPending' &&
+          (b.reason === 'Cancelled' || b.reason === 'Expired'),
       )
-        s.orders[key] = e.body.order
-      else delete s.orders[key]
       break
     }
-    case 'refund_changed':
-      s.refunds[`${store}:${hex(e.body.refund.authority)}`] = e.body.refund
+    case 'refund_changed': {
+      const key = `${store}:${hex(e.body.refund.authority)}`,
+        previous = s.refunds[key],
+        totals = marketTotals(s, store)
+      totals.refundAccounts += previous ? 0n : 1n
+      totals.refundableLux +=
+        BigInt(e.body.refund.amount_lux) - BigInt(previous?.amount_lux ?? '0')
+      s.refunds[key] = e.body.refund
+      syncMarket(s, store)
       break
+    }
     case 'refund_claimed':
     case 'trade_settled':
     case 'escrow_renewed':
@@ -917,7 +1098,7 @@ function receiptEffects(
   receipt: Receipt,
 ): CommittedEvent[] {
   const effects = committedEvents(receipt, previous.scope),
-    scope = { ...previous.scope },
+    scope: Record<string, ContractRole> = Object.create(previous.scope),
     admittedAt = new Map<string, number>()
   function add(id: T.Contract, role: ContractRole, ordinal: number): void {
     const emitter = contractId(id)
@@ -937,7 +1118,11 @@ function receiptEffects(
     } else if (event.topic === 'action_applied') {
       const body = (event.data as T.Event<T.ActionApplied>).body
       if (body.admission)
-        add(body.admission.id, actionAdmissionRole(body.action), event.ordinal)
+        add(
+          body.admission.id,
+          actionAdmissionRole(body.action),
+          event.ordinal,
+        )
       if (body.market) add(body.market.id, 'marketplace', event.ordinal)
     }
   }
@@ -956,106 +1141,99 @@ function receiptEffects(
     scope,
   )
 }
-/** Apply a receipt to a clone and publish the whole result, or throw without changing the input. */
+/** Apply in place and return the same state. A rejected receipt leaves it exactly unchanged. */
 export function projectReceipt(
   previous: ProjectionState,
   receipt: Receipt,
 ): ProjectionState {
-  if (previous.receipts.includes(receipt.id)) return previous
+  if (Object.hasOwn(previous.receipts, receipt.id)) return previous
   if (receipt.height < previous.height)
     throw new Error('Rollback before replaying an older block')
   const effects = receiptEffects(previous, receipt),
-    next = structuredClone(previous),
+    journal = new ProjectionJournal(),
+    next = journal.view(previous),
     activated = new Set<string>(),
     forwarded = new Set<string>()
-  for (const event of effects) {
-    if (!next.scope[event.emitter]) continue
+  try {
+    for (const event of effects) {
+      if (!next.scope[event.emitter]) continue
+      requireHistory(
+        event.topic !== 'operation_begin' && event.topic !== 'operation_end',
+        'framing event leaked',
+      )
+      const effect = {
+        topic: event.topic,
+        emitter: event.emitter,
+        height: event.height,
+        // Decoding owns event.data; mutable state must not share retained evidence.
+        body: next.retainEffects
+          ? structuredClone((event.data as T.Event<unknown>).body)
+          : (event.data as T.Event<unknown>).body,
+      } as Effect
+      apply(next, effect, activated, forwarded)
+      if (next.retainEffects) journal.append(previous.effects, event)
+    }
     requireHistory(
-      event.topic !== 'operation_begin' && event.topic !== 'operation_end',
-      'framing event leaked',
+      activated.size === forwarded.size &&
+        [...activated].every((id) => forwarded.has(id)),
+      'incomplete atomic move',
     )
-    const effect = {
-      topic: event.topic,
-      emitter: event.emitter,
-      height: event.height,
-      // State may retain and mutate any nested field; the effects log must not share it.
-      body: structuredClone((event.data as T.Event<unknown>).body),
-    } as Effect
-    apply(next, effect, activated, forwarded)
-    next.effects.push(event)
+    next.height = receipt.height
+    next.receipts[receipt.id] = true
+    journal.commit()
+    return previous
+  } catch (error) {
+    journal.rollback()
+    throw error
   }
-  requireHistory(
-    activated.size === forwarded.size &&
-      [...activated].every((id) => forwarded.has(id)),
-    'incomplete atomic move',
-  )
-  for (const [market, config] of Object.entries(next.marketConfigs)) {
-    const orders = Object.entries(next.orders)
-      .filter(([key]) => key.startsWith(`${market}:`))
-      .map(([, o]) => o)
-    const refunds = Object.entries(next.refunds)
-      .filter(([key]) => key.startsWith(`${market}:`))
-      .map(([, r]) => r)
-    config.unsettled_orders = BigInt(orders.length)
-    config.refund_accounts = BigInt(refunds.length)
-    config.refundable_lux = refunds
-      .reduce((sum, r) => sum + BigInt(r.amount_lux), 0n)
-      .toString()
-    config.held_lux = (
-      BigInt(config.refundable_lux) +
-      orders
-        .filter((o) => o.status === 'Open')
-        .reduce(
-          (sum, o) =>
-            sum +
-            (o.terms.kind === 'Offer'
-              ? BigInt(o.terms.amount_lux)
-              : BigInt(o.highest?.amount_lux ?? '0')),
-          0n,
-        )
-    ).toString()
-    for (const o of [
-      ...orders,
-      ...Object.entries(next.closedOrders)
-        .filter(([key]) => key.startsWith(`${market}:`))
-        .map(([, o]) => o.order),
-    ])
-      if (o.terms.id >= config.next_order_id)
-        config.next_order_id = o.terms.id + 1n
-  }
-  next.height = receipt.height
-  next.receipts.push(receipt.id)
-  return next
+}
+/** Deliberately copy the entire projection for a checkpoint or a stable consumer view. */
+export function snapshotProjection(state: ProjectionState): ProjectionState {
+  return structuredClone(state)
+}
+/** Resume from an independent copy, preserving the reusable checkpoint and all indexes. */
+export function restoreProjection(
+  snapshot: ProjectionState,
+): ProjectionState {
+  if (snapshot.schemaVersion !== 2)
+    throw new Error(
+      'Unsupported projection snapshot; replay receipts with schema version 2',
+    )
+  return snapshotProjection(snapshot)
 }
 export interface Projector {
+  /** Live state; use snapshotProjection for an independent view. */
   readonly state: ProjectionState
   apply(receipt: Receipt): ProjectionState
+  /** Explicitly retain this height for rollback. Call only at complete block boundaries. */
+  checkpoint(): void
+  /** Restore an exact checkpoint height, discarding newer checkpoints. */
   rollbackTo(height: bigint): ProjectionState
 }
-/** Retains receipt checkpoints for block reorgs; persist checkpoints externally for long histories. */
+/** In-place convenience projector with explicitly requested, in-memory checkpoints. */
 export function createProjector(options: ProjectionOptions): Projector {
-  const initial = createProjectionState(options)
-  let current = initial
-  const checkpoints: ProjectionState[] = []
+  let current = createProjectionState(options)
+  const checkpoints = new Map<bigint, ProjectionState>([
+    [0n, snapshotProjection(current)],
+  ])
   return {
     get state() {
-      return structuredClone(current)
+      return current
     },
     apply(receipt) {
-      const next = projectReceipt(current, receipt)
-      if (next !== current) {
-        checkpoints.push(current)
-        current = next
-      }
-      return structuredClone(current)
+      return projectReceipt(current, receipt)
+    },
+    checkpoint() {
+      checkpoints.set(current.height, snapshotProjection(current))
     },
     rollbackTo(height) {
-      while (current.height > height) {
-        const prior = checkpoints.pop()
-        if (!prior) throw new Error('Rollback exceeds retained history')
-        current = prior
-      }
-      return structuredClone(current)
+      const checkpoint = checkpoints.get(height)
+      if (!checkpoint)
+        throw new Error('No projection checkpoint at requested height')
+      current = restoreProjection(checkpoint)
+      for (const h of checkpoints.keys())
+        if (h > height) checkpoints.delete(h)
+      return current
     },
   }
 }
@@ -1065,7 +1243,8 @@ export function projectedPrimary(
   endpoint: T.Endpoint,
   height: bigint,
 ): { store: string; primary: T.Primary; name: T.Name } | null {
-  let result: { store: string; primary: T.Primary; name: T.Name } | null = null
+  let result: { store: string; primary: T.Primary; name: T.Name } | null =
+    null
   for (const [key, p] of Object.entries(state.primaries)) {
     if (!equalBytes(p.endpoint, endpoint)) continue
     const store = key.slice(0, 64),
@@ -1237,7 +1416,9 @@ export function projectedCommitment(
   raw = false,
 ): T.Commitment | null {
   const c =
-    state.commitments[`${contractId(store)}:${hex(key.actor)}:${hex(key.hash)}`]
+    state.commitments[
+      `${contractId(store)}:${hex(key.actor)}:${hex(key.hash)}`
+    ]
   return c &&
     (raw || (height >= c.created_at && height - c.created_at <= 8640n))
     ? structuredClone(c)
