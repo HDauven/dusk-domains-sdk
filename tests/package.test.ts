@@ -10,7 +10,7 @@ it('npm and JSR expose the same entrypoints with platform-appropriate runtime fi
       readFileSync(new URL('package.json', root), 'utf8'),
     ),
     jsr = JSON.parse(readFileSync(new URL('jsr.json', root), 'utf8'))
-  expect(npm.version).toBe('0.3.0')
+  expect(npm.version).toBe('0.3.1')
   expect(jsr.version).toBe(npm.version)
   expect(Object.keys(npm.exports).sort()).toEqual(
     Object.keys(jsr.exports).sort(),
