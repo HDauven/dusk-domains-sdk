@@ -3,6 +3,7 @@
   "version": "0.3.0",
   "license": "MIT",
   "type": "module",
+  "sideEffects": false,
   "description": "TypeScript SDK and integration helpers for Dusk Domains.",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
