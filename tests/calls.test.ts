@@ -207,6 +207,7 @@ it('transfer exposes clear_records and registration preserves original commitmen
     years: 1,
     secret: bytes(3),
     commitmentStore: id(4),
+    commitHeight: 100n,
     quote,
     referrer: { kind: 'Contract', bytes: bytes(9) },
   })

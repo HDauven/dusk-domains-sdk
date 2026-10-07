@@ -2,6 +2,9 @@
 
 ## 0.3.0 (2026-10-07)
 
+- Require the observed commit height in `registrationCalls` and accept a separately
+  reviewed reveal deadline bounded by the commitment window.
+
 Breaking release for ADR 0004's fresh frozen deployment. No legacy state migration.
 
 - Replace router/core/treasury and legacy marketplace clients with manifest-loaded

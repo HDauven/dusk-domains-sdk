@@ -5,17 +5,27 @@ selection version, newest store and the two independent stop flags. Read
 `client.policy(policyId).config()` for the policy config version. Obtain the
 registration quote through the intended store's `quote_registration`; it performs
 the contract's guarded policy validation and returns base, premium, referral,
-exact total, deadline and selection/config versions. Direct policy `quote` is
-also available for inspection, but does not guarantee registration eligibility.
+exact total, quote height and selection/config versions. The policy quote’s
+`valid_until` equals its request height; it is not a transaction deadline.
+Direct policy `quote` is also available for inspection, but does not guarantee
+registration eligibility.
 
 `registrationCalls(store, input)` takes the actor, root label, years, secret,
-original commitment store, reviewed quote, optional typed referrer, initial
-records and optional primary. It returns separate `commit` and `reveal` calls.
+original commitment store, observed `commitHeight`, reviewed quote, optional
+`validUntil` transaction deadline, typed referrer, initial records and primary.
+It returns separate `commit` and `reveal` calls.
 Persist the secret and commitment shard privately before committing. Wait for
 confirmed commitment inclusion and a reveal age of 5–8,640 blocks inclusive;
 the SDK does not send both calls automatically. A fresh quote may be needed
 before reveal; the commitment is independent of economics. Its derivation is
 BLAKE2b-256 over the protocol domain, actor, root, label and secret.
+
+Before inclusion is known, submit `storeCommitCall` using the persisted commitment.
+After inclusion, build/rebuild `registrationCalls` with the observed `commitHeight`.
+The reveal deadline defaults to `commitHeight + 8_640n` (capped at u64 maximum);
+an explicit `validUntil` must lie between `commitHeight + 5n` and that last block,
+inclusive. Review this deadline separately from the quote. Re-quoting never extends
+the commitment window, and the store checks current economics at reveal inclusion.
 
 The reveal's deposit equals `expected_fee_lux`. All fees are decimal Lux text;
 there is no separate transaction value transfer. Referrals are typed principals,

@@ -7,7 +7,11 @@ import {
   namehash,
   commitmentHash,
 } from './bytes.ts'
-import { stringifyJson } from './json.ts'
+import { stringifyJson, u64, U64_MAX } from './json.ts'
+import {
+  REGISTRATION_MIN_REVEAL_WAIT_BLOCKS,
+  REGISTRATION_MAX_COMMITMENT_AGE_BLOCKS,
+} from '../core/commitment.ts'
 import { wireValue } from './wire.ts'
 import type { DataDriver } from './driver.ts'
 import type {
@@ -52,6 +56,10 @@ export interface RegistrationInput {
   years: number
   secret: Digest
   commitmentStore: string
+  /** Observed inclusion height of the original commitment. */
+  commitHeight: bigint
+  /** Inclusive transaction deadline; defaults to the last valid commitment block. */
+  validUntil?: bigint
   quote: RegistrationQuote
   referrer?: TypedPrincipal | null
   records?: RecordInput[]
@@ -68,7 +76,16 @@ export function registrationCalls(
   input: RegistrationInput,
 ): RegistrationCalls {
   const commitment = commitmentHash(input.actor, input.label, input.secret),
-    quote = wireValue('RegistrationQuote', input.quote)
+    quote = wireValue('RegistrationQuote', input.quote),
+    commitHeight = u64(input.commitHeight),
+    firstReveal = u64(commitHeight + REGISTRATION_MIN_REVEAL_WAIT_BLOCKS),
+    windowEnd = commitHeight + REGISTRATION_MAX_COMMITMENT_AGE_BLOCKS,
+    lastReveal = windowEnd > U64_MAX ? U64_MAX : windowEnd,
+    validUntil = u64(input.validUntil === undefined ? lastReveal : input.validUntil)
+  if (validUntil < firstReveal || validUntil > lastReveal)
+    throw new Error(
+      'Registration deadline is outside the commitment reveal window',
+    )
   if (
     BigInt(quote.total_lux) !==
     BigInt(quote.quote.base_lux) + BigInt(quote.quote.premium_lux)
@@ -86,7 +103,7 @@ export function registrationCalls(
     expected_fee_lux: quote.total_lux,
     expected_policy_version: quote.policy_version,
     expected_policy_config_version: quote.quote.config_version,
-    valid_until: quote.quote.valid_until,
+    valid_until: validUntil,
     referrer: input.referrer ?? null,
     records: input.records ?? [],
     primary: input.primary ?? null,
