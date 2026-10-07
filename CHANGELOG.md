@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Calibrate wallet gas budgets against VM measurements, admission reserves and
+  bounded existing state, including expired subtrees and full proposal tables.
+
 ## 0.3.0 (2026-10-07)
 
 - Apply projection receipts in place with atomic undo, constant-time receipt

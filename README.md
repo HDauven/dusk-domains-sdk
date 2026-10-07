@@ -124,8 +124,8 @@ chain before submission and uses verified driver bytes.
 It never accepts a caller-substituted prepared payload. Automatic gas price is
 bounded to 1–10 Lux/gas; `gasPrice` can be supplied explicitly. Included failures
 can consume the full gas limit even when the principal deposit is refunded.
-The [gas policy](docs/gas-policy.md) distinguishes spec budgets from provisional
-wallet limits; no live measurements are claimed.
+The [gas policy](docs/gas-policy.md) documents measured VM budgets, contract
+admission reserves and the bounds of the workload coverage.
 
 Wire byte arrays are ordinary `number[]`. Lux is decimal text; other u64 fields
 are `bigint`. Use `parseJson`/`stringifyJson`, not `JSON.parse`/`JSON.stringify`,
