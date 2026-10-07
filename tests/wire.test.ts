@@ -10,80 +10,81 @@ import { fromHex, hex } from '../src/frozen/bytes.ts'
 describe('protocol golden JSON and WASM', () => {
   for (const suite of ['frozen-v1', 'frozen-v1-max', 'market-v1']) {
     const rows = fixtures(suite)
-    it(`${suite}: strict JSON shapes and lossless roundtrips`, () => {
-      let tested = 0
-      for (const [key, row] of Object.entries(rows)) {
-        if (!definitions[row.type]) continue
+    for (const [key, row] of Object.entries(rows)) {
+      if (!definitions[row.type]) continue
+      it(`${suite} / ${key}: strict JSON and lossless roundtrip`, () => {
         const value = wireValue(row.type, row.json)
-        expect(
-          wireValue(row.type, parseJson(stringifyJson(value))),
-          key,
-        ).toEqual(value)
-        tested++
-      }
-      expect(tested).toBeGreaterThan(0)
-    })
-    it(`${suite}: encode and decode every exported input/output/event vector`, async () => {
-      const r = await release()
-      let encoded = 0,
-        decoded = 0
-      for (const c of r.contracts.values()) {
-        if (suite === 'market-v1' && c.role !== 'marketplace') continue
-        const driver = r.drivers.get(c.contractId)!
-        for (const method of methodCatalog[c.role]) {
-          for (const [key, row] of Object.entries(rows)) {
-            if (
-              row.type === 'ReceiveFromContract' &&
-              ((key.endsWith('::Store') && c.role === 'vault') ||
-                (key.endsWith('::Vault') && c.role !== 'vault'))
-            )
-              continue
-            const data = Uint8Array.from(fromHex(row.rkyv))
-            if (row.type === method.input) {
+        expect(wireValue(row.type, parseJson(stringifyJson(value)))).toEqual(
+          value,
+        )
+      })
+    }
+    for (const [role, methods] of Object.entries(methodCatalog)) {
+      if (suite === 'market-v1' && role !== 'marketplace') continue
+      for (const method of methods) {
+        for (const [key, row] of Object.entries(rows)) {
+          if (
+            row.type === 'ReceiveFromContract' &&
+            ((key.endsWith('::Store') && role === 'vault') ||
+              (key.endsWith('::Vault') && role !== 'vault'))
+          )
+            continue
+          if (row.type === method.input) {
+            it(`${suite} / ${role}.${method.name} / ${key}: golden input bytes`, async () => {
+              const r = await release(),
+                c = r.manifest.contracts.find((c) => c.role === role)!,
+                driver = r.drivers.get(c.contractId)!
               const value = wireValue(row.type, row.json)
-              let result: Uint8Array
-              try {
-                result = driver.encodeInput(method.name, stringifyJson(value))
-              } catch (error) {
-                throw new Error(`${c.role}.${method.name} ${key}`, {
-                  cause: error,
-                })
-              }
-              expect(hex(result), `${c.role}.${method.name} / ${key}`).toBe(
-                row.rkyv,
-              )
               expect(
-                wireValue(row.type, driver.decodeInput(method.name, data)),
-                key,
+                hex(driver.encodeInput(method.name, stringifyJson(value))),
+              ).toBe(row.rkyv)
+              expect(
+                wireValue(
+                  row.type,
+                  driver.decodeInput(
+                    method.name,
+                    Uint8Array.from(fromHex(row.rkyv)),
+                  ),
+                ),
               ).toEqual(value)
-              encoded++
-            }
-            if (row.type === method.output && method.mode !== 'metadata') {
+            })
+          }
+          if (row.type === method.output && method.mode !== 'metadata') {
+            it(`${suite} / ${role}.${method.name} / ${key}: golden output bytes`, async () => {
+              const r = await release(),
+                c = r.manifest.contracts.find((c) => c.role === role)!,
+                driver = r.drivers.get(c.contractId)!
               expect(
-                wireValue(row.type, driver.decodeOutput(method.name, data)),
-                `${c.role}.${method.name} / ${key}`,
+                wireValue(
+                  row.type,
+                  driver.decodeOutput(
+                    method.name,
+                    Uint8Array.from(fromHex(row.rkyv)),
+                  ),
+                ),
               ).toEqual(wireValue(row.type, row.json))
-              decoded++
-            }
+            })
           }
         }
-        for (const [topic, event] of Object.entries(indexerEventCatalog)) {
-          if (event.role !== '*' && event.role !== c.role) continue
-          for (const [key, row] of Object.entries(rows))
-            if (row.type === event.type) {
+      }
+      for (const [topic, event] of Object.entries(indexerEventCatalog)) {
+        if (event.role !== '*' && event.role !== role) continue
+        for (const [key, row] of Object.entries(rows))
+          if (row.type === event.type) {
+            it(`${suite} / ${role}.${topic} / ${key}: golden event bytes`, async () => {
+              const r = await release(),
+                c = r.manifest.contracts.find((c) => c.role === role)!,
+                driver = r.drivers.get(c.contractId)!
               expect(
                 wireValue(
                   row.type,
                   driver.decodeEvent(topic, Uint8Array.from(fromHex(row.rkyv))),
                 ),
-                key,
               ).toEqual(wireValue(row.type, row.json))
-              decoded++
-            }
-        }
+            })
+          }
       }
-      expect(encoded + decoded).toBeGreaterThan(0)
-    })
+    }
   }
   it('rejects ambiguous numbers, unknown/missing fields, bytes and overflow', () => {
     expect(() =>

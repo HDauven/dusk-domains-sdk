@@ -4,6 +4,10 @@ import type { LoadedRelease } from '../frozen/manifest.ts'
 import { MAX_AUTO_GAS_PRICE, MAX_GAS_LIMIT } from '../frozen/gas.ts'
 import { stringifyJson, u64 } from '../frozen/json.ts'
 import { hex } from '../frozen/bytes.ts'
+import {
+  checkPublicBalanceForWrite,
+  WriteBalanceError,
+} from '../writes/balance.ts'
 export interface ConnectWallet {
   request(method: string, params?: unknown): Promise<unknown>
 }
@@ -117,6 +121,20 @@ export function createDuskDomainsConnectApp(
     prepare,
     async submit(call) {
       const prepared = await prepare(call)
+      await assertChain()
+      let balance: unknown
+      try {
+        balance = await wallet.request('dusk_getPublicBalance')
+      } catch {
+        balance = null
+      }
+      const funds = checkPublicBalanceForWrite({
+        balanceLux: (balance as { value?: unknown } | null)?.value,
+        depositLux: prepared.deposit,
+        gasLimit: BigInt(prepared.gas.limit),
+        gasPrice: BigInt(prepared.gas.price),
+      })
+      if (!funds.ok) throw new WriteBalanceError(funds)
       await assertChain()
       const { chainId: _, ...payload } = prepared
       // No prepared payload is accepted back from a caller; submission always re-encodes.

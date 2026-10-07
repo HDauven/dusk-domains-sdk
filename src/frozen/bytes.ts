@@ -41,9 +41,12 @@ export function hash(
   ...parts: (readonly number[] | Uint8Array | string)[]
 ): Digest {
   const enc = new TextEncoder()
-  const arrays = parts.map((p) =>
-    typeof p === 'string' ? enc.encode(p) : Uint8Array.from(p),
-  )
+  const arrays = parts.map((p) => {
+    if (typeof p === 'string') return enc.encode(p)
+    if (p.some((b) => !Number.isInteger(b) || b < 0 || b > 255))
+      throw new Error('Invalid hash bytes')
+    return Uint8Array.from(p)
+  })
   const bytes = new Uint8Array(arrays.reduce((n, p) => n + p.length, 0))
   let at = 0
   for (const p of arrays) {
@@ -57,6 +60,7 @@ export function validateLabel(label: string): void {
     throw new Error('Expected a canonical 1–63 byte ASCII label')
 }
 export function childNode(parent: Node, label: string): Node {
+  if (parent.length !== 32) throw new Error('Invalid parent node')
   validateLabel(label)
   return hash(parent, hash(label))
 }

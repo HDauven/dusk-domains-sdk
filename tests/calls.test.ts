@@ -103,13 +103,18 @@ it('wallet submits public calls with raw verified-driver bytes, exact deposit, z
       request: async (method, params) => {
         if (method === 'dusk_chainId') return 'dusk:1'
         if (method === 'dusk_estimateGas') return { median: '2000' }
+        if (method === 'dusk_getPublicBalance')
+          return { value: '18446744073709551615' }
         sent.push(params)
         return { hash: 'abc' }
       },
     },
     r,
   )
-  const call = buildCall('store', id(4), 'register', input('Register') as never)
+  const call = buildCall('store', id(4), 'register', {
+    ...(input('Register') as any),
+    expected_fee_lux: '123',
+  })
   await app.submit(call)
   expect(sent[0]).toMatchObject({
     kind: 'contract_call',

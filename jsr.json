@@ -9,7 +9,8 @@
     "./connect-app": "./src/wallet/duskConnectApp.ts",
     "./event-catalog": "./src/indexer/events/indexerEventCatalog.ts",
     "./projection": "./src/projection.ts",
-    "./chain-addresses": "./src/chain-addresses.ts"
+    "./chain-addresses": "./src/chain-addresses.ts",
+    "./indexer": "./src/indexer.ts"
   },
   "publish": {
     "include": [

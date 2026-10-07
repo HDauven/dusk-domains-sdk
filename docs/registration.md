@@ -42,3 +42,70 @@ bind the expected operator epoch. Claims remain available during registration
 pause/suspension. Contract-principal paid execution requires the authenticated
 C2C receipt adapter of that wallet; the Connect integration here submits direct
 public Moonlight calls and never inherits an outer signer's contract authority.
+
+## Input, estimates and recovery helpers
+
+`normalizeNameInput` trims and folds ASCII uppercase for a search field. It does
+not map Unicode. `validateName` checks the store's 1–63-byte label rules and up to
+three subname labels; `ok` describes structure. Its separate `rootEligibility`
+uses the policy's denied/reserved/minimum precedence. The launch policy requires
+three-byte roots and reserves the 17 labels in `RESERVED_LABELS`. A subname may
+have one character, repeated interior hyphens, or a reserved root label.
+`namehashHex` requires a canonical full spelling and returns **unprefixed** hex.
+
+`analyzeName(query, { policy, current, height })` produces `NameResult` and a
+machine-readable `NameStatus`. Omitted `current` means `unchecked`; explicit
+`null` means an observed absent name. There are no hardcoded registered names or
+UI messages. This result does not check directory pause, capacity or authorization.
+
+`estimateRegistrationQuote(policyConfig, quoteRequest)` mirrors the published v1
+policy: five annual tiers, denied/reserved zero prices, daily premium halving over
+`PREMIUM_WINDOW_DAYS` (21), and separate floor rounding for the two referral
+shares. It returns `estimate: true`, decimal Lux amounts and a request hash.
+`launchPolicyConfig()` provides the initial published rules; fetch the selected
+policy config for current estimates. A replacement policy need not implement the
+same curve. Estimates do not verify policy binding, availability or stop flags
+and must not be substituted for a store quote in a signed transaction.
+
+`registrationPremiumSchedule` returns the premium, next step and end block,
+plus optional estimated ISO dates when `nowSeconds` is supplied. Dates use the
+10-second target, never wall time for price. Unrepresentable future u64 heights
+are null. `estimateRenewalQuote(schedule, name, years, height)` uses all five tiers
+of the directory table, applies the existing generation's referral, and enforces
+grace and the ten-year horizon. `formatLuxAsDusk` formats without floating point.
+
+`createRegistrationLifecycle`, `renewRegistrationLifecycle` and
+`registrationLifecycleStatus` take bigint heights and whole years. Renewal
+extends the old expiry even during grace. `blockHeightToUnixSeconds` and
+`blocksForSeconds` are explicit target-time estimates. Subnames have no independent
+grace or renewal right.
+
+`createRegistrationSecret()` uses secure randomness and returns 0x-prefixed
+32-byte hex. `registrationCommitmentHex` accepts hex controller/node/secret,
+requires the canonical root label, checks its node and matches the frozen store
+commitment. `registrationCommitWindow` distinguishes missing/future observations,
+waiting, ready and stale. At age 8,640 the commitment is still ready with
+`staleInBlocks: 0n`; it is stale at 8,641. Future inclusion heights require a fresh
+observation, for example after a reorg.
+
+The four recovery helpers are `upsertPendingNameReservation`,
+`listPendingNameReservations`, `removePendingNameReservation` and
+`updatePendingNameReservationBlock`. Pass a synchronous `ReservationStorage`
+(`getItem`/`setItem`) or omit it for browser `localStorage`. Records contain:
+
+- Canonical name, root node, controller, commitment and secret.
+- Chain ID, directory and **original commitment store**.
+- Duration, nullable bigint inclusion height/transaction ID and ISO audit dates.
+
+Save before signing commit. Key mutations by chain, directory, original store,
+controller and commitment. A different secret or shard remains a separate entry;
+re-quoting must not discard an older pending secret. Heights survive reload above
+JavaScript's safe-number range. Clear a block/tx back to null after a reorg.
+
+Unavailable or malformed storage returns no recovered rows. Mutations throw
+`ReservationStorageError` with `unavailable`, `corrupt` or `write_failed`; the app
+must not claim durable recovery after a failed save. Corrupt storage is not
+overwritten. The adapter is not a cross-tab transaction system. Local storage
+contains the secret; do not include it in logs or telemetry. Legacy 0.2 entries
+cannot be automatically recovered into a fresh frozen deployment because they
+lack the original frozen directory/store binding.

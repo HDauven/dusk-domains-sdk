@@ -20,6 +20,16 @@ Breaking release for ADR 0004's fresh frozen deployment. No legacy state migrati
 - Add real protocol WASM golden-vector, builder, manifest, gas, forwarding and
   replay tests. Driver fixtures are test-only; this release is not published here.
 
+- Restore frozen name/policy analysis, exact local pricing and premium estimates,
+  directory renewal/lifecycle math, commit-window helpers and secure secrets.
+- Restore deployment/shard-scoped pending-reservation recovery, record validation
+  and mutation simulation, typed principal parsing and primary verification status.
+- Add the frozen projection HTTP v1 client/types, snapshot-bound pagination and
+  write confirmation, plus manifest/env runtime configuration.
+- Require public-balance preflight for Connect writes and restore transaction
+  tracking without activity/error presentation copy.
+- Test each golden vector separately and expand every read, helper, event journal,
+  manifest and forwarding-boundary regression matrix.
 
 ## 0.2.0 (2026-10-06)
 
@@ -72,12 +82,8 @@ Clients route through the contract-pool router.
 - Apply reserved-name policy only to roots while keeping subnames out of public registration. ([#235])
 
 [#235]: https://github.com/HDauven/dusk-domains-protocol/issues/235
-
 [#237]: https://github.com/HDauven/dusk-domains-protocol/issues/237
-
 [#239]: https://github.com/HDauven/dusk-domains-protocol/issues/239
-
 [#242]: https://github.com/HDauven/dusk-domains-protocol/issues/242
 [#243]: https://github.com/HDauven/dusk-domains-protocol/issues/243
-
 [#124]: https://github.com/HDauven/dusk-domains-protocol/issues/124

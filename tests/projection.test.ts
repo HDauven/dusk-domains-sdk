@@ -1316,3 +1316,32 @@ it('replays a maximum 257-row tree with independent primary endpoints', () => {
     ).toBe(BigInt(i + 1000))
   }
 }, 20000)
+
+it('projects marketplace configuration and retains audited trade/escrow/refund effects without double-accounting', () => {
+  const marketRows = fixtures('market-v1')
+  const body = (type: string): any =>
+    Object.values(marketRows).find((row) => row.type === type)?.json
+  const configured = body('Event<MarketConfigured>')
+  let state = projectReceipt(
+    createProjectionState(options),
+    receipt(1n, [[6, 'market_configured', configured.body]]),
+  )
+  expect(state.marketConfigs[id(6)].fee_bps).toBe(
+    configured.body.config.fee_bps,
+  )
+  const before = structuredClone(state)
+  const effects = ['trade_settled', 'escrow_renewed', 'refund_claimed'].map(
+    (topic) => {
+      const row = marketRows[`event:${topic}`]
+      if (!row) throw new Error(topic)
+      return [6, topic, (row.json as any).body] as [number, string, unknown]
+    },
+  )
+  state = projectReceipt(state, receipt(2n, effects))
+  expect(state.vault).toEqual(before.vault)
+  expect(state.orders).toEqual(before.orders)
+  expect(state.refunds).toEqual(before.refunds)
+  expect(state.effects.slice(-3).map((e) => e.topic)).toEqual(
+    effects.map((e) => e[1]),
+  )
+})

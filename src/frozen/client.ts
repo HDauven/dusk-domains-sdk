@@ -18,6 +18,7 @@ import {
 } from './manifest.ts'
 import { stringifyJson, u64 } from './json.ts'
 import { wireValue } from './wire.ts'
+import { primaryNameStatus } from '../core/primary.ts'
 import { createHttpTransport, type ReadTransport } from './transport.ts'
 import type { ReadMethods } from './read-types.ts'
 import type {
@@ -579,6 +580,16 @@ export class FrozenClient {
           continue
         if (!equalBytes(nameKey(primary.spelling).node, n.key.node))
           throw new Error('Primary spelling mismatch')
+        if (
+          !primaryNameStatus({
+            endpoint,
+            primary,
+            name: view,
+            record: record.Local,
+            height,
+          }).verified
+        )
+          continue
         if (found) throw new Error('Multiple verified pool primaries')
         found = { store, primary, record: record.Local, height }
       }

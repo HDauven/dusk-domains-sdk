@@ -47,7 +47,13 @@ interface SdkManifestFields {
   nodeUrl: string
   indexerUrl: string
   contracts: Array<{
-    role: 'directory' | 'store' | 'resolver' | 'vault' | 'policy' | 'marketplace'
+    role:
+      | 'directory'
+      | 'store'
+      | 'resolver'
+      | 'vault'
+      | 'policy'
+      | 'marketplace'
     contractId: string // nonzero 32-byte hex, optional 0x prefix
     codeHash?: string // BLAKE3, compared with directory admission when supplied
     dataDriver: {
@@ -94,11 +100,13 @@ const name = await client.getName('example.dusk')
 if (name.value !== 'Absent' && 'Local' in name.value) {
   const current = name.value.Local.name
   const quote = await client.quoteRenewal(name.store, {
-    name: { key: current.key, incarnation: current.incarnation }, years: 1,
+    name: { key: current.key, incarnation: current.incarnation },
+    years: 1,
   })
   if (quote.value !== 'Absent' && 'Local' in quote.value) {
     const call = storeRenewCall(quote.store, {
-      name: { key: current.key, incarnation: current.incarnation }, years: 1,
+      name: { key: current.key, incarnation: current.incarnation },
+      years: 1,
       expected_schedule_version: quote.value.Local.schedule_version,
       expected_fee_lux: quote.value.Local.total_lux,
       valid_until: quote.height + 60n,
@@ -111,7 +119,8 @@ if (name.value !== 'Absent' && 'Local' in name.value) {
 
 Calls contain immutable reviewed arguments, an exact decimal deposit and an
 explicit action gas limit. The wallet sends public transactions with transaction
-value zero, rechecks the chain before submission and uses verified driver bytes.
+value zero, checks public balance for deposit plus maximum gas cost, rechecks the
+chain before submission and uses verified driver bytes.
 It never accepts a caller-substituted prepared payload. Automatic gas price is
 bounded to 1–10 Lux/gas; `gasPrice` can be supplied explicitly. Included failures
 can consume the full gas limit even when the principal deposit is refunded.
@@ -123,6 +132,45 @@ are `bigint`. Use `parseJson`/`stringifyJson`, not `JSON.parse`/`JSON.stringify`
 for driver or indexer JSON containing large u64 values. Fields and enum shapes
 are exactly those in the shared protocol types; missing/extra wire fields reject.
 
+## Integrator helpers
+
+The root entrypoint also exports name validation/analysis, local policy price
+estimates, premium schedules, directory renewal estimates, lifecycle/commit-window
+math, secure secrets, pending-reservation persistence, typed principals and record
+validation/mutation helpers. These use frozen byte limits and bigint heights;
+`formatLuxAsDusk` preserves exact amounts. Estimates are marked `estimate: true`
+and must be replaced with canonical quotes before signing.
+
+```ts
+import {
+  normalizeNameInput,
+  validateName,
+  launchPolicyConfig,
+  createDuskDomainsRuntimeConfig,
+} from '@duskdomains/sdk'
+
+const canonical = normalizeNameInput(' Alice ')
+const validation = validateName(canonical, launchPolicyConfig())
+// ok means valid store structure; rootEligibility is Public / Reserved / Denied.
+const runtime = createDuskDomainsRuntimeConfig(client.release.manifest, {
+  DUSK_DOMAINS_NODE_URL: 'https://your-node.example',
+})
+```
+
+Runtime config accepts explicit env objects, including Vite's
+`VITE_DUSK_DOMAINS_NODE_URL`, `...INDEXER_URL`, and `...CHAIN_ID`; unprefixed
+`DUSK_DOMAINS_*` takes precedence. URLs override manifest endpoints. A numeric
+chain override must match the manifest's frozen network byte; switching networks
+requires the corresponding release. Pass `runtime.manifest` to the loader with
+its artifact base. No process environment, baked-in deployment or UI configuration
+is read implicitly.
+
+`@duskdomains/sdk/indexer` supplies the frozen projection HTTP client and
+`waitForIndexerWrite`. `submitDuskDomainWrite` in `./writes` reports typed
+transaction states; a hash alone is `submitted`, never `executed`. Use Connect
+execution handles or observe the indexer after inclusion. Presentation copy,
+activity descriptions and record edit drafts belong to the app.
+
 ## Integration guides
 
 - [Public exports and API map](docs/public-surface.md)
@@ -130,6 +178,7 @@ are exactly those in the shared protocol types; missing/extra wire fields reject
 - [Records and primaries](docs/records.md)
 - [Namespace, custody and moves](docs/namespace.md)
 - [Event-only indexer projection](docs/indexer-events.md)
+- [Indexer HTTP API and confirmation](docs/indexer-http.md)
 - [Trust model and migration](docs/integration-trust-model.md)
 - [Directory governance](docs/operator-handover.md)
 - [Direct canonical reads](docs/examples/direct-onchain-reads.md)

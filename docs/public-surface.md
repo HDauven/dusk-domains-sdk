@@ -1,16 +1,17 @@
 # Public surface in 0.3.0
 
-The npm and JSR export maps contain the same seven entrypoints and target files.
+The npm and JSR export maps contain the same eight entrypoints and target files.
 
-| Import | Public API |
-| --- | --- |
-| `@duskdomains/sdk` | `createClientFromManifest`, `FrozenClient`, manifest/driver/transport helpers, exact frozen wire types, lossless JSON, name/authority/commitment derivations, write builders and gas policy |
-| `@duskdomains/sdk/writes` | `buildCall`, all public write builders, `registrationCalls`, `transferCall`, `reassignSubnameCall`, `createMarketplaceCalls`, `GAS_LIMITS` |
-| `@duskdomains/sdk/connect-app` | `createDuskDomainsConnectApp`, `ConnectWallet`, `ConnectApp`, `PreparedCall` |
-| `@duskdomains/sdk/marketplace` | `createMarketplaceCalls`, order/custody/refund types and builders |
-| `@duskdomains/sdk/event-catalog` | `indexerEventCatalog`, `duskDomainsIndexedEventTypes`, `EventTopic` |
-| `@duskdomains/sdk/projection` | Receipt journals, projection, projected reads, digest helpers and event catalog |
-| `@duskdomains/sdk/chain-addresses` | Ethereum, Bitcoin and Solana address validators; retained as public |
+| Import                             | Public API                                                                                                                                                                                  |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@duskdomains/sdk`                 | `createClientFromManifest`, `FrozenClient`, manifest/driver/transport helpers, exact frozen wire types, lossless JSON, name/authority/commitment derivations, write builders and gas policy |
+| `@duskdomains/sdk/writes`          | `buildCall`, all public write builders, `registrationCalls`, `transferCall`, `reassignSubnameCall`, `createMarketplaceCalls`, `GAS_LIMITS`                                                  |
+| `@duskdomains/sdk/connect-app`     | `createDuskDomainsConnectApp`, `ConnectWallet`, `ConnectApp`, `PreparedCall`                                                                                                                |
+| `@duskdomains/sdk/marketplace`     | `createMarketplaceCalls`, order/custody/refund types and builders                                                                                                                           |
+| `@duskdomains/sdk/event-catalog`   | `indexerEventCatalog`, `duskDomainsIndexedEventTypes`, `EventTopic`                                                                                                                         |
+| `@duskdomains/sdk/projection`      | Receipt journals, projection, projected reads, digest helpers and event catalog                                                                                                             |
+| `@duskdomains/sdk/indexer`         | Projection HTTP response types, `createDuskDomainsIndexerClient`, `createIndexerClientFromManifest`, `collectIndexerPages`, `waitForIndexerWrite`                                           |
+| `@duskdomains/sdk/chain-addresses` | Ethereum, Bitcoin and Solana address validators; retained as public                                                                                                                         |
 
 `./internal` and `./write-proof` are removed with the legacy clients. The old
 `*_runtime` names, router/core/treasury presets, hand-written legacy wire shapes,
@@ -24,14 +25,14 @@ specific implementation. Methods use exact wire names, argument objects and
 return shapes. The generated `ReadApi` provides compile-time argument/result
 types. Unit reads take no arguments.
 
-| Scope | Read families |
-| --- | --- |
-| directory | `config`, `registration_context`, `renewal_schedule`, `roles`, `member`, `members`, `allocation`, `market`, `proposal`, `proposals`, common interface/binding/capacity |
-| store | `home`, `get_name`, `children`, `record_slot`, `read_record`, `read_records`, `resolve_record`, `read_primary`, `resolve_primary`, `pending_commitment`, `commitment_raw`, both quotes, slot liveness, move/import status, cooldowns, export rows, stats and common reads |
-| resolver | `read_slot_record`, `read_record_slot`, stats and common reads |
-| policy | `quote`, `config`, `interface_version`, `binding` |
-| vault | `read_state`, `read_balance`, `read_referral`, `referrals`, `source` and common reads |
-| marketplace | `config`, `wind_down_state`, `order_api_version`, `read_order`, `read_listing`, `read_offer`, `read_refund` and common reads |
+| Scope       | Read families                                                                                                                                                                                                                                                             |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| directory   | `config`, `registration_context`, `renewal_schedule`, `roles`, `member`, `members`, `allocation`, `market`, `proposal`, `proposals`, common interface/binding/capacity                                                                                                    |
+| store       | `home`, `get_name`, `children`, `record_slot`, `read_record`, `read_records`, `resolve_record`, `read_primary`, `resolve_primary`, `pending_commitment`, `commitment_raw`, both quotes, slot liveness, move/import status, cooldowns, export rows, stats and common reads |
+| resolver    | `read_slot_record`, `read_record_slot`, stats and common reads                                                                                                                                                                                                            |
+| policy      | `quote`, `config`, `interface_version`, `binding`                                                                                                                                                                                                                         |
+| vault       | `read_state`, `read_balance`, `read_referral`, `referrals`, `source` and common reads                                                                                                                                                                                     |
+| marketplace | `config`, `wind_down_state`, `order_api_version`, `read_order`, `read_listing`, `read_offer`, `read_refund` and common reads                                                                                                                                              |
 
 `getName(spelling, homeHint?)` returns `{ store, value, forwards, height }`.
 `quoteRenewal(store, args)` retains the same routing metadata. `locate` supports
@@ -80,3 +81,25 @@ The host receipt's contract/metadata fields remain hex, as specified by Dusk.
 Runtime sources live in `src/frozen`; generated inputs live in `scripts/frozen`.
 The standalone committed event catalog is rebuilt by `npm run build`. Test-only
 WASM and golden fixtures live under `tests/fixtures` and are never published.
+
+## Protocol integration helpers
+
+All of these are also exported from the root entrypoint:
+
+| Family        | Helpers / types                                                                                                                                                                                                      |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Names         | `normalizeNameInput`, `validateName`, `analyzeName`, `NameResult`, `NameStatus`, `namehashHex`, `rootLabelStatus`, `RESERVED_LABELS`                                                                                 |
+| Pricing       | `quoteRegistration` (store/selected policy), `estimateRegistrationQuote`, `launchPolicyConfig`, `registrationPremiumSchedule`, `PREMIUM_WINDOW_DAYS`, `estimateRenewalQuote`, `referralRewardLux`, `formatLuxAsDusk` |
+| Lifecycle     | `createRegistrationLifecycle`, `renewRegistrationLifecycle`, `registrationLifecycleStatus`, `blockHeightToUnixSeconds`, `blocksForSeconds`, block constants                                                          |
+| Commit/reveal | `createRegistrationSecret`, `registrationCommitmentHex`, `registrationCommitWindow`, reveal-window constants                                                                                                         |
+| Recovery      | `PendingNameReservation`, `ReservationStorage`, `ReservationStorageError`, list/upsert/remove/update-block helpers                                                                                                   |
+| Records       | Definitions, `validateRecordValue`, `validateRecordInput`, `validateRecordSet`, `createRecordInput`, `createResolverRecord`, `applyRecordMutations`                                                                  |
+| Principals    | `typedPrincipalFromWalletAccount`, `contractPrincipal`, authority derivation, claimable checks, Base58, key/label/short-value helpers                                                                                |
+| Primary       | `client.verifyPrimary`, `primaryNameStatus`, `PrimaryNameStatus`                                                                                                                                                     |
+| Runtime       | `createDuskDomainsRuntimeConfig`, explicit env/config types                                                                                                                                                          |
+| Writes        | `checkPublicBalanceForWrite`, `WriteBalanceError`, `submitDuskDomainWrite`, `trackDuskDomainTransaction`, `DuskDomainTxState` / `TransactionState`, busy-state helper                                                |
+| Indexer       | HTTP client/types, complete pagination, `waitForIndexerConfirmation`, `waitForIndexerWrite`                                                                                                                          |
+
+Balance, transaction and confirmation helpers are also in `./writes`. Activity
+labels/descriptions, user-facing error mapping and record-edit drafts are not
+SDK exports. Validation returns codes and protocol state; the app owns wording.

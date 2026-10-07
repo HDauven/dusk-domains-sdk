@@ -11,8 +11,8 @@ Future compatible code needs its own release-reviewed driver metadata.
 Canonical reads go to the manifest's node. They obtain the current height
 without a caller-provided callback and bracket multi-read operations with height
 checks. A consistent node endpoint is required; same-height reorgs are not detected
-by height alone. The indexer URL is configuration for consumers' search/history
-queries; this SDK does not assume the legacy HTTP route schema. Indexed search
+by height alone. The indexer HTTP client uses the versioned [frozen projection API](indexer-http.md),
+with explicit deployment and snapshot binding. Indexed search
 results must be revalidated on chain before payments or a newly signed action.
 
 Permanent forwarding is root-keyed and monotonically increases admission ordinal.
@@ -49,9 +49,27 @@ the refundable principal deposit. Included failures may consume the full limit.
 - Rebuild index storage from deployment receipts with all event journals,
   physical resolver snapshots and staging history. Use one block snapshot for
   derived views and whole-transaction rollback.
-- Replace the former indexer HTTP client with your new indexer's versioned route
-  adapter. `client.release.manifest.indexerUrl` remains available for discovery.
+- Use `createIndexerClientFromManifest` and implement the documented frozen
+  HTTP v1 projection contract in the indexer; do not serve legacy rows under it.
 - Replace loss-prone JSON handling with bigint-aware parsing/serialization.
 
 Frozen testnet is a fresh deployment. Do not restore old names, commitments,
 money or historical events into the new projection.
+
+## Portable helpers from 0.2
+
+Name, premium, lifecycle, commitment, persistence, principal, record and write
+helpers are restored with frozen semantics. Structure and policy eligibility are
+separate; one-character subnames and repeated interior hyphens are valid. The
+local name analyzer has no mock registration list. Lux is decimal text and block
+heights are bigint. Renewals enforce the ten-year horizon. Pending commitments
+are scoped to chain/directory/original store/controller/hash, and storage write
+failures are explicit. Legacy entries with no frozen shard binding are not
+silently migrated.
+
+Records use the ABI byte layout and block timestamps, including binary Moonlight
+endpoints. Known key conventions are optional; raw bounded custom keys remain
+valid. Principal parsing requires canonical compressed public keys or explicit
+contract IDs; ambiguous bare authority bytes and uncompressed keys are refused.
+Validation issues and transaction errors carry codes/data for the app to render.
+No activity copy, primary-display copy or edit drafts were restored.

@@ -34,6 +34,10 @@
     "./chain-addresses": {
       "types": "./src/chain-addresses.ts",
       "import": "./src/chain-addresses.ts"
+    },
+    "./indexer": {
+      "types": "./src/indexer.ts",
+      "import": "./src/indexer.ts"
     }
   },
   "files": [
@@ -52,6 +56,7 @@
     "generate": "node scripts/generate-frozen.mjs"
   },
   "dependencies": {
+    "@noble/curves": "^2.4.0",
     "@noble/hashes": "^2.2.0"
   },
   "devDependencies": {
