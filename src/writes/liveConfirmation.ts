@@ -1,94 +1,86 @@
-export type IndexerConfirmationOptions = {
-  description: string
+/** Bounded indexer confirmation. A submitted transaction is not yet projected state. @module */
+import type { DuskDomainsIndexerClient } from '../indexer/client.ts'
+export interface IndexerConfirmationOptions {
   check: () => Promise<boolean>
   attempts?: number
   delayMs?: number
-  wait?: (delayMs: number) => Promise<void>
+  signal?: AbortSignal
+  wait?: (delayMs: number, signal?: AbortSignal) => Promise<void>
 }
-
-export type IndexerConfirmationResult = {
+export interface IndexerConfirmationResult {
   confirmed: boolean
   attempts: number
-  description: string
-  error: string | null
+  error: unknown | null
 }
-
-export type IndexerConfirmationAndRefreshOptions = IndexerConfirmationOptions & {
-  refresh: () => Promise<boolean>
+async function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted()
+  await new Promise<void>((resolve, reject) => {
+    const abort = (): void => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', abort)
+      reject(signal?.reason)
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', abort)
+      resolve()
+    }, ms)
+    signal?.addEventListener('abort', abort, { once: true })
+  })
 }
-
-export type IndexerConfirmationAndRefreshResult = IndexerConfirmationResult & {
-  indexerConfirmed: boolean
-  refreshed: boolean
-}
-
-export async function waitForIndexerConfirmation(options: IndexerConfirmationOptions): Promise<IndexerConfirmationResult> {
-  const attempts = Math.max(1, options.attempts ?? 5)
-  const delayMs = Math.max(0, options.delayMs ?? 750)
-  const wait = options.wait ?? sleep
-  let lastError: string | null = null
-
-  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+export async function waitForIndexerConfirmation(
+  options: IndexerConfirmationOptions,
+): Promise<IndexerConfirmationResult> {
+  const attempts = options.attempts ?? 20,
+    delayMs = options.delayMs ?? 1000
+  if (
+    !Number.isSafeInteger(attempts) ||
+    attempts < 1 ||
+    !Number.isSafeInteger(delayMs) ||
+    delayMs < 0
+  )
+    throw new RangeError('Invalid confirmation bounds')
+  let error: unknown | null = null
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    options.signal?.throwIfAborted()
     try {
       if (await options.check()) {
-        return {
-          confirmed: true,
-          attempts: attempt,
-          description: options.description,
-          error: null,
-        }
+        options.signal?.throwIfAborted()
+        return { confirmed: true, attempts: attempt, error: null }
       }
-      lastError = null
-    } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error)
+      error = null
+    } catch (cause) {
+      options.signal?.throwIfAborted()
+      error = cause
     }
-
-    if (attempt < attempts && delayMs > 0) {
-      await wait(delayMs)
-    }
+    if (attempt < attempts)
+      await (options.wait ?? delay)(delayMs, options.signal)
   }
-
-  return {
-    confirmed: false,
-    attempts,
-    description: options.description,
-    error: lastError,
-  }
+  return { confirmed: false, attempts, error }
 }
-
-export async function waitForConfirmedIndexerRefresh(
-  options: IndexerConfirmationAndRefreshOptions,
-): Promise<IndexerConfirmationAndRefreshResult> {
-  const confirmation = await waitForIndexerConfirmation(options)
-
-  if (!confirmation.confirmed) {
-    return {
-      ...confirmation,
-      indexerConfirmed: false,
-      refreshed: false,
-    }
-  }
-
-  try {
-    const refreshed = await options.refresh()
-    return {
-      ...confirmation,
-      indexerConfirmed: true,
-      confirmed: refreshed,
-      refreshed,
-      error: refreshed ? null : confirmation.error,
-    }
-  } catch (error) {
-    return {
-      ...confirmation,
-      indexerConfirmed: true,
-      confirmed: false,
-      refreshed: false,
-      error: error instanceof Error ? error.message : String(error),
-    }
-  }
-}
-
-function sleep(delayMs: number) {
-  return new Promise<void>((resolve) => globalThis.setTimeout(resolve, delayMs))
+/** Indexer must only expose transactions on its current canonical branch; confirmation is not finality. */
+export function waitForIndexerWrite(
+  client: DuskDomainsIndexerClient,
+  txId: string,
+  options: Omit<IndexerConfirmationOptions, 'check'> & {
+    check?: IndexerConfirmationOptions['check']
+  } = {},
+): Promise<IndexerConfirmationResult> {
+  return waitForIndexerConfirmation({
+    ...options,
+    check: async () => {
+      const { data, snapshot } = await client.getTransaction(
+        txId,
+        options.signal,
+      )
+      if (!data) return false
+      if (!data.success) throw new Error('Transaction reverted')
+      if (
+        snapshot.height < data.height ||
+        (snapshot.height === data.height &&
+          snapshot.blockHash !== data.blockHash)
+      )
+        throw new Error('Inconsistent transaction snapshot')
+      return options.check ? options.check() : true
+    },
+  })
 }

@@ -1,5 +1,53 @@
 # Changelog
 
+## 0.3.0 (2026-10-07)
+
+- Apply projection receipts in place with atomic undo, constant-time receipt
+  membership and incremental indexes/accounting; remove history-wide replay copies.
+- Add explicit `snapshotProjection`/`restoreProjection` and projector checkpoints.
+  Projection returns/getters are live, receipt IDs are a record, and checkpoint
+  schema version 2 requires replaying old snapshots. See the indexer event guide.
+- Make effect history retention optional with `retainEffects: false` for indexers
+  that persist their own history; retained logs append without replay copies.
+
+- Require the observed commit height in `registrationCalls` and accept a separately
+  reviewed reveal deadline bounded by the commitment window.
+- Project emitters admitted earlier in the same committed receipt in event order.
+- Separate retained event payloads from mutable projection state.
+- Keep directory revisions synchronized through delay changes and role handovers.
+- Preserve store admission roles when projecting `SetAcceptsMoves`.
+- Publish compiled npm runtime entrypoints usable by plain Node while keeping
+  the same TypeScript source entrypoints for JSR.
+
+Breaking release for ADR 0004's fresh frozen deployment. No legacy state migration.
+
+- Replace router/core/treasury and legacy marketplace clients with manifest-loaded
+  directory, store shards, registry-keyed resolvers, policy, vault and marketplace v1.
+- Verify driver hashes before execution and contract interface/deployment bindings;
+  discover admissions and follow root-keyed forwarding with bounded monotone hops.
+- Acquire current block height automatically for canonical reads (#186), retain
+  lossless u64 values, exact Lux strings and authoritative generated wire shapes.
+- Add all public write builders, exact deposits/referrals, reviewed marketplace
+  custody/orders, vault claims, shard moves and explicit per-action Connect gas.
+- Replace legacy projections with the complete frozen journal/event catalog,
+  transaction-atomic replay, implicit descendant/custody effects, sealed move
+  reconciliation, cooldowns and reorg checkpoints.
+- Align npm/JSR exports, retain `./chain-addresses` (#185), remove obsolete
+  `./internal` and `./write-proof`, and rewrite all integration guides.
+- Add real protocol WASM golden-vector, builder, manifest, gas, forwarding and
+  replay tests. Driver fixtures are test-only; this release is not published here.
+
+- Restore frozen name/policy analysis, exact local pricing and premium estimates,
+  directory renewal/lifecycle math, commit-window helpers and secure secrets.
+- Restore deployment/shard-scoped pending-reservation recovery, record validation
+  and mutation simulation, typed principal parsing and primary verification status.
+- Add the frozen projection HTTP v1 client/types, snapshot-bound pagination and
+  write confirmation, plus manifest/env runtime configuration.
+- Require public-balance preflight for Connect writes and restore transaction
+  tracking without activity/error presentation copy.
+- Test each golden vector separately and expand every read, helper, event journal,
+  manifest and forwarding-boundary regression matrix.
+
 ## 0.2.0 (2026-10-06)
 
 First release since 0.1.6. Entrypoints changed: `./connect` and `./local-dev` are gone; `./writes`,
@@ -51,12 +99,8 @@ Clients route through the contract-pool router.
 - Apply reserved-name policy only to roots while keeping subnames out of public registration. ([#235])
 
 [#235]: https://github.com/HDauven/dusk-domains-protocol/issues/235
-
 [#237]: https://github.com/HDauven/dusk-domains-protocol/issues/237
-
 [#239]: https://github.com/HDauven/dusk-domains-protocol/issues/239
-
 [#242]: https://github.com/HDauven/dusk-domains-protocol/issues/242
 [#243]: https://github.com/HDauven/dusk-domains-protocol/issues/243
-
 [#124]: https://github.com/HDauven/dusk-domains-protocol/issues/124

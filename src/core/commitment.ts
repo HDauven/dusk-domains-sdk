@@ -1,106 +1,58 @@
-import { blake2b } from '@noble/hashes/blake2.js'
-import { bytesToHex, concatBytes, utf8ToBytes } from '@noble/hashes/utils.js'
-
-export type RegistrationCommitmentInput = {
+/** Frozen commit/reveal helpers. @module */
+import {
+  commitmentHash,
+  equalBytes,
+  fromHex,
+  hex,
+  namehash,
+} from '../frozen/bytes.ts'
+import { u64 } from '../frozen/json.ts'
+export const REGISTRATION_MIN_REVEAL_WAIT_BLOCKS = 5n
+export const REGISTRATION_MAX_COMMITMENT_AGE_BLOCKS = 8_640n
+export const MAX_PENDING_COMMITMENTS_PER_CONTROLLER = 16
+export interface RegistrationCommitmentInput {
   node: string
   controller: string
   label: string
   secret: string
 }
-
-export const REGISTRATION_MIN_REVEAL_WAIT_BLOCKS = 5
-export const REGISTRATION_MAX_COMMITMENT_AGE_BLOCKS = 8_640
-
-export type RegistrationCommitWindow =
-  | {
-      status: 'missing'
-      waitBlocks: 0
-      staleInBlocks: 0
-    }
-  | {
-      status: 'waiting'
-      waitBlocks: number
-      staleInBlocks: number
-    }
-  | {
-      status: 'ready'
-      waitBlocks: 0
-      staleInBlocks: number
-    }
-  | {
-      status: 'stale'
-      waitBlocks: 0
-      staleInBlocks: 0
-    }
-
+/** Persist the result before submitting commit; never substitute non-cryptographic randomness. */
 export function createRegistrationSecret(): string {
-  const bytes = new Uint8Array(32)
-
-  if (!globalThis.crypto?.getRandomValues) {
-    throw new Error('Secure randomness is required to prepare a registration commitment.')
-  }
-
-  globalThis.crypto.getRandomValues(bytes)
-  return `0x${bytesToHex(bytes)}`
+  if (!globalThis.crypto?.getRandomValues)
+    throw new Error('Secure randomness unavailable')
+  return `0x${hex(globalThis.crypto.getRandomValues(new Uint8Array(32)))}`
 }
-
-export function registrationCommitmentHex(input: RegistrationCommitmentInput): string {
-  const material = concatBytes(
-    utf8ToBytes('dusk-domains:registration:v1'),
-    bytes32(input.controller, 'controller'),
-    bytes32(input.node, 'node'),
-    utf8ToBytes(input.label.trim().toLowerCase()),
-    bytes32(input.secret, 'secret'),
-  )
-
-  return `0x${bytesToHex(blake2b(material, { dkLen: 32 }))}`
+export function registrationCommitmentHex(
+  input: RegistrationCommitmentInput,
+): string {
+  const node = fromHex(input.node, 32)
+  if (!equalBytes(node, namehash(`${input.label}.dusk`)))
+    throw new Error('Root node mismatch')
+  return `0x${hex(commitmentHash(fromHex(input.controller, 32), input.label, fromHex(input.secret, 32)))}`
 }
-
-function bytes32(value: string, label: string): Uint8Array {
-  const hex = value.trim().toLowerCase().replace(/^0x/u, '')
-  if (!/^[a-f0-9]{64}$/u.test(hex)) {
-    throw new Error(`${label} must be a 32-byte hex string.`)
-  }
-  return Uint8Array.from({ length: 32 }, (_, index) => Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16))
+export interface RegistrationCommitWindow {
+  status: 'missing' | 'future' | 'waiting' | 'ready' | 'stale'
+  waitBlocks: bigint
+  /** Distance to the last valid reveal block; zero is still ready on that block. */
+  staleInBlocks: bigint
 }
-
 export function registrationCommitWindow(
-  committedBlockHeight: number | null | undefined,
-  currentBlockHeight: number | null | undefined,
+  committed: bigint | null | undefined,
+  current: bigint | null | undefined,
 ): RegistrationCommitWindow {
-  if (!isBlockHeight(committedBlockHeight) || !isBlockHeight(currentBlockHeight)) {
+  if (committed == null || current == null)
+    return { status: 'missing', waitBlocks: 0n, staleInBlocks: 0n }
+  const age = u64(current) - u64(committed)
+  if (age < 0n)
     return {
-      status: 'missing',
-      waitBlocks: 0,
-      staleInBlocks: 0,
+      status: 'future',
+      waitBlocks: 5n - age,
+      staleInBlocks: 8640n - age,
     }
-  }
-
-  const age = Math.max(0, currentBlockHeight - committedBlockHeight)
-
-  if (age > REGISTRATION_MAX_COMMITMENT_AGE_BLOCKS) {
-    return {
-      status: 'stale',
-      waitBlocks: 0,
-      staleInBlocks: 0,
-    }
-  }
-
-  if (age < REGISTRATION_MIN_REVEAL_WAIT_BLOCKS) {
-    return {
-      status: 'waiting',
-      waitBlocks: REGISTRATION_MIN_REVEAL_WAIT_BLOCKS - age,
-      staleInBlocks: REGISTRATION_MAX_COMMITMENT_AGE_BLOCKS - age,
-    }
-  }
-
+  if (age > 8640n) return { status: 'stale', waitBlocks: 0n, staleInBlocks: 0n }
   return {
-    status: 'ready',
-    waitBlocks: 0,
-    staleInBlocks: REGISTRATION_MAX_COMMITMENT_AGE_BLOCKS - age,
+    status: age < 5n ? 'waiting' : 'ready',
+    waitBlocks: age < 5n ? 5n - age : 0n,
+    staleInBlocks: 8640n - age,
   }
-}
-
-function isBlockHeight(value: number | null | undefined): value is number {
-  return Number.isInteger(value) && Number(value) >= 0
 }

@@ -1,186 +1,149 @@
-import type {
-  DuskConnectAppLike,
-  DuskDomainContractPreset,
-  DuskDomainDecodedContext,
-  DuskDomainGas,
-} from '../contracts/calls'
-import { prepareBoundCall, preparedCallForTarget } from '../contracts/preparedCalls'
-import { DUSK_DOMAIN_MAX_AUTO_GAS_PRICE } from '../contracts/callGas'
-
-export type DuskDomainsContractCallParams = {
-  contract: DuskDomainContractPreset
-  functionName: string
-  args?: unknown
-  deposit?: string
-  decodedContext?: DuskDomainDecodedContext
+/** Dusk Connect public-wallet integration with exact deposits and explicit action gas. @module */
+import { type FrozenCall, buildCall } from '../frozen/calls.ts'
+import type { LoadedRelease } from '../frozen/manifest.ts'
+import { MAX_AUTO_GAS_PRICE, MAX_GAS_LIMIT } from '../frozen/gas.ts'
+import { stringifyJson, u64 } from '../frozen/json.ts'
+import { hex } from '../frozen/bytes.ts'
+import {
+  checkPublicBalanceForWrite,
+  WriteBalanceError,
+} from '../writes/balance.ts'
+export interface ConnectWallet {
+  request(method: string, params?: unknown): Promise<unknown>
 }
-
-export type DuskDomainsWriteContractCallParams = DuskDomainsContractCallParams & {
-  preparedCall?: unknown
-  gas?: { limit: string; price: string }
-}
-
-export type DuskDomainsConnectAppTransport = {
-  readonly chainId?: string
-  readonly state?: { readonly chainId: string | null }
-  wallet?: { request: (method: string, params?: unknown) => Promise<unknown> }
-  readContract?: (params: DuskDomainsContractCallParams) => Promise<unknown>
-  prepareContractCall?: (params: DuskDomainsContractCallParams) => Promise<unknown>
-  writeContract?: (params: DuskDomainsWriteContractCallParams) => Promise<unknown>
-  request?: (request: { method: string; params?: unknown }) => Promise<unknown>
-}
-
-export type DuskDomainsConnectAppOptions = {
-  requestMethods?: {
-    readContract?: string
-    prepareContractCall?: string
-    writeContract?: string
+export interface PreparedCall {
+  chainId: string
+  contractId: string
+  fnName: string
+  fnArgs: string
+  deposit: string
+  gas: { limit: string; price: string }
+  display: {
+    action: string
+    arguments: string
+    depositLux: string
+    maximumGasCostLux: string
   }
 }
-
-const defaultRequestMethods = {
-  readContract: 'dusk_readContract',
-  prepareContractCall: 'dusk_prepareContractCall',
-  writeContract: 'dusk_sendTransaction',
-} as const
-
-const GAS_PRICE_TIMEOUT_MS = 1_000
-
+export interface ConnectOptions {
+  gasPrice?: bigint
+  estimateTimeoutMs?: number
+}
+export interface ConnectApp {
+  prepare(call: FrozenCall): Promise<PreparedCall>
+  submit(call: FrozenCall): Promise<unknown>
+}
+/** Pass app.wallet from @dusk/connect. Encoded bytes go directly to dusk_sendTransaction. */
 export function createDuskDomainsConnectApp(
-  transport: DuskDomainsConnectAppTransport,
-  options: DuskDomainsConnectAppOptions = {},
-): DuskConnectAppLike {
-  const requestMethods = {
-    ...defaultRequestMethods,
-    ...options.requestMethods,
+  wallet: ConnectWallet,
+  release: LoadedRelease,
+  options: ConnectOptions = {},
+): ConnectApp {
+  const chain = release.manifest.chainId
+  async function assertChain(): Promise<void> {
+    if ((await wallet.request('dusk_chainId')) !== chain)
+      throw new Error(`Wallet must be connected to ${chain}`)
   }
-  const chain = { get chainId() { return transport.state ? transport.state.chainId ?? undefined : transport.chainId } }
-
+  async function price(): Promise<bigint> {
+    if (options.gasPrice !== undefined) {
+      const p = u64(options.gasPrice)
+      if (p === 0n) throw new Error('Gas price must be positive')
+      return p
+    }
+    let timeout: ReturnType<typeof setTimeout> | undefined
+    try {
+      const result = await Promise.race([
+        wallet.request('dusk_estimateGas', {}),
+        new Promise<null>((resolve) => {
+          timeout = setTimeout(
+            () => resolve(null),
+            options.estimateTimeoutMs ?? 1000,
+          )
+        }),
+      ])
+      const candidate = (result as { median?: unknown } | null)?.median
+      const p = u64(
+        typeof candidate === 'string' && /^\d+$/u.test(candidate)
+          ? BigInt(candidate)
+          : candidate,
+      )
+      return p < 1n ? 1n : p > MAX_AUTO_GAS_PRICE ? MAX_AUTO_GAS_PRICE : p
+    } catch {
+      return 1n
+    } finally {
+      clearTimeout(timeout)
+    }
+  }
+  async function prepare(call: FrozenCall): Promise<PreparedCall> {
+    // Rebuild prevents a fabricated or modified call from substituting a deposit/gas class.
+    const checked = buildCall(
+      call.role,
+      call.contractId,
+      call.functionName as never,
+      call.args as never,
+    )
+    if (
+      call.deposit !== checked.deposit ||
+      call.gasLimit !== checked.gasLimit ||
+      checked.gasLimit > MAX_GAS_LIMIT
+    )
+      throw new Error('Call deposit or gas policy was modified')
+    const descriptor = release.contracts.get(checked.contractId),
+      driver = release.drivers.get(checked.contractId)
+    if (!descriptor || descriptor.role !== checked.role || !driver)
+      throw new Error('Target is absent from verified release')
+    await assertChain()
+    const encoded = driver.encodeInput(
+        checked.functionName,
+        stringifyJson(checked.args),
+      ),
+      gasPrice = await price()
+    await assertChain()
+    const args = checked.args as { valid_until?: bigint }
+    // Chain height/deadline and current order/home should be rechecked by the UI before approval.
+    if (args.valid_until !== undefined) u64(args.valid_until)
+    return {
+      chainId: chain,
+      contractId: checked.contractId,
+      fnName: checked.functionName,
+      fnArgs: `0x${hex(encoded)}`,
+      deposit: checked.deposit,
+      gas: { limit: checked.gasLimit.toString(), price: gasPrice.toString() },
+      display: {
+        action: `${checked.role}.${checked.functionName}`,
+        arguments: stringifyJson(checked.args),
+        depositLux: checked.deposit,
+        maximumGasCostLux: (checked.gasLimit * gasPrice).toString(),
+      },
+    }
+  }
   return {
-    get chainId() { return chain.chainId },
-    async readContract(params) {
-      if (transport.readContract) return await transport.readContract(connectReadContractParams(params))
-      return await requestTransport(transport, requestMethods.readContract, connectReadContractParams(params))
-    },
-    async prepareContractCall(params) {
-      return await prepareBoundCall(chain, params.contract.contractId, async () => {
-        if (transport.prepareContractCall) return await transport.prepareContractCall(connectContractParams(params))
-        return await requestTransport(transport, requestMethods.prepareContractCall, connectContractParams(params))
+    prepare,
+    async submit(call) {
+      const prepared = await prepare(call)
+      await assertChain()
+      let balance: unknown
+      try {
+        balance = await wallet.request('dusk_getPublicBalance')
+      } catch {
+        balance = null
+      }
+      const funds = checkPublicBalanceForWrite({
+        balanceLux: (balance as { value?: unknown } | null)?.value,
+        depositLux: prepared.deposit,
+        gasLimit: BigInt(prepared.gas.limit),
+        gasPrice: BigInt(prepared.gas.price),
+      })
+      if (!funds.ok) throw new WriteBalanceError(funds)
+      await assertChain()
+      const { chainId: _, ...payload } = prepared
+      // No prepared payload is accepted back from a caller; submission always re-encodes.
+      return wallet.request('dusk_sendTransaction', {
+        kind: 'contract_call',
+        privacy: 'public',
+        amount: '0',
+        ...payload,
       })
     },
-    async writeContract(params) {
-      const { gas, ...callParams } = params
-      const writeParams: DuskDomainsWriteContractCallParams = {
-        ...callParams,
-        ...(gas ? { gas: await resolveGas(transport, gas) } : {}),
-      }
-      if (writeParams.preparedCall !== undefined) {
-        writeParams.preparedCall = preparedCallForTarget(chain, writeParams.contract.contractId, writeParams.preparedCall)
-      }
-      if (transport.writeContract) return await transport.writeContract(connectWriteContractParams(writeParams))
-      const requestParams = requestMethods.writeContract === defaultRequestMethods.writeContract
-        ? connectSendTransactionParams(writeParams)
-        : connectContractParams(writeParams)
-      return await requestTransport(transport, requestMethods.writeContract, requestParams)
-    },
   }
-}
-
-function connectReadContractParams(params: DuskDomainsContractCallParams) {
-  const callParams = { ...params }
-  delete callParams.decodedContext
-  return callParams
-}
-
-function connectContractParams(params: DuskDomainsContractCallParams) {
-  const callParams = { ...params }
-  delete callParams.decodedContext
-
-  return {
-    privacy: 'public',
-    ...callParams,
-    display: params.decodedContext,
-  }
-}
-
-function connectWriteContractParams(params: DuskDomainsWriteContractCallParams) {
-  const callParams = { ...params }
-  delete callParams.preparedCall
-  return connectContractParams(callParams)
-}
-
-function connectSendTransactionParams(params: DuskDomainsWriteContractCallParams) {
-  if (!isObjectRecord(params.preparedCall)) {
-    throw new Error('Prepared contract-call payload is required for dusk_sendTransaction.')
-  }
-  if (typeof params.preparedCall.contractId !== 'string' || params.preparedCall.contractId.toLowerCase() !== params.contract.contractId.toLowerCase()) {
-    throw new Error('Prepared contract-call payload does not match the target contract.')
-  }
-
-  return {
-    kind: 'contract_call',
-    ...params.preparedCall,
-    deposit: params.preparedCall.deposit ?? params.deposit,
-    display: params.preparedCall.display ?? params.decodedContext,
-    ...(params.gas ? { gas: params.gas } : {}),
-  }
-}
-
-async function resolveGas(transport: DuskDomainsConnectAppTransport, gas: DuskDomainGas) {
-  const limit = BigInt(gas.limit).toString()
-  const price = gas.price === undefined ? await estimateGasPrice(transport) : gasPriceU64(gas.price).toString()
-  return { limit, price }
-}
-
-async function estimateGasPrice(transport: DuskDomainsConnectAppTransport): Promise<string> {
-  if (!transport.request && !transport.wallet) return '1'
-  let timeout: ReturnType<typeof globalThis.setTimeout> | undefined
-  try {
-    const stats = await Promise.race([
-      transport.request
-        ? transport.request({ method: 'dusk_estimateGas', params: {} })
-        : transport.wallet!.request('dusk_estimateGas', {}),
-      new Promise<undefined>(resolve => { timeout = globalThis.setTimeout(() => resolve(undefined), GAS_PRICE_TIMEOUT_MS) }),
-    ])
-    const median = isObjectRecord(stats) ? stats.median : undefined
-    const price = gasPriceU64(median)
-    return price < 1n ? '1' : (price > DUSK_DOMAIN_MAX_AUTO_GAS_PRICE ? DUSK_DOMAIN_MAX_AUTO_GAS_PRICE : price).toString()
-  } catch {
-    return '1'
-  } finally {
-    globalThis.clearTimeout(timeout)
-  }
-}
-
-function gasPriceU64(value: unknown): bigint {
-  const price = typeof value === 'bigint'
-    ? value
-    : typeof value === 'number' && Number.isSafeInteger(value)
-      ? BigInt(value)
-      : typeof value === 'string' && /^\d+$/u.test(value)
-        ? BigInt(value)
-        : null
-  if (price === null || price < 0n || price > 18_446_744_073_709_551_615n) {
-    throw new Error('Gas price must be a u64 integer.')
-  }
-  return price
-}
-
-function isObjectRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === 'object' && !Array.isArray(value))
-}
-
-async function requestTransport(
-  transport: DuskDomainsConnectAppTransport,
-  method: string,
-  params: DuskDomainsContractCallParams | DuskDomainsWriteContractCallParams | Record<string, unknown>,
-) {
-  if (!transport.request) {
-    throw new Error('Dusk Connect transport does not expose contract-call methods or request fallback.')
-  }
-
-  return await transport.request({
-    method,
-    params,
-  })
 }

@@ -1,15 +1,6 @@
-import {
-  decodedDuskDomainContext,
-  isRuntimeBoundDuskDomainWrite,
-  prepareDuskDomainContractCall,
-  writeDuskDomainContract,
-  type DuskConnectAppLike,
-  type DuskDomainCallMetadata,
-  type DuskDomainContractMap,
-  type DuskDomainDecodedContext,
-  type DuskDomainGas,
-} from '../contracts/calls'
-
+/** Dusk Connect submission/execution states without presentation copy. @module */
+import type { FrozenCall } from '../frozen/calls.ts'
+import type { ConnectApp } from '../wallet/duskConnectApp.ts'
 export type DuskDomainTxStatus =
   | 'preparing'
   | 'awaiting_approval'
@@ -19,336 +10,196 @@ export type DuskDomainTxStatus =
   | 'failed'
   | 'rejected'
   | 'timeout'
-
-export type DuskDomainTxState = {
+export interface DuskDomainTxState {
   status: DuskDomainTxStatus
-  context: DuskDomainDecodedContext
-  call?: DuskDomainTxCall
+  call: { contractId: string; functionName: string }
   txId?: string
-  message?: string
   result?: unknown
+  error?: unknown
 }
-
-const busyDuskDomainTxStatuses = new Set<DuskDomainTxStatus>([
-  'preparing',
-  'awaiting_approval',
-  'submitted',
-  'executing',
-])
-
-export function isDuskDomainTxBusy(txState: DuskDomainTxState | null | undefined): boolean {
-  return txState ? busyDuskDomainTxStatuses.has(txState.status) : false
-}
-
-export type DuskDomainTxCall = {
-  contract: DuskDomainCallMetadata['contract']
-  functionName: string
-}
-
-export type DuskTxHandleLike = {
-  id?: string
+export type TransactionState = DuskDomainTxState
+export interface DuskTxHandleLike {
   hash?: string
-  transactionHash?: string
+  id?: string
   status?: string
   wait?: () => Promise<unknown>
   waitExecuted?: () => Promise<unknown>
-  result?: Promise<unknown>
-  onStatus?: (handler: (status: unknown) => void) => (() => void) | void
-  subscribe?: (handler: (status: unknown) => void) => (() => void) | void
-  on?: (event: string, handler: (status: unknown) => void) => (() => void) | void
+  onStatus?: (callback: (status: unknown) => void) => (() => void) | void
 }
-
-export type SubmitDuskDomainWriteOptions = {
-  gas?: DuskDomainGas
+export interface SubmitDuskDomainWriteOptions {
   onUpdate?: (state: DuskDomainTxState) => void
   timeoutMs?: number
-  contracts?: DuskDomainContractMap
-  call?: DuskDomainTxCall
-  allowUnsafePreviewCall?: boolean
 }
-
-export async function submitDuskDomainWrite(
-  app: DuskConnectAppLike,
-  call: DuskDomainCallMetadata,
-  options: SubmitDuskDomainWriteOptions = {},
-): Promise<DuskDomainTxState> {
-  const context = decodedDuskDomainContext(call)
-  const txCall = txCallFrom(call)
-  try {
-    emit(options, { status: 'preparing', context, call: txCall })
-    if (!options.allowUnsafePreviewCall && !isRuntimeBoundDuskDomainWrite(call)) {
-      throw new Error('This action cannot be submitted safely from the browser yet.')
+export function isDuskDomainTxBusy(
+  state: DuskDomainTxState | null | undefined,
+): boolean {
+  return (
+    !!state &&
+    ['preparing', 'awaiting_approval', 'submitted', 'executing'].includes(
+      state.status,
+    )
+  )
+}
+function object(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === 'object'
+    ? (value as Record<string, unknown>)
+    : null
+}
+function txId(value: unknown): string | undefined {
+  const r = object(value)
+  const id = r?.hash ?? r?.id ?? r?.transactionHash
+  return typeof id === 'string' && id ? id : undefined
+}
+function failed(value: unknown, depth = 0): boolean {
+  const r = object(value)
+  if (!r || depth > 8) return false
+  if (
+    r.ok === false ||
+    r.success === false ||
+    r.reverted === true ||
+    r.err ||
+    r.error
+  )
+    return true
+  const payload = object(r.event)?.payload
+  if (ArrayBuffer.isView(payload)) {
+    try {
+      if (failed(JSON.parse(new TextDecoder().decode(payload)), depth + 1))
+        return true
+    } catch {
+      /* non-JSON event */
     }
-    const preparedCall = await prepareDuskDomainContractCall(app, call, options.contracts)
-
-    emit(options, { status: 'awaiting_approval', context, call: txCall })
-    const result = await writeDuskDomainContract(app, call, preparedCall, options.contracts, options.gas)
-
-    if (isTxHandleLike(result)) {
-      return await trackDuskDomainTransaction(result, context, { ...options, call: txCall })
-    }
-
-    const executed = {
-      status: 'executed',
-      context,
-      call: txCall,
-      txId: txIdFrom(result),
-      result,
-    } satisfies DuskDomainTxState
-    emit(options, executed)
-    return executed
-  } catch (error) {
-    const failed = failedTxState(error, context, undefined, txCall)
-    emit(options, failed)
-    return failed
   }
+  return failed(r.receipt, depth + 1)
 }
-
+function status(value: unknown): DuskDomainTxStatus | undefined {
+  const s = typeof value === 'string' ? value : object(value)?.status
+  const normalized = typeof s === 'string' ? s.toLowerCase() : undefined
+  if (normalized === 'timeout' || normalized === 'rejected') return normalized
+  if (failed(value)) return 'failed'
+  if (!normalized) return undefined
+  return [
+    'submitted',
+    'executing',
+    'executed',
+    'failed',
+    'rejected',
+    'timeout',
+  ].includes(normalized)
+    ? (normalized as DuskDomainTxStatus)
+    : undefined
+}
+function terminal(s: DuskDomainTxStatus): boolean {
+  return ['executed', 'failed', 'rejected', 'timeout'].includes(s)
+}
 export async function trackDuskDomainTransaction(
   handle: DuskTxHandleLike,
-  context: DuskDomainDecodedContext,
+  call: DuskDomainTxState['call'],
   options: SubmitDuskDomainWriteOptions = {},
 ): Promise<DuskDomainTxState> {
-  let unsubscribe: (() => void) | undefined
-  let latestTxId = txIdFrom(handle)
-  const submitted: DuskDomainTxState = {
-    status: normalizeTxStatus(handle.status) ?? 'submitted',
-    context,
-    call: options.call,
-    txId: latestTxId,
+  const timeoutMs = options.timeoutMs ?? 60_000
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1)
+    throw new RangeError('Invalid transaction timeout')
+  let latest: DuskDomainTxState = {
+    status: status(handle) ?? 'submitted',
+    call,
+    txId: txId(handle),
   }
-  emit(options, submitted)
-  let lastStatus = submitted.status
-
-  if (isTerminalTxStatus(submitted.status)) {
-    return submitted
+  let unsubscribe: (() => void) | undefined,
+    timer: ReturnType<typeof setTimeout> | undefined,
+    done = false
+  let resolveTerminal: (update: unknown) => void = () => {}
+  const terminalUpdate = new Promise<unknown>((resolve) => {
+    resolveTerminal = resolve
+  })
+  const emit = (state: DuskDomainTxState): void => {
+    latest = state
+    options.onUpdate?.(state)
   }
-
+  emit(latest)
+  if (terminal(latest.status)) return latest
   try {
-    unsubscribe = subscribeToHandle(handle, (status) => {
-      const nextStatus = txStatusFrom(status) ?? 'executing'
-      latestTxId = txIdFrom(status) ?? latestTxId ?? txIdFrom(handle)
-      if (nextStatus === lastStatus) return
-      lastStatus = nextStatus
-      emit(options, {
-        status: nextStatus,
-        context,
-        call: options.call,
-        txId: latestTxId,
-        message: txMessageFrom(status),
-        result: status,
-      })
-    })
-
-    const result = await waitWithTimeout(waitForHandle(handle), options.timeoutMs)
-    latestTxId = txIdFrom(result) ?? latestTxId ?? txIdFrom(handle)
-    const finalStatus = finalStatusFromWaitResult(result, lastStatus)
-    const executed = {
+    unsubscribe =
+      handle.onStatus?.((update) => {
+        if (done || terminal(latest.status)) return
+        const next = status(update)
+        if (next) {
+          emit({
+            ...latest,
+            status: next,
+            txId: txId(update) ?? latest.txId,
+            result: update,
+          })
+          if (terminal(next)) resolveTerminal(update)
+        }
+      }) ?? undefined
+    const wait = handle.wait ?? handle.waitExecuted
+    // A submitted hash alone never proves successful execution.
+    if (!wait && !handle.onStatus) return latest
+    if (terminal(latest.status)) return latest
+    const result = await Promise.race([
+      ...(wait ? [wait.call(handle)] : []),
+      terminalUpdate,
+      new Promise<unknown>((resolve) => {
+        timer = setTimeout(() => resolve({ status: 'timeout' }), timeoutMs)
+      }),
+    ])
+    const observed = status(result)
+    // A failure event cannot be overwritten by an incomplete/successful wait payload.
+    const finalStatus = terminal(latest.status)
+      ? latest.status
+      : (observed ?? latest.status)
+    emit({
+      ...latest,
       status: finalStatus,
-      context,
-      call: options.call,
-      txId: latestTxId,
-      message: finalStatus === 'executed' ? undefined : txMessageFrom(result),
+      txId: txId(result) ?? latest.txId,
       result,
-    } satisfies DuskDomainTxState
-    emit(options, executed)
-    return executed
+    })
+    return latest
   } catch (error) {
-    const failed = failedTxState(error, context, latestTxId ?? txIdFrom(handle), options.call)
-    emit(options, failed)
-    return failed
+    emit({
+      ...latest,
+      status: object(error)?.code === 4001 ? 'rejected' : 'failed',
+      error,
+    })
+    return latest
   } finally {
+    done = true
+    clearTimeout(timer)
     unsubscribe?.()
   }
 }
-
-export function createPreviewDuskTxHandle(options: {
-  txId: string
-  delayMs?: number
-  finalStatus?: 'executed' | 'failed' | 'rejected'
-  errorMessage?: string
-}): DuskTxHandleLike {
-  const delayMs = options.delayMs ?? 260
-  const finalStatus = options.finalStatus ?? 'executed'
-
-  return {
-    id: options.txId,
-    status: 'submitted',
-    async wait() {
-      await new Promise((resolve) => globalThis.setTimeout(resolve, delayMs))
-      if (finalStatus === 'failed') throw new Error(options.errorMessage ?? 'Transaction failed.')
-      if (finalStatus === 'rejected') throw new Error(options.errorMessage ?? 'Wallet approval rejected.')
-      return { id: options.txId, status: finalStatus }
-    },
-  }
-}
-
-function emit(options: SubmitDuskDomainWriteOptions, state: DuskDomainTxState) {
-  options.onUpdate?.(state)
-}
-
-function failedTxState(error: unknown, context: DuskDomainDecodedContext, txId?: string, call?: DuskDomainTxCall) {
-  return {
-    status: isTimeout(error) ? 'timeout' : isRejected(error) ? 'rejected' : 'failed',
-    context,
-    call,
-    txId,
-    message: error instanceof Error ? error.message : String(error),
-  } satisfies DuskDomainTxState
-}
-
-function txCallFrom(call: DuskDomainCallMetadata): DuskDomainTxCall {
-  return {
-    contract: call.contract,
+export async function submitDuskDomainWrite(
+  app: ConnectApp,
+  call: FrozenCall,
+  options: SubmitDuskDomainWriteOptions = {},
+): Promise<DuskDomainTxState> {
+  const context = {
+    contractId: call.contractId,
     functionName: call.functionName,
   }
-}
-
-function isTxHandleLike(value: unknown): value is DuskTxHandleLike {
-  if (!value || typeof value !== 'object') return false
-  const candidate = value as Partial<DuskTxHandleLike>
-  return Boolean(
-    candidate.wait
-    || candidate.waitExecuted
-    || candidate.result
-    || candidate.onStatus
-    || candidate.subscribe
-    || candidate.on
-    || candidate.id
-    || candidate.hash,
-  )
-}
-
-function subscribeToHandle(handle: DuskTxHandleLike, handler: (status: unknown) => void) {
-  if (handle.onStatus) return handle.onStatus(handler) ?? undefined
-  if (handle.subscribe) return handle.subscribe(handler) ?? undefined
-  if (handle.on) return handle.on('status', handler) ?? handle.on('change', handler) ?? undefined
-  return undefined
-}
-
-async function waitForHandle(handle: DuskTxHandleLike) {
-  if (handle.wait) return await handle.wait()
-  if (handle.waitExecuted) return await handle.waitExecuted()
-  if (handle.result) return await handle.result
-  return handle
-}
-
-function normalizeTxStatus(status: unknown): DuskDomainTxStatus | null {
-  const value = typeof status === 'string'
-    ? status
-    : status && typeof status === 'object' && 'status' in status && typeof status.status === 'string'
-      ? status.status
-      : ''
-
-  const normalized = value.toLowerCase().replaceAll('-', '_')
-  if (normalized === 'prepared') return 'preparing'
-  if (normalized === 'approval' || normalized === 'awaiting_approval' || normalized === 'waiting_for_signature') {
-    return 'awaiting_approval'
-  }
-  if (normalized === 'submitted' || normalized === 'broadcast') return 'submitted'
-  if (normalized === 'pending' || normalized === 'confirming' || normalized === 'executing') return 'executing'
-  if (normalized === 'executed' || normalized === 'confirmed' || normalized === 'success') return 'executed'
-  if (normalized === 'failed' || normalized === 'error') return 'failed'
-  if (normalized === 'rejected' || normalized === 'denied') return 'rejected'
-  if (normalized === 'timeout' || normalized === 'timed_out') return 'timeout'
-  return null
-}
-
-function txStatusFrom(value: unknown): DuskDomainTxStatus | null {
-  const status = normalizeTxStatus(value)
-  return status === 'executed' && revertedPayloadError(value) ? 'failed' : status
-}
-
-function finalStatusFromWaitResult(result: unknown, lastStatus: DuskDomainTxStatus): DuskDomainTxStatus {
-  const resultStatus = txStatusFrom(result)
-  if (isTerminalTxStatus(resultStatus)) return resultStatus
-  if (isTerminalTxStatus(lastStatus)) return lastStatus
-  return 'executed'
-}
-
-function isTerminalTxStatus(status: DuskDomainTxStatus | null): status is DuskDomainTxStatus {
-  return status === 'executed'
-    || status === 'failed'
-    || status === 'rejected'
-    || status === 'timeout'
-}
-
-function txMessageFrom(value: unknown) {
-  if (!value || typeof value !== 'object') return undefined
-  const record = value as Record<string, unknown>
-  for (const key of ['error', 'message', 'reason']) {
-    const message = record[key]
-    if (typeof message === 'string' && message.trim()) return message
-  }
-  const reverted = revertedPayloadError(record)
-  if (reverted) return reverted
-  const receipt = record.receipt
-  if (receipt && typeof receipt === 'object') {
-    return txMessageFrom(receipt)
-  }
-  return undefined
-}
-
-// @dusk/connect 0.2.0 decodes an Executed payload only when its Content-Type says JSON. Rusk 1.7 sends
-// none, so a reverted call arrives as an executed receipt carrying raw bytes. Drop this once connect ships its fix.
-function revertedPayloadError(value: unknown): string | undefined {
-  if (!value || typeof value !== 'object') return undefined
-  const record = value as Record<string, unknown>
-  const event = record.event
-  const payload = event && typeof event === 'object' ? (event as Record<string, unknown>).payload : undefined
-  if (!ArrayBuffer.isView(payload)) return revertedPayloadError(record.receipt)
-  let decoded: unknown
+  const emit = (status: DuskDomainTxStatus): void =>
+    options.onUpdate?.({ status, call: context })
   try {
-    decoded = JSON.parse(new TextDecoder().decode(payload))
-  } catch {
-    return undefined
-  }
-  if (!decoded || typeof decoded !== 'object') return undefined
-  const { err, error } = decoded as Record<string, unknown>
-  for (const failure of [err, error]) {
-    if (typeof failure === 'string' && failure.trim()) return failure
-    if (failure && typeof failure === 'object') return JSON.stringify(failure)
-  }
-  return undefined
-}
-
-async function waitWithTimeout<T>(promise: Promise<T>, timeoutMs: number | undefined) {
-  if (!timeoutMs) return await promise
-
-  let timeoutId: ReturnType<typeof globalThis.setTimeout> | undefined
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timeoutId = globalThis.setTimeout(() => reject(new TxTimeoutError(timeoutMs)), timeoutMs)
-      }),
-    ])
-  } finally {
-    if (timeoutId !== undefined) globalThis.clearTimeout(timeoutId)
-  }
-}
-
-function isRejected(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error)
-  return /reject|denied|cancel/i.test(message)
-}
-
-function isTimeout(error: unknown) {
-  return error instanceof TxTimeoutError
-}
-
-function txIdFrom(value: unknown) {
-  if (!value || typeof value !== 'object') return undefined
-  const record = value as Record<string, unknown>
-  for (const key of ['id', 'hash', 'transactionHash', 'txHash']) {
-    const txId = record[key]
-    if (typeof txId === 'string' && txId) return txId
-  }
-  return undefined
-}
-
-class TxTimeoutError extends Error {
-  constructor(timeoutMs: number) {
-    super(`Transaction did not settle within ${timeoutMs}ms.`)
+    emit('preparing')
+    // This is a review preview. submit independently rebuilds and checks funds before signing.
+    await app.prepare(call)
+    emit('awaiting_approval')
+    const result = await app.submit(call)
+    if (!object(result) || !txId(result))
+      throw new Error('Missing transaction identifier')
+    return await trackDuskDomainTransaction(
+      result as DuskTxHandleLike,
+      context,
+      options,
+    )
+  } catch (error) {
+    const state: DuskDomainTxState = {
+      status: object(error)?.code === 4001 ? 'rejected' : 'failed',
+      call: context,
+      error,
+    }
+    options.onUpdate?.(state)
+    return state
   }
 }

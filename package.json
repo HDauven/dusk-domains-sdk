@@ -1,69 +1,60 @@
 {
   "name": "@duskdomains/sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "license": "MIT",
   "type": "module",
   "description": "TypeScript SDK and integration helpers for Dusk Domains.",
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    "./chain-addresses": {
-      "types": "./src/core/chainAddresses.d.mts",
-      "import": "./src/core/chainAddresses.mjs"
-    },
     ".": {
-      "types": "./src/index.ts",
-      "import": "./src/index.ts"
-    },
-    "./internal": {
-      "types": "./src/internal.ts",
-      "import": "./src/internal.ts"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     },
     "./writes": {
-      "types": "./src/writes.ts",
-      "import": "./src/writes.ts"
-    },
-    "./write-proof": {
-      "types": "./src/write-proof.ts",
-      "import": "./src/write-proof.ts"
-    },
-    "./connect-app": {
-      "types": "./src/wallet/duskConnectApp.ts",
-      "import": "./src/wallet/duskConnectApp.ts"
+      "types": "./dist/writes.d.ts",
+      "import": "./dist/writes.js"
     },
     "./marketplace": {
-      "types": "./src/marketplace.ts",
-      "import": "./src/marketplace.ts"
+      "types": "./dist/marketplace.d.ts",
+      "import": "./dist/marketplace.js"
+    },
+    "./connect-app": {
+      "types": "./dist/wallet/duskConnectApp.d.ts",
+      "import": "./dist/wallet/duskConnectApp.js"
     },
     "./event-catalog": {
-      "types": "./src/indexer/events/indexerEventCatalog.d.mts",
+      "types": "./dist/indexer/events/indexerEventCatalog.d.ts",
       "import": "./src/indexer/events/indexerEventCatalog.mjs"
     },
     "./projection": {
-      "types": "./src/projection.d.mts",
-      "import": "./src/projection.mjs"
+      "types": "./dist/projection.d.ts",
+      "import": "./dist/projection.js"
+    },
+    "./chain-addresses": {
+      "types": "./dist/chain-addresses.d.ts",
+      "import": "./dist/chain-addresses.js"
+    },
+    "./indexer": {
+      "types": "./dist/indexer.d.ts",
+      "import": "./dist/indexer.js"
     }
   },
   "files": [
+    "dist",
     "src",
-    "!src/**/*.test.ts",
-    "!src/**/*.test.mjs",
-    "!src/**/*test-fixtures*",
-    "!src/connect.ts",
-    "!src/local-dev.ts",
-    "!src/wallet/duskConnect.ts",
-    "!src/wallet/duskDomainsConnectRuntime.ts",
-    "!src/dev",
     "docs",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/build-event-catalog.mjs",
-    "jsr:dry-run": "npx jsr publish --dry-run",
+    "jsr:dry-run": "npx jsr publish --dry-run --allow-dirty",
     "prepare": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "generate": "node scripts/generate-frozen.mjs"
   },
   "dependencies": {
     "@noble/curves": "^2.4.0",
@@ -71,7 +62,6 @@
   },
   "devDependencies": {
     "@dusk/connect": "npm:@jsr/dusk__connect@^0.2.0",
-    "@dusk/w3sper": "npm:@jsr/dusk__w3sper@^1.6.0",
     "@types/node": "^24.12.3",
     "typescript": "~6.0.2",
     "vitest": "^4.1.9"

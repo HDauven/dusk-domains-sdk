@@ -1,87 +1,122 @@
-# SDK surface
+# Public surface in 0.3.0
 
-[package.json](../package.json) defines these exported entrypoints:
+The npm and JSR export maps contain the same eight entrypoints. npm resolves
+runtime imports to compiled JavaScript and types to declarations in `dist`; its
+`event-catalog` export uses the generated standalone `.mjs` catalog. Plain Node
+consumers need no TypeScript loader. JSR continues to export TypeScript sources.
 
-| Import | Use |
-| --- | --- |
-| `@duskdomains/sdk` | Combined/direct/indexer clients, namehash, records, principals, manifests and projector helpers. |
-| `@duskdomains/sdk/writes` | Runtime-bound call builders, encoding, preparation, submission and confirmation. |
-| `@duskdomains/sdk/marketplace` | Fixed-sale, auction, offer/refund builders and indexed models. |
-| `@duskdomains/sdk/connect-app` | Dusk Connect app adapter without a runtime wallet-library dependency. |
-| `@duskdomains/sdk/event-catalog` | Plain JavaScript event families and contract topics. |
-| `@duskdomains/sdk/chain-addresses` | Plain JavaScript Bitcoin, Ethereum/EVM and Solana record validators and normalizers. |
-| `@duskdomains/sdk/projection` | Plain JavaScript projection, decoded-event normalization and reserved-name policy, with types. |
-| `@duskdomains/sdk/write-proof` | Write-proof capture helpers. |
-| `@duskdomains/sdk/internal` | First-party lower-level helpers; not a stable third-party API. |
+| Import                             | Public API                                                                                                                                                                                  |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@duskdomains/sdk`                 | `createClientFromManifest`, `FrozenClient`, manifest/driver/transport helpers, exact frozen wire types, lossless JSON, name/authority/commitment derivations, write builders and gas policy |
+| `@duskdomains/sdk/writes`          | `buildCall`, all public write builders, `registrationCalls`, `transferCall`, `reassignSubnameCall`, `createMarketplaceCalls`, `GAS_LIMITS`                                                  |
+| `@duskdomains/sdk/connect-app`     | `createDuskDomainsConnectApp`, `ConnectWallet`, `ConnectApp`, `PreparedCall`                                                                                                                |
+| `@duskdomains/sdk/marketplace`     | `createMarketplaceCalls`, order/custody/refund types and builders                                                                                                                           |
+| `@duskdomains/sdk/event-catalog`   | `indexerEventCatalog`, `duskDomainsIndexedEventTypes`, `EventTopic`                                                                                                                         |
+| `@duskdomains/sdk/projection`      | Receipt journals, projection, projected reads, digest helpers and event catalog                                                                                                             |
+| `@duskdomains/sdk/indexer`         | Projection HTTP response types, `createDuskDomainsIndexerClient`, `createIndexerClientFromManifest`, `collectIndexerPages`, `waitForIndexerWrite`                                           |
+| `@duskdomains/sdk/chain-addresses` | Ethereum, Bitcoin and Solana address validators; retained as public                                                                                                                         |
 
-Browser wallet runtime creation and local wallet shims are repository-internal.
-The package does not export `connect` or `local-dev` subpaths.
+`./internal` and `./write-proof` are removed with the legacy clients. The old
+`*_runtime` names, router/core/treasury presets, hand-written legacy wire shapes,
+legacy marketplace hooks and event projectors have no frozen aliases.
 
-## Reads and writes
+## Canonical reads
 
-Start with [direct-read examples](examples/direct-onchain-reads.md) and the
-[trust model](integration-trust-model.md). The indexer client's `*Page` methods
-expose named arrays and `nextCursor`. Array-returning methods return one page.
-`getAllNames({ owner, maxItems })` and `getAllSubnames(parentNode, maxItems)`
-traverse scoped collections with a hard 10,000-item cap and fail on overflow or
-non-advancing cursors. See the [HTTP API](https://github.com/HDauven/dusk-domains-indexer/blob/main/docs/indexer-api.md).
+`client.directory` and `client.vault` select the manifest's singleton roles.
+`client.store(id)`, `.resolver(id)`, `.policy(id)` and `.marketplace(id)` select a
+specific implementation. Methods use exact wire names, argument objects and
+return shapes. The generated `ReadApi` provides compile-time argument/result
+types. Unit reads take no arguments.
 
-Write builders produce call metadata; the configured wallet/transport signs and
-submits it. Paid builders derive exact deposits and reject Lux values above
-`Number.MAX_SAFE_INTEGER`. Canonical marketplace reads retain `u64` as `bigint`.
+| Scope       | Read families                                                                                                                                                                                                                                                             |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| directory   | `config`, `registration_context`, `renewal_schedule`, `roles`, `member`, `members`, `allocation`, `market`, `proposal`, `proposals`, common interface/binding/capacity                                                                                                    |
+| store       | `home`, `get_name`, `children`, `record_slot`, `read_record`, `read_records`, `resolve_record`, `read_primary`, `resolve_primary`, `pending_commitment`, `commitment_raw`, both quotes, slot liveness, move/import status, cooldowns, export rows, stats and common reads |
+| resolver    | `read_slot_record`, `read_record_slot`, stats and common reads                                                                                                                                                                                                            |
+| policy      | `quote`, `config`, `interface_version`, `binding`                                                                                                                                                                                                                         |
+| vault       | `read_state`, `read_balance`, `read_referral`, `referrals`, `source` and common reads                                                                                                                                                                                     |
+| marketplace | `config`, `wind_down_state`, `order_api_version`, `read_order`, `read_listing`, `read_offer`, `read_refund` and common reads                                                                                                                                              |
 
-`coreRenewRuntimeCall({ node, durationYears, feeLux })` accepts any direct Moonlight
-payer; no owner or manager credential is required. It extends a root before grace
-ends, including during grace and for contract-owned names. It preserves ownership,
-records and primary names, and extends inheriting subnames. Subnames cannot renew
-independently. The event actor is the payer, and the stored referrer retains the
-usual renewal share. Names owned or managed by the pool marketplace must leave escrow
-before renewal; `userFacingErrorMessage` explains that the listing must close first.
+`getName(spelling, homeHint?)` returns `{ store, value, forwards, height }`.
+`quoteRenewal(store, args)` retains the same routing metadata. `locate` supports
+other `Located` reads when destination metadata is needed. `verifyPrimary`
+discovers pool mappings and verifies incarnation/lifecycle/forward resolution.
+Low-level `read(role, id, method, args)` also obtains its height automatically.
 
-Each registry permits 16 pending reservations per controller. A commit removes
-that controller's expired commitments first; the reveal window includes age 8,640
-blocks. `userFacingErrorMessage` explains the cap and points users to My names.
-Reserved labels apply only to root names; subname preflight permits reserved words
-under ordinary, transferred and operator-issued parents.
+Every by-name lookup is root-keyed. `NameRef` includes generation and serial.
+`Located<T>` is `'Absent' | { Local: T } | { Forwarded: Forward }`; the client's
+routing helpers consume forwarding and return the final Local/Absent plus route.
+Raw primary reads are distinct from verification. Commitment source IDs are
+independent of name placement.
 
-The call surface includes `corePruneSubnameRuntimeCall({ node })` for expired
-subtrees, `routerIssueReservedNameRuntimeCall({ node, label, owner, manager,
-durationYears })` for router-operator issuance, and the two pause setters
-`routerSetRegistrationsPausedRuntimeCall({ paused })` and
-`marketplaceSetTradingPausedRuntimeCall({ paused })`. Runtime caller authority
-remains enforced by contracts. [Operator handovers](operator-handover.md) require
-acceptance by the proposed operator; treasury also changes its payout recipient.
+## Write builders
 
-For referral input, await `isClaimableReferrer(principal)` for full Moonlight
-curve/subgroup validation. It lazily loads Noble. Builders and wire encoding use
-the synchronous `hasClaimableReferrerShape` predicate matching the contract's
-structural check. Structurally valid off-curve points pass that cheaper boundary.
-Failed full validation leaves attribution inactive in the frontend.
+The naming rule is `<role><PascalCaseEntrypoint>Call(targetId, exactWireArgs)`.
+For example, `storeCommitCall`, `storeRegisterCall`, `storeRenewCall`,
+`storeMutateRecordsCall`, `storeSetPrimaryCall`, `storeClearPrimaryCall`,
+`storeCreateSubnameCall`, `storeTakeBackSubnamesCall`, `storeRemoveSubnameCall`,
+`vaultClaimReferralCall`, `storeBeginMoveCall`, `storeStageMoveRowCall`,
+`storeFinalizeMoveCall`, and `storeCancelMoveCall`.
 
-## Projection
+There is a builder for every public wallet action, including directory proposals,
+acceptance/pause controls, preserving/replacing records, maintenance, marketplace
+orders and refunds. System-only callbacks, initialization and receipt hooks are
+represented in the ABI catalog but refused by `buildCall` as wallet actions.
 
-```js
-import { createProjectionState, applyProjectionEvent, normalizeObservedEvent }
-  from '@duskdomains/sdk/projection'
-```
+`transferCall` maps `clear_records` to `update_authorities.clear_identity`.
+Ancestor reassignment uses `reassignSubnameCall` and the same underlying entrypoint.
+Marketplace listing/auction/offer acceptance use the verified driver's
+`custody_intent` encoder inside store `transfer_and_call`. Other marketplace
+actions submit the complete reviewed order. Refunds are account-level claims.
 
-The caller supplies event order, deduplication, `meta.eventId` and observation
-time. Activity uses supplied event/observation time; replay time is not invented.
-`createLifecycleEventProjector` exposes getters over the same state engine; its
-subname getters use wall-clock expiry. Servers can derive reads at a confirmed
-chain height from mutable projection state. [Event semantics](indexer-events.md)
-are shared by the standalone indexer.
+All builders deep-copy and freeze arguments. Calls carry `deposit` and
+`gasLimit`; the Connect adapter rebuilds both before encoding. No action is
+silently forwarded or retried after signing.
 
-## Source and versions
+## Numeric and byte contracts
 
-`src/core` owns name rules, `contracts` call/wire shapes, `client` public clients,
-`onchain` canonical reads, `indexer` HTTP clients/types, `projection` shared
-JavaScript state, `runtime` configuration/manifests, `wallet` adapters, `writes`
-submission and `proof` proof helpers. Root files are entrypoint facades.
+`Lux` is decimal text, other u64 values are `bigint`, smaller integers are
+`number`, and byte fields are `number[]`. `wireValue` enforces exact fields and
+bounds. `encodeJson`/`decodeJson` validate against generated JSON definitions;
+the release's verified WASM driver performs canonical rkyv encoding/validation.
+The host receipt's contract/metadata fields remain hex, as specified by Dusk.
 
-SDK package version, contract deployment/source commit, artifact manifest and
-indexer revision are independent compatibility boundaries. A package version
-alone does not select a deployed contract. The build regenerates
-`src/indexer/events/indexerEventCatalog.mjs` from its TypeScript source; that file
-is committed for raw archive installs. LICENSE defines package licensing;
-manifest package labels do not prove publication of separate artifact/client packages.
+Runtime sources live in `src/frozen`; generated inputs live in `scripts/frozen`.
+The standalone committed event catalog is rebuilt by `npm run build`. Test-only
+WASM and golden fixtures live under `tests/fixtures` and are never published.
+
+## Protocol integration helpers
+
+All of these are also exported from the root entrypoint:
+
+| Family        | Helpers / types                                                                                                                                                                                                      |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Names         | `normalizeNameInput`, `validateName`, `analyzeName`, `NameResult`, `NameStatus`, `namehashHex`, `rootLabelStatus`, `RESERVED_LABELS`                                                                                 |
+| Pricing       | `quoteRegistration` (store/selected policy), `estimateRegistrationQuote`, `launchPolicyConfig`, `registrationPremiumSchedule`, `PREMIUM_WINDOW_DAYS`, `estimateRenewalQuote`, `referralRewardLux`, `formatLuxAsDusk` |
+| Lifecycle     | `createRegistrationLifecycle`, `renewRegistrationLifecycle`, `registrationLifecycleStatus`, `blockHeightToUnixSeconds`, `blocksForSeconds`, block constants                                                          |
+| Commit/reveal | `createRegistrationSecret`, `registrationCommitmentHex`, `registrationCommitWindow`, reveal-window constants                                                                                                         |
+| Recovery      | `PendingNameReservation`, `ReservationStorage`, `ReservationStorageError`, list/upsert/remove/update-block helpers                                                                                                   |
+| Records       | Definitions, `validateRecordValue`, `validateRecordInput`, `validateRecordSet`, `createRecordInput`, `createResolverRecord`, `applyRecordMutations`                                                                  |
+| Principals    | `typedPrincipalFromWalletAccount`, `contractPrincipal`, authority derivation, claimable checks, Base58, key/label/short-value helpers                                                                                |
+| Primary       | `client.verifyPrimary`, `primaryNameStatus`, `PrimaryNameStatus`                                                                                                                                                     |
+| Runtime       | `createDuskDomainsRuntimeConfig`, explicit env/config types                                                                                                                                                          |
+| Writes        | `checkPublicBalanceForWrite`, `WriteBalanceError`, `submitDuskDomainWrite`, `trackDuskDomainTransaction`, `DuskDomainTxState` / `TransactionState`, busy-state helper                                                |
+| Indexer       | HTTP client/types, complete pagination, `waitForIndexerConfirmation`, `waitForIndexerWrite`                                                                                                                          |
+
+Balance, transaction and confirmation helpers are also in `./writes`. Activity
+labels/descriptions, user-facing error mapping and record-edit drafts are not
+SDK exports. Validation returns codes and protocol state; the app owns wording.
+
+### Projection checkpoint API
+
+The `@duskdomains/sdk/projection` entrypoint exports `snapshotProjection(state)`
+and `restoreProjection(snapshot)`. `projectReceipt` and `createProjector().apply`
+mutate and return live state; the projector's `state` getter also returns that live
+object. `checkpoint()` explicitly retains a completed block height, and
+`rollbackTo(height)` requires an exact checkpoint (zero is retained initially).
+`ProjectionState.receipts` is now a serializable `Record<string, true>`, and
+`ProjectionOptions.retainEffects` controls history retention (default `true`).
+Checkpoint schema version 2 includes incremental indexes and import row counts;
+old snapshots must be rebuilt from receipts. See the
+[indexer migration notes](./indexer-events.md#explicit-checkpoints-and-indexer-migration)
+for persistence and reorg ordering.

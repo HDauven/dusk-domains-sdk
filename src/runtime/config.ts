@@ -1,291 +1,49 @@
+/** Manifest-first runtime configuration; env is supplied explicitly for browser/Node parity. @module */
 import {
-  DUSK_DOMAINS_CONTRACTS,
-  DUSK_DOMAINS_PLACEHOLDER_CONTRACT_ID,
-  type DuskDomainContractMap,
-  type DuskDomainContractPreset,
-  type DuskDomainRequiredContractKey,
-} from '../contracts/calls'
-
-export type DuskDomainsRuntimeMode = 'preview' | 'live_ready'
-
-export type DuskDomainsRuntimeConfig = {
-  mode: DuskDomainsRuntimeMode
-  contracts: DuskDomainContractMap
-  capabilities: {
-    marketplace: boolean
-    referralAttribution: boolean
-    referralRewardClaims: boolean
-  }
-  launchLinks: DuskDomainsLaunchLinks
-  indexerUrl: string | null
-  nodeUrl: string
-  chainId: string
-  liveWritesEnabled: boolean
-  missingLiveInputs: string[]
-  warnings: string[]
-}
-
-export type DuskDomainsLaunchLinks = {
-  support: string | null
-  abuse: string | null
-  security: string | null
-  status: string | null
-}
-
+  validateReleaseManifest,
+  type ReleaseManifest,
+  type ManifestOptions,
+} from '../frozen/manifest.ts'
 export type DuskDomainsRuntimeEnv = Record<string, string | boolean | undefined>
-
-type RuntimeEnvKey = string | {
-  preferred: string
-  legacy?: string
+export interface DuskDomainsRuntimeConfig {
+  manifest: ReleaseManifest
+  nodeUrl: string
+  indexerUrl: string
+  chainId: string
+  network: number
 }
-
-const contractKeys = ['router', 'core', 'treasury'] as const satisfies readonly DuskDomainRequiredContractKey[]
-
-const contractIdEnvKeys = {
-  router: envKey('VITE_DUSK_DOMAINS_ROUTER_CONTRACT_ID', 'VITE_DUSK_DOMAINS_ROUTER_CONTRACT_ID'),
-  core: envKey('VITE_DUSK_DOMAINS_CORE_CONTRACT_ID', 'VITE_DUSK_DOMAINS_CORE_CONTRACT_ID'),
-  treasury: envKey('VITE_DUSK_DOMAINS_TREASURY_CONTRACT_ID', 'VITE_DUSK_DOMAINS_TREASURY_CONTRACT_ID'),
-} as const satisfies Record<DuskDomainRequiredContractKey, RuntimeEnvKey>
-
-const driverUrlEnvKeys = {
-  router: envKey('VITE_DUSK_DOMAINS_ROUTER_DRIVER_URL', 'VITE_DUSK_DOMAINS_ROUTER_DRIVER_URL'),
-  core: envKey('VITE_DUSK_DOMAINS_CORE_DRIVER_URL', 'VITE_DUSK_DOMAINS_CORE_DRIVER_URL'),
-  treasury: envKey('VITE_DUSK_DOMAINS_TREASURY_DRIVER_URL', 'VITE_DUSK_DOMAINS_TREASURY_DRIVER_URL'),
-} as const satisfies Record<DuskDomainRequiredContractKey, RuntimeEnvKey>
-
-const indexerUrlEnvKey = envKey('VITE_DUSK_DOMAINS_INDEXER_URL', 'VITE_DUSK_DOMAINS_INDEXER_URL')
-const nodeUrlEnvKey = envKey('VITE_DUSK_DOMAINS_NODE_URL', 'VITE_DUSK_DOMAINS_NODE_URL')
-const chainIdEnvKey = envKey('VITE_DUSK_DOMAINS_CHAIN_ID', 'VITE_DUSK_DOMAINS_CHAIN_ID')
-const liveWritesEnabledEnvKey = envKey('VITE_DUSK_DOMAINS_ENABLE_LIVE_WRITES', 'VITE_DUSK_DOMAINS_ENABLE_LIVE_WRITES')
-const referralAttributionEnabledEnvKey = envKey(
-  'VITE_DUSK_DOMAINS_ENABLE_REFERRAL_ATTRIBUTION',
-  'VITE_DUSK_DOMAINS_ENABLE_REFERRAL_ATTRIBUTION',
-)
-const referralClaimsEnabledEnvKey = envKey(
-  'VITE_DUSK_DOMAINS_ENABLE_REFERRAL_CLAIMS',
-  'VITE_DUSK_DOMAINS_ENABLE_REFERRAL_CLAIMS',
-)
-const marketplaceEnabledEnvKey = envKey(
-  'VITE_DUSK_DOMAINS_ENABLE_MARKETPLACE',
-  'VITE_DUSK_DOMAINS_ENABLE_MARKETPLACE',
-)
-const marketplaceContractIdEnvKey = envKey(
-  'VITE_DUSK_DOMAINS_MARKETPLACE_CONTRACT_ID',
-  'VITE_DUSK_DOMAINS_MARKETPLACE_CONTRACT_ID',
-)
-const marketplaceDriverUrlEnvKey = envKey(
-  'VITE_DUSK_DOMAINS_MARKETPLACE_DRIVER_URL',
-  'VITE_DUSK_DOMAINS_MARKETPLACE_DRIVER_URL',
-)
-const launchLinkEnvKeys = {
-  support: envKey('VITE_DUSK_DOMAINS_SUPPORT_URL', 'VITE_DUSK_DOMAINS_SUPPORT_URL'),
-  abuse: envKey('VITE_DUSK_DOMAINS_ABUSE_URL', 'VITE_DUSK_DOMAINS_ABUSE_URL'),
-  security: envKey('VITE_DUSK_DOMAINS_SECURITY_URL', 'VITE_DUSK_DOMAINS_SECURITY_URL'),
-  status: envKey('VITE_DUSK_DOMAINS_STATUS_URL', 'VITE_DUSK_DOMAINS_STATUS_URL'),
-} as const satisfies Record<keyof DuskDomainsLaunchLinks, RuntimeEnvKey>
-const defaultNodeUrl = 'https://testnet.nodes.dusk.network'
-const defaultChainId = 'dusk:2'
-
+/** DUSK_DOMAINS_* overrides VITE_DUSK_DOMAINS_*. Numeric chain overrides must match the release network byte. */
 export function createDuskDomainsRuntimeConfig(
+  manifest: unknown,
   env: DuskDomainsRuntimeEnv = {},
-  baseContracts: DuskDomainContractMap = DUSK_DOMAINS_CONTRACTS,
 ): DuskDomainsRuntimeConfig {
-  const missingLiveInputs: string[] = []
-  const warnings: string[] = []
-  const contracts = {} as DuskDomainContractMap
-
-  for (const key of contractKeys) {
-    const contract = baseContracts[key]
-    const contractId = stringEnv(env, contractIdEnvKeys[key])
-    const driverUrl = stringEnv(env, driverUrlEnvKeys[key])
-
-    contracts[key] = {
-      ...contract,
-      contractId: validContractIdOrPreview(contractId, contract, contractIdEnvKeys[key], warnings),
-      driverUrl: validRuntimeUrlOrPreview(driverUrl, contract.driverUrl, driverUrlEnvKeys[key], warnings),
+  const read = (key: string): string | undefined => {
+    for (const prefix of ['DUSK_DOMAINS_', 'VITE_DUSK_DOMAINS_']) {
+      const value = env[`${prefix}${key}`]
+      if (value === undefined || value === '') continue
+      if (typeof value !== 'string' || !value.trim())
+        throw new Error(`Invalid environment setting ${key}`)
+      return value.trim()
     }
+    return undefined
   }
-
-  const rawIndexerUrl = stringEnv(env, indexerUrlEnvKey)
-  const indexerUrl = validRuntimeUrlOrNull(rawIndexerUrl, indexerUrlEnvKey, warnings)
-  if (!indexerUrl) missingLiveInputs.push(envName(indexerUrlEnvKey))
-
-  const nodeUrl = validRuntimeUrlOrPreview(stringEnv(env, nodeUrlEnvKey), defaultNodeUrl, nodeUrlEnvKey, warnings)
-  const chainId = validChainIdOrPreview(stringEnv(env, chainIdEnvKey), defaultChainId, chainIdEnvKey, warnings)
-  const liveWritesEnabled = booleanEnv(env, liveWritesEnabledEnvKey)
-  const referralAttributionRequested = booleanEnv(env, referralAttributionEnabledEnvKey)
-  const referralClaimsRequested = booleanEnv(env, referralClaimsEnabledEnvKey)
-  const marketplaceRequested = booleanEnv(env, marketplaceEnabledEnvKey)
-  const launchLinks = {
-    support: validLaunchLinkOrNull(stringEnv(env, launchLinkEnvKeys.support), launchLinkEnvKeys.support, warnings),
-    abuse: validLaunchLinkOrNull(stringEnv(env, launchLinkEnvKeys.abuse), launchLinkEnvKeys.abuse, warnings),
-    security: validLaunchLinkOrNull(stringEnv(env, launchLinkEnvKeys.security), launchLinkEnvKeys.security, warnings),
-    status: validLaunchLinkOrNull(stringEnv(env, launchLinkEnvKeys.status), launchLinkEnvKeys.status, warnings),
+  const options: ManifestOptions = {
+    nodeUrl: read('NODE_URL'),
+    indexerUrl: read('INDEXER_URL'),
   }
-
-  for (const key of contractKeys) {
-    if (isPlaceholderContractId(contracts[key].contractId)) missingLiveInputs.push(envName(contractIdEnvKeys[key]))
+  let release = validateReleaseManifest(manifest, options)
+  const chain = read('CHAIN_ID')
+  if (chain !== undefined && chain !== release.chainId) {
+    const numeric = /^dusk:(\d+)$/u.exec(chain)?.[1]
+    if (numeric === undefined || BigInt(numeric) !== BigInt(release.network))
+      throw new Error('Environment chain differs from release')
+    release = validateReleaseManifest({ ...release, chainId: chain })
   }
-  const hasCoreReferralPath = !isPlaceholderContractId(contracts.core.contractId)
-    && !isPlaceholderContractId(contracts.treasury.contractId)
-  const referralAttributionSupported = referralAttributionRequested && hasCoreReferralPath
-  if (referralAttributionRequested && !referralAttributionSupported) {
-    warnings.push(`${envName(referralAttributionEnabledEnvKey)} is set, but core and treasury contracts are not configured; referral attribution stays local.`)
-  }
-  const referralClaimsSupported = referralClaimsRequested && !isPlaceholderContractId(contracts.treasury.contractId)
-  if (referralClaimsRequested && !referralClaimsSupported) {
-    warnings.push(`${envName(referralClaimsEnabledEnvKey)} is set, but no treasury contract is configured; reward claims stay disabled.`)
-  }
-
-  if (marketplaceRequested) {
-    const marketplacePreset = baseContracts.marketplace
-    const marketplaceContractId = stringEnv(env, marketplaceContractIdEnvKey)
-    const marketplaceDriverUrl = stringEnv(env, marketplaceDriverUrlEnvKey)
-
-    if (!marketplacePreset) {
-      warnings.push(`${envName(marketplaceEnabledEnvKey)} is set, but the SDK does not have a marketplace contract preset.`)
-    } else if (!marketplaceContractId || !isValidDuskContractId(marketplaceContractId)) {
-      warnings.push(`${envName(marketplaceContractIdEnvKey)} must be a 32-byte hex contract ID; marketplace stays disabled.`)
-    } else if (!marketplaceDriverUrl || !isValidRuntimeUrl(marketplaceDriverUrl)) {
-      warnings.push(`${envName(marketplaceDriverUrlEnvKey)} must be an http(s) or root-relative URL; marketplace stays disabled.`)
-    } else {
-      contracts.marketplace = {
-        ...marketplacePreset,
-        contractId: marketplaceContractId,
-        driverUrl: marketplaceDriverUrl,
-      }
-    }
-  }
-
   return {
-    mode: missingLiveInputs.length === 0 ? 'live_ready' : 'preview',
-    contracts,
-    capabilities: {
-      marketplace: Boolean(contracts.marketplace),
-      referralAttribution: referralAttributionSupported,
-      referralRewardClaims: referralClaimsSupported,
-    },
-    launchLinks,
-    indexerUrl,
-    nodeUrl,
-    chainId,
-    liveWritesEnabled,
-    missingLiveInputs: unique(missingLiveInputs),
-    warnings: unique(warnings),
+    manifest: release,
+    nodeUrl: release.nodeUrl,
+    indexerUrl: release.indexerUrl,
+    chainId: release.chainId,
+    network: release.network,
   }
-}
-
-export function isPlaceholderContractId(contractId: string): boolean {
-  return contractId === DUSK_DOMAINS_PLACEHOLDER_CONTRACT_ID
-}
-
-export function isValidDuskContractId(contractId: string): boolean {
-  return /^0x[0-9a-fA-F]{64}$/.test(contractId)
-}
-
-export function isValidRuntimeUrl(value: string): boolean {
-  if (value.startsWith('/')) return !value.startsWith('//')
-
-  try {
-    const url = new URL(value)
-    return url.protocol === 'https:' || url.protocol === 'http:'
-  } catch {
-    return false
-  }
-}
-
-export function isValidLaunchLinkUrl(value: string): boolean {
-  if (isValidRuntimeUrl(value)) return true
-
-  try {
-    const url = new URL(value)
-    return url.protocol === 'mailto:'
-  } catch {
-    return false
-  }
-}
-
-function envKey(preferred: string, legacy?: string): RuntimeEnvKey {
-  return { preferred, legacy }
-}
-
-function envName(key: RuntimeEnvKey) {
-  return typeof key === 'string' ? key : key.preferred
-}
-
-function envCandidates(key: RuntimeEnvKey) {
-  return typeof key === 'string' ? [key] : [key.preferred, key.legacy].filter((candidate): candidate is string => Boolean(candidate))
-}
-
-function stringEnv(env: DuskDomainsRuntimeEnv, key: RuntimeEnvKey) {
-  const value = envCandidates(key)
-    .map((candidate) => env[candidate])
-    .find((candidate) => typeof candidate === 'string' && candidate.trim())
-  return typeof value === 'string' && value.trim() ? value.trim() : null
-}
-
-function booleanEnv(env: DuskDomainsRuntimeEnv, key: RuntimeEnvKey) {
-  const value = envCandidates(key)
-    .map((candidate) => env[candidate])
-    .find((candidate) => typeof candidate === 'boolean' || typeof candidate === 'string')
-  if (typeof value === 'boolean') return value
-  if (typeof value !== 'string') return false
-  return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase())
-}
-
-function validContractIdOrPreview(
-  value: string | null,
-  contract: DuskDomainContractPreset,
-  envKey: RuntimeEnvKey,
-  warnings: string[],
-) {
-  if (!value) {
-    return contract.contractId
-  }
-
-  if (isValidDuskContractId(value)) return value
-
-  warnings.push(`${envName(envKey)} is not a 32-byte hex contract ID; using preview placeholder.`)
-  return contract.contractId
-}
-
-function validRuntimeUrlOrPreview(
-  value: string | null,
-  fallback: string,
-  envKey: RuntimeEnvKey,
-  warnings: string[],
-) {
-  if (!value) return fallback
-  if (isValidRuntimeUrl(value)) return value
-
-  warnings.push(`${envName(envKey)} must be an http(s) or root-relative URL; using preview default.`)
-  return fallback
-}
-
-function validRuntimeUrlOrNull(value: string | null, envKey: RuntimeEnvKey, warnings: string[]) {
-  if (!value) return null
-  if (isValidRuntimeUrl(value)) return value
-
-  warnings.push(`${envName(envKey)} must be an http(s) or root-relative URL; indexer integration disabled.`)
-  return null
-}
-
-function validLaunchLinkOrNull(value: string | null, envKey: RuntimeEnvKey, warnings: string[]) {
-  if (!value) return null
-  if (isValidLaunchLinkUrl(value)) return value
-
-  warnings.push(`${envName(envKey)} must be an http(s), mailto, or root-relative URL; launch link disabled.`)
-  return null
-}
-
-function validChainIdOrPreview(value: string | null, fallback: string, envKey: RuntimeEnvKey, warnings: string[]) {
-  if (!value) return fallback
-  if (/^dusk:[a-zA-Z0-9_-]+$/.test(value)) return value
-
-  warnings.push(`${envName(envKey)} must be a Dusk CAIP-2 chain ID such as dusk:2; using ${fallback}.`)
-  return fallback
-}
-
-function unique(values: string[]) {
-  return [...new Set(values)]
 }

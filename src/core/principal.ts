@@ -1,233 +1,153 @@
-import { blake2b } from '@noble/hashes/blake2.js'
-import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
-
-const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
-const PUBLIC_SENDER_KEY_BYTES = 96
-const BLS_PUBLIC_KEY_BYTES = 193
-// Big-endian BLS12-381 modulus, matching dusk-domains-types/src/principals.rs.
-const BLS_BASE_FIELD_MODULUS = [
-  0x1a, 0x01, 0x11, 0xea, 0x39, 0x7f, 0xe6, 0x9a, 0x4b, 0x1b, 0xa7, 0xb6, 0x43, 0x4b, 0xac, 0xd7,
-  0x64, 0x77, 0x4b, 0x84, 0xf3, 0x85, 0x12, 0xbf, 0x67, 0x30, 0xd2, 0xa0, 0xf6, 0xb0, 0xf6, 0x24,
-  0x1e, 0xab, 0xff, 0xfe, 0xb1, 0x53, 0xff, 0xff, 0xb9, 0xfe, 0xff, 0xff, 0xff, 0xff, 0xaa, 0xab,
-]
-const RUNTIME_AUTHORITY_DOMAIN = utf8ToBytes('dusk-domains:runtime-authority:v1')
-
-export type DuskPrincipalKind = 'Moonlight' | 'Phoenix' | 'Contract'
-
-export type DuskPrincipal = {
-  kind: DuskPrincipalKind
-  bytes: number[]
-}
-
-/** Cheap contract-equivalent encoding check; does not validate the curve or subgroup. */
-export function hasClaimableReferrerShape(principal: DuskPrincipal | null | undefined): boolean {
-  if (!principal) return false
-  for (const byte of principal.bytes) {
-    if (!Number.isInteger(byte) || byte < 0 || byte > 255) return false
+/** Typed frozen principals. Phoenix has no holder/claim authority in v1. @module */
+import { bls12_381 } from '@noble/curves/bls12-381.js'
+import { authority, contractId, fromHex, hex } from '../frozen/bytes.ts'
+import type { TypedPrincipal } from '../frozen/types.ts'
+export type DuskPrincipal = TypedPrincipal
+export type DuskPrincipalResult =
+  | {
+      ok: true
+      principal: TypedPrincipal
+      source: 'moonlight_account' | 'contract_id'
+    }
+  | { ok: false; reason: 'empty' | 'invalid_account' | 'ambiguous_principal' }
+export type ContractPrincipalResult =
+  | { ok: true; principal: string; source: 'moonlight_account' | 'contract_id' }
+  | { ok: false; reason: 'empty' | 'invalid_account' | 'ambiguous_principal' }
+const alphabet = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+export function decodeBase58(value: string): Uint8Array | null {
+  if (!value || value.length > 512) return null
+  let n = 0n
+  for (const c of value) {
+    const digit = alphabet.indexOf(c)
+    if (digit < 0) return null
+    n = n * 58n + BigInt(digit)
   }
-  if (principal.kind === 'Contract') {
-    return principal.bytes.length === 32 && principal.bytes.some((byte) => byte !== 0)
+  const bytes: number[] = []
+  while (n) {
+    bytes.unshift(Number(n & 255n))
+    n >>= 8n
   }
-  if (principal.kind !== 'Moonlight' || principal.bytes.length !== PUBLIC_SENDER_KEY_BYTES) return false
-  if ((principal.bytes[0] & 0xc0) !== 0x80) return false
-  return coordinateBelowModulus(principal.bytes, 0) && coordinateBelowModulus(principal.bytes, 48)
+  let zeroes = 0
+  while (value[zeroes] === '1') zeroes++
+  return Uint8Array.from([...Array<number>(zeroes).fill(0), ...bytes])
 }
-
-function coordinateBelowModulus(bytes: number[], offset: number): boolean {
-  for (let index = 0; index < BLS_BASE_FIELD_MODULUS.length; index += 1) {
-    const byte = offset === 0 && index === 0 ? bytes[0] & 0x1f : bytes[offset + index]
-    if (byte !== BLS_BASE_FIELD_MODULUS[index]) return byte < BLS_BASE_FIELD_MODULUS[index]
+export function encodeBase58(value: Uint8Array | readonly number[]): string {
+  if (value.some((b) => !Number.isInteger(b) || b < 0 || b > 255))
+    throw new RangeError('Invalid bytes')
+  let n = 0n,
+    out = '',
+    zeroes = 0
+  for (const byte of value) n = (n << 8n) + BigInt(byte)
+  while (n) {
+    out = alphabet[Number(n % 58n)] + out
+    n /= 58n
   }
-  return false
+  while (zeroes < value.length && value[zeroes] === 0) zeroes++
+  return '1'.repeat(zeroes) + out
 }
-
-/** Fully validates runtime callers, loading BLS only for Moonlight referrals. */
-export async function isClaimableReferrer(principal: DuskPrincipal | null | undefined): Promise<boolean> {
-  if (!principal || !hasClaimableReferrerShape(principal)) return false
-  if (principal.kind === 'Contract') return true
-  const { bls12_381 } = await import('@noble/curves/bls12-381.js')
+/** Mirrors the cheap referrer check in principals.rs; not a curve or subgroup proof. */
+export function hasClaimableReferrerShape(
+  p: TypedPrincipal | null | undefined,
+): boolean {
+  if (!p || !p.bytes.every((b) => Number.isInteger(b) && b >= 0 && b <= 255))
+    return false
+  if (p.kind === 'Contract')
+    return p.bytes.length === 32 && p.bytes.some((b) => b !== 0)
+  if (
+    p.kind !== 'Moonlight' ||
+    p.bytes.length !== 96 ||
+    (p.bytes[0] & 0xc0) !== 0x80
+  )
+    return false
+  const modulus = BigInt(
+    '0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab',
+  )
+  const first = [...p.bytes.slice(0, 48)]
+  first[0] &= 0x1f
+  return (
+    BigInt(`0x${hex(first)}`) < modulus &&
+    BigInt(`0x${hex(p.bytes.slice(48))}`) < modulus
+  )
+}
+/** Full canonical compressed BLS endpoint check, matching validate_endpoint. */
+export function isMoonlightEndpoint(
+  bytes: readonly number[] | Uint8Array,
+): boolean {
+  if (
+    !hasClaimableReferrerShape({ kind: 'Moonlight', bytes: Array.from(bytes) })
+  )
+    return false
   try {
-    const point = bls12_381.G2.Point.fromBytes(Uint8Array.from(principal.bytes))
+    const point = bls12_381.G2.Point.fromBytes(Uint8Array.from(bytes))
     point.assertValidity()
-    return !point.is0() && point.toBytes().every((byte, index) => byte === principal.bytes[index])
+    return !point.is0() && point.toBytes().every((b, i) => b === bytes[i])
   } catch {
     return false
   }
 }
-
-export type ContractPrincipalResult =
-  | { ok: true; principal: string; source: 'hex_principal' | 'moonlight_account' | 'contract_id' }
-  | { ok: false; reason: string }
-
-export type DuskPrincipalResult =
-  | { ok: true; principal: DuskPrincipal; source: 'hex_principal' | 'moonlight_account' | 'contract_id' }
-  | { ok: false; reason: string }
-
-export function contractPrincipalFromWalletAccount(account: string): ContractPrincipalResult {
+export function isClaimableReferrer(
+  p: TypedPrincipal | null | undefined,
+): boolean {
+  return (
+    !!p &&
+    hasClaimableReferrerShape(p) &&
+    (p.kind === 'Contract' || isMoonlightEndpoint(p.bytes))
+  )
+}
+export function contractPrincipal(id: string): TypedPrincipal {
+  return { kind: 'Contract', bytes: fromHex(contractId(id), 32) }
+}
+export function typedPrincipalFromWalletAccount(
+  account: string,
+): DuskPrincipalResult {
   const value = account.trim()
-  if (!value) return { ok: false, reason: 'Wallet account is empty.' }
-
-  const contractMatch = /^contract:(0x[a-fA-F0-9]{64})$/.exec(value)
-  if (contractMatch) {
-    return {
-      ok: true,
-      principal: contractMatch[1].toLowerCase(),
-      source: 'contract_id',
+  if (!value) return { ok: false, reason: 'empty' }
+  if (value.startsWith('contract:')) {
+    try {
+      return {
+        ok: true,
+        principal: contractPrincipal(value.slice(9)),
+        source: 'contract_id',
+      }
+    } catch {
+      return { ok: false, reason: 'invalid_account' }
     }
   }
-
-  if (/^0x[a-fA-F0-9]{64}$/.test(value)) {
-    return { ok: true, principal: value.toLowerCase(), source: 'hex_principal' }
-  }
-
-  const publicSender = decodeBase58(value)
-  if (!publicSender) return { ok: false, reason: 'Use a valid Dusk public account.' }
-
-  if (publicSender.length !== PUBLIC_SENDER_KEY_BYTES) {
-    return {
-      ok: false,
-      reason: 'Use a valid Dusk public account.',
-    }
-  }
-
+  if (/^(?:0x)?[a-fA-F0-9]{64}$/u.test(value))
+    return { ok: false, reason: 'ambiguous_principal' }
+  const bytes = decodeBase58(value)
+  if (!bytes || !isMoonlightEndpoint(bytes))
+    return { ok: false, reason: 'invalid_account' }
   return {
     ok: true,
-    principal: authorityHexFromPublicSender(publicSender),
+    principal: { kind: 'Moonlight', bytes: Array.from(bytes) },
     source: 'moonlight_account',
   }
 }
-
-export function typedPrincipalFromWalletAccount(account: string): DuskPrincipalResult {
-  const value = account.trim()
-  if (!value) return { ok: false, reason: 'Wallet account is empty.' }
-
-  const contractMatch = /^contract:(0x[a-fA-F0-9]{64})$/.exec(value)
-  if (contractMatch) {
-    return {
-      ok: true,
-      principal: {
-        kind: 'Contract',
-        bytes: Array.from(hexToBytes32(contractMatch[1], 'contract principal')),
-      },
-      source: 'contract_id',
-    }
-  }
-
-  if (/^0x[a-fA-F0-9]{64}$/.test(value)) {
-    return {
-      ok: true,
-      principal: {
-        kind: 'Phoenix',
-        bytes: Array.from(hexToBytes32(value, 'principal')),
-      },
-      source: 'hex_principal',
-    }
-  }
-
-  const publicSender = decodeBase58(value)
-  if (!publicSender || !isMoonlightPublicKeyLength(publicSender.length)) {
-    return { ok: false, reason: 'Use a valid Dusk public account.' }
-  }
-
-  return {
-    ok: true,
-    principal: {
-      kind: 'Moonlight',
-      bytes: Array.from(publicSender),
-    },
-    source: 'moonlight_account',
-  }
+export function contractPrincipalFromWalletAccount(
+  account: string,
+): ContractPrincipalResult {
+  const result = typedPrincipalFromWalletAccount(account)
+  return result.ok
+    ? { ...result, principal: `0x${hex(authority(result.principal))}` }
+    : result
 }
-
-export function principalKey(principal: DuskPrincipal | null | undefined): string {
-  if (!principal) return ''
-  return `${principal.kind.toLowerCase()}:${bytesToHex(Uint8Array.from(principal.bytes))}`
+export function authorityHexFromPublicSender(sender: Uint8Array): string {
+  if (!isMoonlightEndpoint(sender))
+    throw new Error('Invalid Moonlight endpoint')
+  return `0x${hex(authority({ kind: 'Moonlight', bytes: Array.from(sender) }))}`
 }
-
-export function principalLabel(principal: DuskPrincipal | null | undefined): string {
-  if (!principal) return '-'
-  if (principal.kind === 'Moonlight') return 'Moonlight wallet'
-  if (principal.kind === 'Contract') return 'Contract'
-  return 'Direct principal'
+/** Same key as the frozen projection (case-sensitive kind tag). */
+export function principalKey(p: TypedPrincipal | null | undefined): string {
+  return p ? `${p.kind}:${hex(p.bytes)}` : ''
 }
-
-export function principalShortValue(principal: DuskPrincipal | null | undefined): string {
-  if (!principal) return '-'
-  const hex = `0x${bytesToHex(Uint8Array.from(principal.bytes))}`
-  return `${hex.slice(0, 10)}...${hex.slice(-6)}`
+export function principalLabel(p: TypedPrincipal | null | undefined): string {
+  return p?.kind ?? ''
 }
-
-export function authorityHexFromPublicSender(publicSender: Uint8Array): string {
-  if (publicSender.length !== PUBLIC_SENDER_KEY_BYTES) {
-    throw new Error(`Dusk public sender keys must be ${PUBLIC_SENDER_KEY_BYTES} bytes.`)
-  }
-
-  const material = new Uint8Array(RUNTIME_AUTHORITY_DOMAIN.length + publicSender.length)
-  material.set(RUNTIME_AUTHORITY_DOMAIN)
-  material.set(publicSender, RUNTIME_AUTHORITY_DOMAIN.length)
-  return `0x${bytesToHex(blake2b(material, { dkLen: 32 }))}`
-}
-
-function isMoonlightPublicKeyLength(length: number): boolean {
-  return length === PUBLIC_SENDER_KEY_BYTES || length === BLS_PUBLIC_KEY_BYTES
-}
-
-function hexToBytes32(value: string, label: string): Uint8Array {
-  const normalized = value.trim().toLowerCase()
-  if (!/^0x[a-f0-9]{64}$/.test(normalized)) {
-    throw new Error(`${label} must be a 32-byte hex string.`)
-  }
-  const bytes = new Uint8Array(32)
-  for (let index = 0; index < bytes.length; index += 1) {
-    bytes[index] = Number.parseInt(normalized.slice(2 + index * 2, 4 + index * 2), 16)
-  }
-  return bytes
-}
-
-export function decodeBase58(value: string): Uint8Array | null {
-  const bytes: number[] = []
-  const digits: number[] = []
-
-  for (const character of value) {
-    let carry = BASE58_ALPHABET.indexOf(character)
-    if (carry < 0) return null
-    if (carry === 0 && bytes.length === 0 && digits.length === 0) bytes.push(0)
-
-    for (let index = 0; index < digits.length || carry > 0; index += 1) {
-      const current = (digits[index] ?? 0) * 58 + carry
-      digits[index] = current & 0xff
-      carry = current >> 8
-    }
-  }
-
-  for (let index = digits.length - 1; index >= 0; index -= 1) {
-    bytes.push(digits[index])
-  }
-
-  return new Uint8Array(bytes)
-}
-
-export function encodeBase58(value: Uint8Array | number[]): string {
-  const source = value instanceof Uint8Array ? value : Uint8Array.from(value)
-  const digits = [0]
-
-  for (const byte of source) {
-    let carry = byte
-    for (let index = 0; index < digits.length; index += 1) {
-      carry += digits[index] << 8
-      digits[index] = carry % 58
-      carry = Math.floor(carry / 58)
-    }
-    while (carry > 0) {
-      digits.push(carry % 58)
-      carry = Math.floor(carry / 58)
-    }
-  }
-
-  for (const byte of source) {
-    if (byte === 0) digits.push(0)
-    else break
-  }
-
-  return digits.reverse().map((digit) => BASE58_ALPHABET[digit]).join('')
+export function principalShortValue(
+  p: TypedPrincipal | null | undefined,
+): string {
+  if (!p) return ''
+  const value = hex(p.bytes)
+  return `0x${value.slice(0, 8)}...${value.slice(-6)}`
 }

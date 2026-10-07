@@ -1,15 +1,27 @@
+/** Frozen record bounds plus optional conventions for familiar resolver keys. @module */
 import {
   checksumEthereumAddress,
   normalizeBitcoinAddress,
   validateBitcoinAddress,
   validateEthereumAddress,
   validateSolanaAddress,
-} from './chainAddresses.mjs'
-
-export const RECORD_VISIBILITIES = ['public', 'sensitive_public'] as const
-
-export type RecordVisibility = (typeof RECORD_VISIBILITIES)[number]
-
+} from '../chain-addresses.ts'
+import { contractId, fromHex } from '../frozen/bytes.ts'
+import { u64 } from '../frozen/json.ts'
+import { wireValue } from '../frozen/wire.ts'
+import type {
+  RecordInput,
+  RecordValue,
+  RecordMutation,
+} from '../frozen/types.ts'
+import { decodeBase58, isMoonlightEndpoint } from './principal.ts'
+export const MAX_RECORDS_PER_NAME = 16
+export const MAX_RECORD_MUTATIONS_PER_BATCH = 8
+export const MAX_RECORD_BATCH_PAYLOAD_BYTES = 4096
+export const MAX_RECORD_SET_PAYLOAD_BYTES = 9216
+export const MAX_RECORD_KEY_BYTES = 64
+export const MAX_RECORD_VALUE_BYTES = 512
+export const MAX_RECORD_TTL_SECONDS = 86400n
 export type StaticRecordKey =
   | 'moonlight_address'
   | 'phoenix_payment_endpoint'
@@ -25,378 +37,274 @@ export type StaticRecordKey =
   | 'content_pointer'
   | 'attestation_ref'
   | 'compliance_ref'
-
-export type DynamicRecordKey = `text.${string}` | `service_endpoint.${string}`
-export type ResolverRecordKey = StaticRecordKey | DynamicRecordKey
-
-export type ResolverRecord = {
-  key: ResolverRecordKey
-  value: string
-  visibility: RecordVisibility
-  updatedAt: string
-  ttlSeconds: number
-}
-
-export type RecordDefinition = {
-  key: ResolverRecordKey
-  label: string
-  visibility: RecordVisibility
+export type ResolverRecordKey = string
+export type ResolverRecord = RecordValue
+export type RecordIssue =
+  | 'key_bytes'
+  | 'value_bytes'
+  | 'ttl'
+  | 'invalid_address'
+  | 'invalid_url'
+  | 'invalid_reference'
+  | 'invalid_text'
+  | 'invalid_identifier'
+export interface RecordDefinition {
+  key: string
   maxBytes: number
-  defaultTtlSeconds: number
+  defaultTtlSeconds: bigint
+  encoding: 'utf8' | 'moonlight' | 'contract'
   eligibleForPrimaryName: boolean
-  eligibleForDefaultDuskRecipient: boolean
-  validate: (value: string) => string[]
-  normalize?: (value: string) => string
 }
-
-export type EncodedResolverRecord = {
-  version: 1
-  key: ResolverRecordKey
-  value: string
-  visibility: RecordVisibility
-  updatedAt: string
-  ttlSeconds: number
-}
-
+const keys: readonly StaticRecordKey[] = [
+  'moonlight_address',
+  'phoenix_payment_endpoint',
+  'dusk_contract',
+  'dusk_asset',
+  'evm_address',
+  'address.btc',
+  'address.eth',
+  'address.sol',
+  'address.evm',
+  'website',
+  'avatar',
+  'content_pointer',
+  'attestation_ref',
+  'compliance_ref',
+]
 const utf8 = new TextEncoder()
-const HTTPS_URL_MAX_BYTES = 2048
-const OPAQUE_REF_MAX_BYTES = 512
-const TEXT_MAX_BYTES = 512
-
-const staticDefinitions: Record<StaticRecordKey, RecordDefinition> = {
-  moonlight_address: {
-    key: 'moonlight_address',
-    label: 'Dusk Public Address',
-    visibility: 'public',
-    maxBytes: 160,
-    defaultTtlSeconds: 300,
-    eligibleForPrimaryName: true,
-    eligibleForDefaultDuskRecipient: true,
-    validate: validateMoonlightAddress,
-  },
-  phoenix_payment_endpoint: {
-    key: 'phoenix_payment_endpoint',
-    label: 'Dusk Shielded Address',
-    visibility: 'sensitive_public',
-    maxBytes: 256,
-    defaultTtlSeconds: 300,
-    eligibleForPrimaryName: false,
-    eligibleForDefaultDuskRecipient: false,
-    validate: validatePhoenixPaymentEndpoint,
-  },
-  dusk_contract: {
-    key: 'dusk_contract',
-    label: 'Dusk contract',
-    visibility: 'public',
-    maxBytes: 66,
-    defaultTtlSeconds: 300,
-    eligibleForPrimaryName: false,
-    eligibleForDefaultDuskRecipient: false,
-    validate: validateDuskContract,
-  },
-  dusk_asset: {
-    key: 'dusk_asset',
-    label: 'Dusk asset',
-    visibility: 'public',
-    maxBytes: 128,
-    defaultTtlSeconds: 300,
-    eligibleForPrimaryName: false,
-    eligibleForDefaultDuskRecipient: false,
-    validate: validateOpaqueIdentifier,
-  },
-  evm_address: {
-    key: 'evm_address',
-    label: 'DuskEVM Address',
-    visibility: 'public',
-    maxBytes: 42,
-    defaultTtlSeconds: 300,
-    eligibleForPrimaryName: false,
-    eligibleForDefaultDuskRecipient: false,
-    validate: validateEvmAddress,
-  },
-  'address.btc': {
-    key: 'address.btc',
-    label: 'Bitcoin address',
-    visibility: 'public',
-    maxBytes: 90,
-    defaultTtlSeconds: 300,
-    eligibleForPrimaryName: false,
-    eligibleForDefaultDuskRecipient: false,
-    validate: validateBitcoinAddress,
-    normalize: normalizeBitcoinAddress,
-  },
-  'address.eth': {
-    key: 'address.eth',
-    label: 'Ethereum address',
-    visibility: 'public',
-    maxBytes: 42,
-    defaultTtlSeconds: 300,
-    eligibleForPrimaryName: false,
-    eligibleForDefaultDuskRecipient: false,
-    validate: validateEthereumAddress,
-    normalize: checksumEthereumAddress,
-  },
-  'address.sol': {
-    key: 'address.sol',
-    label: 'Solana address',
-    visibility: 'public',
-    maxBytes: 44,
-    defaultTtlSeconds: 300,
-    eligibleForPrimaryName: false,
-    eligibleForDefaultDuskRecipient: false,
-    validate: validateSolanaAddress,
-  },
-  'address.evm': {
-    key: 'address.evm',
-    label: 'EVM address',
-    visibility: 'public',
-    maxBytes: 42,
-    defaultTtlSeconds: 300,
-    eligibleForPrimaryName: false,
-    eligibleForDefaultDuskRecipient: false,
-    validate: validateEthereumAddress,
-    normalize: checksumEthereumAddress,
-  },
-  website: {
-    key: 'website',
-    label: 'Website',
-    visibility: 'public',
-    maxBytes: HTTPS_URL_MAX_BYTES,
-    defaultTtlSeconds: 3600,
-    eligibleForPrimaryName: false,
-    eligibleForDefaultDuskRecipient: false,
-    validate: validateHttpsUrl,
-  },
-  avatar: {
-    key: 'avatar',
-    label: 'Avatar',
-    visibility: 'public',
-    maxBytes: HTTPS_URL_MAX_BYTES,
-    defaultTtlSeconds: 3600,
-    eligibleForPrimaryName: false,
-    eligibleForDefaultDuskRecipient: false,
-    validate: validateDisplayUri,
-  },
-  content_pointer: {
-    key: 'content_pointer',
-    label: 'Content pointer',
-    visibility: 'public',
-    maxBytes: HTTPS_URL_MAX_BYTES,
-    defaultTtlSeconds: 3600,
-    eligibleForPrimaryName: false,
-    eligibleForDefaultDuskRecipient: false,
-    validate: validateContentPointer,
-  },
-  attestation_ref: {
-    key: 'attestation_ref',
-    label: 'Attestation reference',
-    visibility: 'public',
-    maxBytes: OPAQUE_REF_MAX_BYTES,
-    defaultTtlSeconds: 3600,
-    eligibleForPrimaryName: false,
-    eligibleForDefaultDuskRecipient: false,
-    validate: validateOpaqueReference,
-  },
-  compliance_ref: {
-    key: 'compliance_ref',
-    label: 'Compliance reference',
-    visibility: 'public',
-    maxBytes: OPAQUE_REF_MAX_BYTES,
-    defaultTtlSeconds: 3600,
-    eligibleForPrimaryName: false,
-    eligibleForDefaultDuskRecipient: false,
-    validate: validateComplianceReference,
-  },
-}
-
-export const STATIC_RECORD_DEFINITIONS: RecordDefinition[] = Object.values(staticDefinitions)
-
-export function getRecordDefinition(key: ResolverRecordKey): RecordDefinition | undefined {
-  if (isStaticRecordKey(key)) return staticDefinitions[key]
-  if (isTextRecordKey(key)) return createTextRecordDefinition(key)
-  if (isServiceEndpointRecordKey(key)) return createServiceEndpointDefinition(key)
-  return undefined
-}
-
-export function validateRecordValue(key: ResolverRecordKey, value: string): string[] {
-  const definition = getRecordDefinition(key)
-  if (!definition) return [`Unsupported resolver record key: ${key}`]
-
-  const errors = validateByteLength(value, definition.maxBytes)
-  return [...errors, ...definition.validate(value)]
-}
-
-export function createResolverRecord(
-  key: ResolverRecordKey,
-  value: string,
-  updatedAt: string = new Date().toISOString(),
-): ResolverRecord {
-  const definition = getRecordDefinition(key)
-
-  if (!definition) {
-    throw new Error(`Unsupported resolver record key: ${key}`)
-  }
-
-  const errors = validateRecordValue(key, value)
-
-  if (errors.length > 0) {
-    throw new Error(errors.join(' '))
-  }
-
+function definition(key: string): RecordDefinition {
   return {
     key,
-    value: definition.normalize?.(value) ?? value,
-    visibility: definition.visibility,
-    updatedAt,
-    ttlSeconds: definition.defaultTtlSeconds,
+    maxBytes: MAX_RECORD_VALUE_BYTES,
+    defaultTtlSeconds:
+      key.startsWith('address.') ||
+      [
+        'moonlight_address',
+        'phoenix_payment_endpoint',
+        'dusk_contract',
+        'dusk_asset',
+        'evm_address',
+      ].includes(key)
+        ? 300n
+        : 3600n,
+    encoding:
+      key === 'moonlight_address'
+        ? 'moonlight'
+        : key === 'dusk_contract'
+          ? 'contract'
+          : 'utf8',
+    eligibleForPrimaryName: key === 'moonlight_address',
   }
 }
-
-export function encodeResolverRecord(record: ResolverRecord): string {
-  return JSON.stringify({
-    version: 1,
-    key: record.key,
-    value: record.value,
-    visibility: record.visibility,
-    updatedAt: record.updatedAt,
-    ttlSeconds: record.ttlSeconds,
-  } satisfies EncodedResolverRecord)
+export const STATIC_RECORD_DEFINITIONS: readonly RecordDefinition[] =
+  Object.freeze(keys.map((k) => Object.freeze(definition(k))))
+/** Custom keys are accepted by the resolver. They receive the raw UTF-8 convention. */
+export function getRecordDefinition(key: string): RecordDefinition | undefined {
+  return validKey(key) ? definition(key) : undefined
 }
-
-export function decodeResolverRecord(encoded: string): ResolverRecord {
-  const parsed = JSON.parse(encoded) as Partial<EncodedResolverRecord>
-
-  if (parsed.version !== 1) {
-    throw new Error('Unsupported resolver record encoding version.')
-  }
-
-  if (!parsed.key || !parsed.value || !parsed.visibility || !parsed.updatedAt || parsed.ttlSeconds === undefined) {
-    throw new Error('Resolver record encoding is missing required fields.')
-  }
-
-  if (!RECORD_VISIBILITIES.includes(parsed.visibility)) {
-    throw new Error('Resolver record visibility is unsupported.')
-  }
-
-  const errors = validateRecordValue(parsed.key, parsed.value)
-
-  if (errors.length > 0) {
-    throw new Error(errors.join(' '))
-  }
-
-  return {
-    key: parsed.key,
-    value: parsed.value,
-    visibility: parsed.visibility,
-    updatedAt: parsed.updatedAt,
-    ttlSeconds: parsed.ttlSeconds,
-  }
+function validKey(key: string): boolean {
+  const length = utf8.encode(key).length
+  return (
+    new TextDecoder().decode(utf8.encode(key)) === key &&
+    length >= 1 &&
+    length <= MAX_RECORD_KEY_BYTES
+  )
 }
-
-function isStaticRecordKey(key: ResolverRecordKey): key is StaticRecordKey {
-  return key in staticDefinitions
-}
-
-function isTextRecordKey(key: ResolverRecordKey): key is `text.${string}` {
-  return /^text\.[a-z0-9_:-]{1,40}$/.test(key)
-}
-
-function isServiceEndpointRecordKey(key: ResolverRecordKey): key is `service_endpoint.${string}` {
-  return /^service_endpoint\.[a-z0-9_-]{1,40}$/.test(key)
-}
-
-function createTextRecordDefinition(key: `text.${string}`): RecordDefinition {
-  return {
-    key,
-    label: key,
-    visibility: 'public',
-    maxBytes: TEXT_MAX_BYTES,
-    defaultTtlSeconds: 3600,
-    eligibleForPrimaryName: false,
-    eligibleForDefaultDuskRecipient: false,
-    validate: validatePublicText,
-  }
-}
-
-function createServiceEndpointDefinition(key: `service_endpoint.${string}`): RecordDefinition {
-  return {
-    key,
-    label: key,
-    visibility: 'public',
-    maxBytes: HTTPS_URL_MAX_BYTES,
-    defaultTtlSeconds: 3600,
-    eligibleForPrimaryName: false,
-    eligibleForDefaultDuskRecipient: false,
-    validate: validateHttpsUrl,
-  }
-}
-
-function validateByteLength(value: string, maxBytes: number) {
-  if (utf8.encode(value).byteLength > maxBytes) return [`Value exceeds ${maxBytes} bytes.`]
-  return []
-}
-
-function validateMoonlightAddress(value: string) {
-  if (/^dusk1[a-z0-9]{20,127}$/.test(value)) return []
-  if (/^[1-9A-HJ-NP-Za-km-z]{32,160}$/.test(value)) return []
-  return ['Dusk addresses must use a dusk1-prefixed address or Dusk account address form.']
-}
-
-function validatePhoenixPaymentEndpoint(value: string) {
-  if (/^[A-Za-z0-9:_-]{32,256}$/.test(value)) return []
-  return ['Dusk Shielded Addresses must be explicit wallet-approved receive addresses, not profile identity fields.']
-}
-
-function validateDuskContract(value: string) {
-  if (/^0x[a-fA-F0-9]{64}$/.test(value)) return []
-  return ['Dusk contract IDs must be 32-byte hex strings formatted as 0x + 64 hex characters.']
-}
-
-function validateEvmAddress(value: string) {
-  if (/^0x[a-fA-F0-9]{40}$/.test(value)) return []
-  return ['DuskEVM Addresses must be 20-byte hex strings formatted as 0x + 40 hex characters.']
-}
-
-function validateHttpsUrl(value: string) {
+function https(value: string): boolean {
+  if (/\s/u.test(value)) return false
   try {
-    const url = new URL(value)
-    return url.protocol === 'https:' ? [] : ['URLs must use HTTPS.']
+    const u = new URL(value)
+    return u.protocol === 'https:' && !!u.hostname && !u.username && !u.password
   } catch {
-    return ['Value must be a valid HTTPS URL.']
+    return false
   }
 }
-
-function validateDisplayUri(value: string) {
-  if (value.startsWith('ipfs://') || value.startsWith('ar://')) return []
-  return validateHttpsUrl(value)
+function content(value: string): boolean {
+  return https(value) || /^(?:ipfs|ar):\/\/[^\s]+$/u.test(value)
 }
-
-function validateContentPointer(value: string) {
-  if (/^ipfs:\/\/[a-zA-Z0-9]+/.test(value) || /^bafy[a-zA-Z0-9]+$/.test(value)) return []
-  return validateDisplayUri(value)
-}
-
-function validateOpaqueIdentifier(value: string) {
-  if (/^[A-Za-z0-9:._-]{3,128}$/.test(value)) return []
-  return ['Identifier must be 3-128 visible characters using letters, numbers, colon, dot, underscore, or hyphen.']
-}
-
-function validateOpaqueReference(value: string) {
-  if (/^(https:\/\/|urn:|dusk:)[^\s]{3,512}$/.test(value)) return []
-  return ['Reference must be an HTTPS URL, URN, or dusk: reference without whitespace.']
-}
-
-function validateComplianceReference(value: string) {
-  return validateOpaqueReference(value)
-}
-
-function validatePublicText(value: string) {
-  if (value.trim().length === 0) return ['Text records cannot be empty.']
-  if ([...value].some((character) => {
-    const codePoint = character.codePointAt(0) ?? 0
-    return codePoint < 32 || codePoint === 127
-  })) {
-    return ['Text records cannot contain control characters.']
+function encodeValue(key: string, value: string): number[] {
+  if (key === 'moonlight_address') {
+    const bytes = decodeBase58(value)
+    if (!bytes || !isMoonlightEndpoint(bytes))
+      throw new Error('invalid_address')
+    return Array.from(bytes)
   }
-  return []
+  if (key === 'dusk_contract') return fromHex(contractId(value), 32)
+  const normalized =
+    key === 'address.btc'
+      ? normalizeBitcoinAddress(value)
+      : key === 'address.eth' || key === 'address.evm'
+        ? checksumEthereumAddress(value)
+        : value
+  return Array.from(utf8.encode(normalized))
+}
+/** Convention validation; raw contract validation is validateRecordInput. Returns codes, never UI copy. */
+export function validateRecordValue(key: string, value: string): RecordIssue[] {
+  const issues: RecordIssue[] = []
+  if (!validKey(key)) issues.push('key_bytes')
+  let bytes: number[] = []
+  try {
+    bytes = encodeValue(key, value)
+  } catch {
+    issues.push('invalid_address')
+  }
+  if (
+    (!bytes.length || bytes.length > 512) &&
+    !issues.includes('invalid_address')
+  )
+    issues.push('value_bytes')
+  const invalid = (code: RecordIssue): void => {
+    if (!issues.includes(code)) issues.push(code)
+  }
+  if (new TextDecoder().decode(utf8.encode(value)) !== value)
+    invalid('invalid_text')
+  if (key === 'address.btc' && validateBitcoinAddress(value).length)
+    invalid('invalid_address')
+  if (
+    (key === 'address.eth' || key === 'address.evm') &&
+    validateEthereumAddress(value).length
+  )
+    invalid('invalid_address')
+  if (key === 'address.sol' && validateSolanaAddress(value).length)
+    invalid('invalid_address')
+  if (key === 'evm_address' && !/^0x[a-fA-F0-9]{40}$/u.test(value))
+    invalid('invalid_address')
+  if (
+    key === 'phoenix_payment_endpoint' &&
+    !/^[A-Za-z0-9:_-]{32,256}$/u.test(value)
+  )
+    invalid('invalid_address')
+  if (key === 'dusk_asset' && !/^[A-Za-z0-9:._-]{3,128}$/u.test(value))
+    invalid('invalid_identifier')
+  if (
+    (key === 'website' || key.startsWith('service_endpoint.')) &&
+    !https(value)
+  )
+    invalid('invalid_url')
+  if (key === 'avatar' && !content(value)) invalid('invalid_url')
+  if (
+    key === 'content_pointer' &&
+    !content(value) &&
+    !/^bafy[a-zA-Z0-9]+$/u.test(value)
+  )
+    invalid('invalid_reference')
+  if (
+    ['attestation_ref', 'compliance_ref'].includes(key) &&
+    !(https(value) || /^(?:urn:|dusk:)[^\s]{3,}$/u.test(value))
+  )
+    invalid('invalid_reference')
+  if (
+    key.startsWith('text.') &&
+    (!value.trim() || /[\u0000-\u001f\u007f]/u.test(value))
+  )
+    invalid('invalid_text')
+  return issues
+}
+/** Raw validation mirrors store validation.rs and resolver state.rs, including arbitrary keys/bytes. */
+export function validateRecordInput(input: RecordInput): RecordInput {
+  const record = wireValue('RecordInput', input)
+  if (!validKey(record.key)) throw new RangeError('key_bytes')
+  if (!record.value.length || record.value.length > 512)
+    throw new RangeError('value_bytes')
+  if (record.ttl_seconds < 1n || record.ttl_seconds > 86400n)
+    throw new RangeError('ttl')
+  return record
+}
+/** Registration/replacement input. Store stamps updated_at from its current block. */
+export function createRecordInput(
+  key: string,
+  value: string,
+  ttlSeconds?: bigint,
+): RecordInput {
+  const issues = validateRecordValue(key, value)
+  if (issues.length) throw new RangeError(issues.join(','))
+  return validateRecordInput({
+    key,
+    value: encodeValue(key, value),
+    ttl_seconds: ttlSeconds ?? definition(key).defaultTtlSeconds,
+  })
+}
+/** Observed/projected record. updatedAt is explicitly a block height. */
+export function createResolverRecord(
+  key: string,
+  value: string,
+  updatedAt: bigint,
+  ttlSeconds?: bigint,
+): RecordValue {
+  return {
+    ...createRecordInput(key, value, ttlSeconds),
+    updated_at: u64(updatedAt),
+  }
+}
+export function validateRecordSet(
+  input: readonly RecordValue[],
+  height: bigint,
+): RecordValue[] {
+  u64(height)
+  if (input.length > 16) throw new RangeError('record_count')
+  let payload = 0
+  const seen = new Set<string>()
+  const rows = input.map((raw) => {
+    const r = wireValue('RecordValue', raw)
+    validateRecordInput({
+      key: r.key,
+      value: r.value,
+      ttl_seconds: r.ttl_seconds,
+    })
+    if (r.updated_at > height) throw new RangeError('future_timestamp')
+    if (seen.has(r.key)) throw new RangeError('duplicate_key')
+    seen.add(r.key)
+    payload += utf8.encode(r.key).length + r.value.length
+    return r
+  })
+  if (payload > 9216) throw new RangeError('record_payload')
+  return rows.sort((a, b) => compareUtf8(a.key, b.key))
+}
+function compareUtf8(a: string, b: string): number {
+  const x = utf8.encode(a),
+    y = utf8.encode(b)
+  for (let i = 0; i < Math.min(x.length, y.length); i++)
+    if (x[i] !== y[i]) return x[i] - y[i]
+  return x.length - y.length
+}
+/** Atomic local simulation; Clear is idempotent, Set stamps height, TTL does not expire storage. */
+export function applyRecordMutations(
+  records: readonly RecordValue[],
+  mutations: readonly RecordMutation[],
+  height: bigint,
+): RecordValue[] {
+  const current = validateRecordSet(records, height)
+  if (mutations.length < 1 || mutations.length > 8)
+    throw new RangeError('mutation_count')
+  const checked = mutations.map((m) => wireValue('RecordMutation', m)),
+    seen = new Set<string>()
+  let payload = 0
+  for (const m of checked) {
+    if (!validKey(m.key)) throw new RangeError('key_bytes')
+    if (seen.has(m.key)) throw new RangeError('duplicate_key')
+    seen.add(m.key)
+    payload += utf8.encode(m.key).length + m.value.length
+    if (m.action === 'Clear') {
+      if (m.value.length || m.ttl_seconds !== 0n)
+        throw new RangeError('clear_payload')
+    } else
+      validateRecordInput({
+        key: m.key,
+        value: m.value,
+        ttl_seconds: m.ttl_seconds,
+      })
+  }
+  if (payload > 4096) throw new RangeError('mutation_payload')
+  const next = new Map(current.map((r) => [r.key, r]))
+  for (const m of checked) {
+    if (m.action === 'Clear') next.delete(m.key)
+    else
+      next.set(m.key, {
+        key: m.key,
+        value: [...m.value],
+        ttl_seconds: m.ttl_seconds,
+        updated_at: height,
+      })
+  }
+  return validateRecordSet([...next.values()], height)
 }

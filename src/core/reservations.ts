@@ -1,189 +1,54 @@
-export const PENDING_NAME_RESERVATIONS_STORAGE_KEY = 'dusk-domains:pending-reservations:v1'
-
-export type PendingNameReservation = {
+/** Reload recovery for commitments, bound to the original deployment and shard. @module */
+import { contractId, fromHex, hex, namehashHex } from '../frozen/bytes.ts'
+import { u64, parseJson, stringifyJson } from '../frozen/json.ts'
+import { registrationCommitmentHex } from './commitment.ts'
+import { registrationYears } from './lifecycle.ts'
+import { validateName } from './names.ts'
+export const PENDING_NAME_RESERVATIONS_STORAGE_KEY =
+  'dusk-domains:pending-reservations:frozen:v1'
+export interface ReservationStorage {
+  getItem(key: string): string | null
+  setItem(key: string, value: string): void
+}
+export interface PendingNameReservation {
   name: string
   node: string
   commitment: string
   secret: string
   controller: string
-  ownerAddress: string
   chainId: string
+  directory: string
+  commitmentStore: string
   durationYears: number
-  committedBlockHeight: number | null
+  committedBlockHeight: bigint | null
   committedTxId: string | null
   createdAt: string
   updatedAt: string
 }
-
-export type PendingNameReservationFilter = {
+export interface PendingNameReservationFilter {
   chainId?: string
+  directory?: string
   controller?: string
+  commitmentStore?: string
 }
-
-export type PendingNameReservationKey = {
+export interface PendingNameReservationKey {
   chainId: string
+  directory: string
   controller: string
-  commitment?: string
-  node?: string
+  commitmentStore: string
+  commitment: string
 }
-
-type StorageLike = Pick<Storage, 'getItem' | 'setItem'>
-
-export function listPendingNameReservations(
-  filter: PendingNameReservationFilter = {},
-  storage?: StorageLike | null,
-): PendingNameReservation[] {
-  const reservations = readPendingNameReservations(storage)
-  return reservations
-    .filter((reservation) => {
-      if (filter.chainId && reservation.chainId !== filter.chainId) return false
-      if (filter.controller && normalizeController(reservation.controller) !== normalizeController(filter.controller)) return false
-      return true
-    })
-    .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt))
-}
-
-export function upsertPendingNameReservation(
-  reservation: PendingNameReservation,
-  storage?: StorageLike | null,
-): PendingNameReservation[] {
-  const normalized = normalizePendingNameReservation(reservation)
-  if (!normalized) return []
-
-  const reservations = readPendingNameReservations(storage)
-  const next = [
-    normalized,
-    ...reservations.filter((current) => !sameReservationSlot(current, normalized)),
-  ]
-
-  writePendingNameReservations(next, storage)
-  return listPendingNameReservations({}, storage)
-}
-
-export function updatePendingNameReservationBlock(
-  key: PendingNameReservationKey,
-  update: {
-    committedBlockHeight: number | null
-    committedTxId?: string | null
-    updatedAt?: string
-  },
-  storage?: StorageLike | null,
-): PendingNameReservation[] {
-  const reservations = readPendingNameReservations(storage)
-  let updated = false
-  const next = reservations.map((reservation) => {
-    if (!matchesReservationKey(reservation, key)) return reservation
-    updated = true
-    return {
-      ...reservation,
-      committedBlockHeight: update.committedBlockHeight,
-      committedTxId: update.committedTxId ?? reservation.committedTxId,
-      updatedAt: update.updatedAt ?? new Date().toISOString(),
-    }
-  })
-
-  if (updated) writePendingNameReservations(next, storage)
-  return listPendingNameReservations({}, storage)
-}
-
-export function removePendingNameReservation(
-  key: PendingNameReservationKey,
-  storage?: StorageLike | null,
-): PendingNameReservation[] {
-  const reservations = readPendingNameReservations(storage)
-  const next = reservations.filter((reservation) => !matchesReservationKey(reservation, key))
-
-  if (next.length !== reservations.length) {
-    writePendingNameReservations(next, storage)
-  }
-
-  return listPendingNameReservations({}, storage)
-}
-
-function readPendingNameReservations(storage?: StorageLike | null) {
-  const resolvedStorage = resolveStorage(storage)
-  if (!resolvedStorage) return []
-
-  try {
-    const raw = resolvedStorage.getItem(PENDING_NAME_RESERVATIONS_STORAGE_KEY)
-    if (!raw) return []
-    const payload = JSON.parse(raw) as unknown
-    if (!Array.isArray(payload)) return []
-    return payload
-      .map(normalizePendingNameReservation)
-      .filter((reservation): reservation is PendingNameReservation => reservation !== null)
-  } catch {
-    return []
+export class ReservationStorageError extends Error {
+  constructor(
+    readonly code: 'unavailable' | 'corrupt' | 'write_failed',
+    options?: ErrorOptions,
+  ) {
+    super(`Reservation storage: ${code}`, options)
   }
 }
-
-function writePendingNameReservations(
-  reservations: PendingNameReservation[],
-  storage?: StorageLike | null,
-) {
-  const resolvedStorage = resolveStorage(storage)
-  if (!resolvedStorage) return
-
-  try {
-    resolvedStorage.setItem(PENDING_NAME_RESERVATIONS_STORAGE_KEY, JSON.stringify(reservations))
-  } catch {
-    // Local reservation recovery is best-effort; the transaction remains canonical.
-  }
-}
-
-function normalizePendingNameReservation(value: unknown): PendingNameReservation | null {
-  if (!isRecord(value)) return null
-
-  const name = stringField(value.name)
-  const node = stringField(value.node)
-  const commitment = stringField(value.commitment)
-  const secret = stringField(value.secret)
-  const controller = stringField(value.controller)
-  const ownerAddress = stringField(value.ownerAddress)
-  const chainId = stringField(value.chainId)
-  const createdAt = stringField(value.createdAt)
-  const updatedAt = stringField(value.updatedAt)
-  const durationYears = numberField(value.durationYears)
-  const committedBlockHeight = nullableNumberField(value.committedBlockHeight)
-  const committedTxId = nullableStringField(value.committedTxId)
-
-  if (!name || !node || !commitment || !secret || !controller || !ownerAddress || !chainId || !createdAt || !updatedAt) {
-    return null
-  }
-  if (!Number.isInteger(durationYears) || durationYears < 1 || durationYears > 10) return null
-  if (!isValidIsoDate(createdAt) || !isValidIsoDate(updatedAt)) return null
-
-  return {
-    name,
-    node,
-    commitment,
-    secret,
-    controller,
-    ownerAddress,
-    chainId,
-    durationYears,
-    committedBlockHeight,
-    committedTxId,
-    createdAt,
-    updatedAt,
-  }
-}
-
-function sameReservationSlot(left: PendingNameReservation, right: PendingNameReservation) {
-  if (left.chainId !== right.chainId) return false
-  if (normalizeController(left.controller) !== normalizeController(right.controller)) return false
-  return left.commitment === right.commitment || left.node === right.node
-}
-
-function matchesReservationKey(reservation: PendingNameReservation, key: PendingNameReservationKey) {
-  if (reservation.chainId !== key.chainId) return false
-  if (normalizeController(reservation.controller) !== normalizeController(key.controller)) return false
-  if (key.commitment && reservation.commitment === key.commitment) return true
-  if (key.node && reservation.node === key.node) return true
-  return false
-}
-
-function resolveStorage(storage?: StorageLike | null) {
+function storageOrNull(
+  storage?: ReservationStorage | null,
+): ReservationStorage | null {
   if (storage !== undefined) return storage
   try {
     return globalThis.localStorage ?? null
@@ -191,33 +56,178 @@ function resolveStorage(storage?: StorageLike | null) {
     return null
   }
 }
-
-function normalizeController(value: string) {
-  return value.trim().toLowerCase()
+const bytes32 = (value: string): string =>
+  `0x${hex(fromHex(value.replace(/^0X/u, '0x'), 32))}`
+function normalize(value: PendingNameReservation): PendingNameReservation {
+  const v = validateName(value.name)
+  if (!v.ok || v.name.depth || v.name.canonical !== value.name)
+    throw new Error('Invalid reservation name')
+  registrationYears(value.durationYears)
+  if (!/^dusk:[\w-]+$/u.test(value.chainId)) throw new Error('Invalid chain')
+  if (
+    ![value.createdAt, value.updatedAt].every(
+      (s) => typeof s === 'string' && Number.isFinite(Date.parse(s)),
+    )
+  )
+    throw new Error('Invalid reservation date')
+  if (
+    value.committedTxId !== null &&
+    (typeof value.committedTxId !== 'string' || !value.committedTxId)
+  )
+    throw new Error('Invalid transaction ID')
+  const result: PendingNameReservation = {
+    name: value.name,
+    node: bytes32(value.node),
+    commitment: bytes32(value.commitment),
+    secret: bytes32(value.secret),
+    controller: `0x${contractId(value.controller.replace(/^0X/u, '0x'))}`,
+    chainId: value.chainId,
+    directory: contractId(value.directory),
+    commitmentStore: contractId(value.commitmentStore),
+    durationYears: value.durationYears,
+    committedBlockHeight:
+      value.committedBlockHeight === null
+        ? null
+        : u64(value.committedBlockHeight),
+    committedTxId: value.committedTxId,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  }
+  if (
+    result.node !== `0x${namehashHex(result.name)}` ||
+    registrationCommitmentHex({
+      node: result.node,
+      controller: result.controller,
+      label: v.name.registrableLabel,
+      secret: result.secret,
+    }) !== result.commitment
+  )
+    throw new Error('Reservation commitment mismatch')
+  return result
 }
-
-function stringField(value: unknown) {
-  return typeof value === 'string' && value.trim() ? value : ''
+function read(
+  storage: ReservationStorage | null,
+  strict: boolean,
+): PendingNameReservation[] {
+  if (!storage) {
+    if (strict) throw new ReservationStorageError('unavailable')
+    return []
+  }
+  let raw: string | null
+  try {
+    raw = storage.getItem(PENDING_NAME_RESERVATIONS_STORAGE_KEY)
+  } catch (cause) {
+    if (strict) throw new ReservationStorageError('unavailable', { cause })
+    return []
+  }
+  if (raw === null) return []
+  try {
+    const rows = parseJson(raw)
+    if (!Array.isArray(rows)) throw new Error('Invalid storage envelope')
+    const result: PendingNameReservation[] = []
+    for (const row of rows) {
+      try {
+        result.push(normalize(row as unknown as PendingNameReservation))
+      } catch (cause) {
+        if (strict) throw cause
+      }
+    }
+    return result
+  } catch (cause) {
+    if (strict) throw new ReservationStorageError('corrupt', { cause })
+    return []
+  }
 }
-
-function nullableStringField(value: unknown) {
-  if (value === null || value === undefined) return null
-  return typeof value === 'string' ? value : null
+function matching(
+  row: PendingNameReservation,
+  f: PendingNameReservationFilter,
+): boolean {
+  return (
+    (!f.chainId || row.chainId === f.chainId) &&
+    (!f.directory || row.directory === contractId(f.directory)) &&
+    (!f.commitmentStore ||
+      row.commitmentStore === contractId(f.commitmentStore)) &&
+    (!f.controller || row.controller === bytes32(f.controller))
+  )
 }
-
-function numberField(value: unknown) {
-  return typeof value === 'number' && Number.isFinite(value) ? value : Number.NaN
+function keyMatches(
+  row: PendingNameReservation,
+  key: PendingNameReservationKey,
+): boolean {
+  if (
+    !key.chainId ||
+    !key.directory ||
+    !key.controller ||
+    !key.commitmentStore ||
+    !key.commitment
+  )
+    throw new Error('Incomplete reservation key')
+  return matching(row, key) && row.commitment === bytes32(key.commitment)
 }
-
-function nullableNumberField(value: unknown) {
-  if (value === null || value === undefined) return null
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null
+function sorted(rows: PendingNameReservation[]): PendingNameReservation[] {
+  return rows.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
 }
-
-function isValidIsoDate(value: string) {
-  return Number.isFinite(Date.parse(value))
+/** Unavailable/malformed storage yields no recovered rows. Mutations report failure explicitly. */
+export function listPendingNameReservations(
+  filter: PendingNameReservationFilter = {},
+  storage?: ReservationStorage | null,
+): PendingNameReservation[] {
+  return sorted(
+    read(storageOrNull(storage), false).filter((r) => matching(r, filter)),
+  )
 }
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+function mutate(
+  storage: ReservationStorage | null | undefined,
+  operation: (rows: PendingNameReservation[]) => PendingNameReservation[],
+): PendingNameReservation[] {
+  const adapter = storageOrNull(storage),
+    next = sorted(operation(read(adapter, true)))
+  try {
+    adapter!.setItem(PENDING_NAME_RESERVATIONS_STORAGE_KEY, stringifyJson(next))
+  } catch (cause) {
+    throw new ReservationStorageError('write_failed', { cause })
+  }
+  return next
+}
+/** Same digest on different shards is a different recovery entry; a new secret never erases an old one. */
+export function upsertPendingNameReservation(
+  reservation: PendingNameReservation,
+  storage?: ReservationStorage | null,
+): PendingNameReservation[] {
+  const next = normalize(reservation)
+  return mutate(storage, (rows) => [
+    next,
+    ...rows.filter((r) => !keyMatches(r, next)),
+  ])
+}
+export function removePendingNameReservation(
+  key: PendingNameReservationKey,
+  storage?: ReservationStorage | null,
+): PendingNameReservation[] {
+  return mutate(storage, (rows) => rows.filter((r) => !keyMatches(r, key)))
+}
+export function updatePendingNameReservationBlock(
+  key: PendingNameReservationKey,
+  update: {
+    committedBlockHeight: bigint | null
+    committedTxId?: string | null
+    updatedAt?: string
+  },
+  storage?: ReservationStorage | null,
+): PendingNameReservation[] {
+  return mutate(storage, (rows) =>
+    rows.map((r) =>
+      keyMatches(r, key)
+        ? normalize({
+            ...r,
+            committedBlockHeight: update.committedBlockHeight,
+            committedTxId:
+              update.committedTxId === undefined
+                ? r.committedTxId
+                : update.committedTxId,
+            updatedAt: update.updatedAt ?? new Date().toISOString(),
+          })
+        : r,
+    ),
+  )
 }
