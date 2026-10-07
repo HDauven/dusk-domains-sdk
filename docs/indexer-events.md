@@ -1,136 +1,84 @@
-# Event schema and projection
+# Frozen event catalog and projection
 
-`@duskdomains/sdk/event-catalog` exports normalized event families,
-`duskDomainsContractEventTopics` for current contract subscriptions and a separate
-retired-topic list. [The catalog source](../src/indexer/events/indexerEventCatalog.ts)
-and contract data-driver schemas define the complete topic and payload surface.
+Import `indexerEventCatalog` from `@duskdomains/sdk/event-catalog`. It enumerates
+all 56 framing/effect topics from §11 and marketplace v1, their legitimate role
+and exact wire type. All effect payloads are `{ version: 1, op_seq, body }`;
+`operation_begin` and `operation_end` are unwrapped framing records.
 
-`normalizeObservedEvent` from `@duskdomains/sdk/projection` converts decoded
-W3sper/data-driver payloads into camelCase envelopes. It does not decode raw RKYV
-bytes. The collector supplies contract, transaction, block and event identity;
-the shared projection supplies lifecycle, records, primary names, treasury,
-referrals, pool and marketplace state. Persistence and HTTP serving live in the
-[indexer](https://github.com/HDauven/dusk-domains-indexer/blob/main/README.md).
-
-Driver JSON represents `*_lux` amounts as decimal strings at every nesting depth.
-The decoders also accept safe numbers from earlier drivers, and either decimal
-strings or numbers for other u64 fields such as heights, counts and timestamps.
-Bounded fields must fit the JavaScript safe-integer range. Treasury and referral
-accounting remains exact beyond that range; a rounded number from an older driver
-cannot be recovered and is rejected.
-
-## Envelope
+Decode raw event bytes with the release-verified driver's `decodeEvent(topic,
+bytes)`. Preserve the host emitter, transaction ID, block height, receipt
+ordinal, transaction success and per-event `reverted` flag. Never pass raw JSON
+through a parser that rounds u64 fields.
 
 ```ts
-{
-  event: { type: 'record_cleared', node, controller, key },
-  meta: { chainId, contractKey: 'core', contractId, txId, blockHeight,
-    eventIndex, eventId, observedAt }
-}
+import { createProjector } from '@duskdomains/sdk/projection'
+
+// `client` comes from createClientFromManifest; start at deployment receipts.
+const projector = createProjector({
+  directoryId: client.directoryId,
+  contracts: Object.fromEntries(
+    [...client.release.contracts.values()].map(c => [c.contractId, c.role]),
+  ),
+})
+// A receipt is { id, height: bigint, success, events }.
+// Each event is { emitter, topic, data: decodedWireValue, ordinal, reverted? }.
+// const state = projector.apply(receipt)
 ```
 
-The identifier variables above come from the decoded event and its archive
-provenance. The archive collector retains finalized block/transaction ordering,
-block hashes and stable event identities. Projection callers order and deduplicate
-before applying events; the projector itself does not provide a durable journal.
-Unknown/malformed events fail normalization or become replay warnings in the server.
+The initial scope must be release-verified. Subsequent admissions come from
+committed directory initialization/actions; arbitrary callback contracts cannot
+assert registry/vault authority. Do not seed this scope from untrusted events.
+The indexer retains previously admitted emitters, including old marketplaces.
 
-## Current emitted families
+## Journal semantics
 
-| Emitter | Topics |
-| --- | --- |
-| Registry | `registration_committed`, `registration_revealed`, `name_registered`, `name_renewed`, `name_owner_changed`, `record_changed`, `record_cleared`, `primary_name_changed`, `subname_created`, `subname_pruned`, `records_moved`. |
-| Router | `router_initialized`, `pool_member_added`, `fee_config_updated`, `reserved_name_issued`, `registrations_paused_changed` and router handover events. |
-| Treasury | `treasury_initialized`, `treasury_fee_received`, `treasury_claimed`, `referral_reward_accrued`, `referral_reward_claimed` and treasury handover events. |
-| Marketplace | `marketplace_initialized`, `marketplace_config_updated`, `trading_paused_changed`, fixed-sale/auction/offer lifecycle events, `marketplace_refund_claimed` and marketplace handover events. |
+Failed transactions contribute no effects. Reverted events are discarded before
+framing. A Begin occurrence is distinguished by ordinal, emitter, sequence and
+runtime path. The latest open strict path prefix is its parent. Replaced or
+abandoned unfinished journals and their children are discarded; a reused sequence
+after rollback cannot inherit the failed occurrence's effects. A child commits
+only when its own End and every enclosing frozen End succeeded.
 
-The resolver stores records but emits no separate record events; registry writes
-emit them. `name_expired`, `name_released` and `resolver_changed` remain accepted
-legacy/synthetic projection types, not current registry emissions. Expiry is
-computed from lifecycle heights; there is no automatic expiry transaction.
-Retired revocation/delegation topics are not current subname operations.
+`projectReceipt` applies to a cloned state and returns it only after the entire
+receipt validates. Missing move rows, resolver snapshots or readiness seals
+throw. `RootImported` and `RootForwarded` must appear together, so no partially
+moved tree or duplicate endpoint is externally visible. `createProjector` adds
+idempotent receipt application and `rollbackTo(height)` checkpoints. Roll back
+the replaced block as a whole before replaying a same-height fork. Persist
+checkpoints and prune retained history at your application's finality boundary;
+the convenience projector keeps them in memory.
 
-## Projection semantics
+## State semantics
 
-- Commitments are keyed by `(controller, commitment)` and reveal no label/node
-  until `registration_revealed`. Physical commitment pruning and automatic same-controller expiry cleanup on commit
-  emit no event. Commitment projections retain history; use age and the registry
-  read to determine usability.
-- `name_registered` resets stale name state; the following ownership/record events
-  establish the new registration. `name_renewed.actor` is the payer and never changes ownership or manager rights.
-  Renewal extends inheriting subname chains;
-  fixed-expiry branches retain their dates. No separate renewal event is emitted
-  for each subname.
-- `subname_created` also means recreation: clear old records, primary mapping and
-  descendants before applying the new row. `subname_pruned` removes the expired
-  subtree without a replacement. Historical activity remains.
-- Records remain keyed by their own node/key. `records_moved` changes the resolver
-  while preserving current records. Pool registries carry their emitting contract
-  ID in metadata; membership events extend collector scope.
-- `reserved_name_issued` supplements normal registration/ownership events with
-  operator/registry provenance. `issuedAsReserved` and `reservedIssuance` survive
-  renewal and transfer; another registration resets them.
-- Treasury/referral events are accounting read models, not claim authorization.
-  Marketplace order closures remove current listings; refund events update
-  per-authority balances. Unsafe numeric amounts become warnings rather than
-  rounded JavaScript values.
-- Primary-name events never replace the caller's typed forward-verification step.
-  Phoenix endpoints are excluded from public primary display.
-  A nonempty `primary_name_changed.name` produces `primary_name_set` activity;
-  an empty name produces `primary_name_cleared`, retaining the endpoint target
-  and previous name. Historical `primary_name` activity remains supported.
+The projection maintains directory configuration, admissions, proposals, source
+mirrors, stored commitments, names/counters/incarnations, raw primaries, physical
+resolver slots, custody, move preparation/imports/forwards/cooldowns, vault
+reservations/liabilities, orders, refunds and a complete committed effect log.
+Market cancellation retains ReturnPending until the subsequent return closes it.
+Vault effects are authoritative for money; policy/marketplace assertions do not
+accrue vault funds.
 
-## Operator handovers
+Subtree summaries remove implicit descendants and their identities. Renewal
+walks only InheritsParent edges and stops at fixed-expiry branches. Logical
+record clearing leaves physical resolver data stale until a prune event.
+Primary cleanup compares incarnation and mapping ID, preserving replacements.
 
-Router, treasury and marketplace emit `<contract>_operator_proposed` with the
-current `operator` and `pending_operator`; treasury adds
-`pending_operator_recipient`. Reproposal replaces pending values. Cancellation
-emits `<contract>_operator_cancelled`. Neither changes active authority.
+Import rows retain original Name/Primary and destination candidates. Readiness
+checks the locked manifest and resolver snapshots. Activation reconciles its live
+vector against source renewals, cleared mappings and live revision. Cleared
+candidates cannot replace newer primaries. Forwarded cleanup changes physical
+storage only; forwarding and root history survive. Automatic lock expiry derives
+from block height; renewal after that boundary cannot revive it. Cooldown
+eligibility is independent of target cleanup.
 
-Acceptance emits `<contract>_operator_changed` with `previous_operator` and
-`operator`, plus treasury's `operator_recipient`. Marketplace also emits
-`marketplace_config_updated`. Projection exposes camelCase pending fields and
-clears them on acceptance/cancellation. Router/treasury operators are typed
-principals; marketplace uses 32-byte authority hex. See [handover calls](operator-handover.md).
+`projectedHome`, `projectedName`, `projectedRecords`, `projectedChildren`,
+`projectedCommitment`, `projectedPrimary`, `projectedSlotLiveness`,
+`projectedMoveStatus`, `projectedCooldowns`, `effectiveMoveLock` and
+`moveLockEndsAt` expose derived reads. Pass the same block height to lifecycle
+queries. Runtime allocator capacity and actual unsolicited vault surplus are
+node observations, not recoverable from domain events.
 
-## Pauses
-
-`registrations_paused_changed` and `trading_paused_changed` carry `paused`,
-`operator` and block-height `updated_at`. Projection keeps independent flags,
-initially false. Repeated authorized setter values emit nothing; handover and
-fee updates preserve pause state. Indexer health exposes
-`pause: { registrationsPaused, tradingPaused }` and marketplace config exposes
-`tradingPaused`. Healthy indexed status supports display; contracts enforce the gates.
-
-## Namespace control
-
-`name_owner_changed` updates a subname's owner and manager in the subname indexes. Its
-optional `dataCleared` flag clears only that node's records and primary name; descendants
-keep their data. A holder’s own transfers leave the flag false unless `clearRecords` is requested. Ancestor reassignments and take-back batches set it whenever an owner or manager changes. `subname_removed` removes the
-node and its subtree; `subname_pruned` remains expired cleanup.
-
-Name responses may include `namespace` with `descendantCount`, `heldByOthersCount`, all
-stored `subnames` (including expired ones), and the `ancestors` used for authority display.
-Marketplace summaries compare descendant owners to the seller while the root is escrowed.
-A completed purchase records `namespacePurchase` with its buyer and seller so clients can
-offer to take back seller-held subnames. A later root transfer clears that purchase marker.
-
-## Registration premiums
-
-`name_registered` includes `feeLux` (the total payment) and `premiumLux` (its
-premium component). The raw contract field is `premium_lux`; events from earlier
-deployments without it decode to zero. Lifecycle projection retains the amount as
-`registrationPremiumLux`, and treasury projection accumulates
-`premiumReceivedLux`. This is a subset of registration receipts, not additional
-income to add to the treasury total.
-
-Normalized treasury and referral Lux fields use safe integer numbers for small values and
-decimal strings above `Number.MAX_SAFE_INTEGER`. Arithmetic and snapshot loading
-preserve the exact Lux amount. Consumers can use `BigInt(value)` for either form.
-Unsafe numeric inputs are rejected rather than rounded. If premium statistics
-cannot be updated, `premiumAccountingError` records the failure while lifecycle
-and activity projection continue; rebuild the projection to repair those statistics.
-
-Router initialization and `fee_config_updated` carry `premiumStartLux` in their
-fee config (`premium_start_lux` on chain). Historical configs without the field
-normalize to zero. Newly deployed routers default to 1,000,000 DUSK in Lux.
+The TypeScript catalog is the source for the committed standalone
+`src/indexer/events/indexerEventCatalog.mjs`. `npm run build` regenerates it;
+CI checks it for drift. Frozen projection schemas replace all legacy event rows:
+rebuild the index from the fresh deployment's first block.

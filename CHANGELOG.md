@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.3.0 (2026-10-07)
+
+Breaking release for ADR 0004's fresh frozen deployment. No legacy state migration.
+
+- Replace router/core/treasury and legacy marketplace clients with manifest-loaded
+  directory, store shards, registry-keyed resolvers, policy, vault and marketplace v1.
+- Verify driver hashes before execution and contract interface/deployment bindings;
+  discover admissions and follow root-keyed forwarding with bounded monotone hops.
+- Acquire current block height automatically for canonical reads (#186), retain
+  lossless u64 values, exact Lux strings and authoritative generated wire shapes.
+- Add all public write builders, exact deposits/referrals, reviewed marketplace
+  custody/orders, vault claims, shard moves and explicit per-action Connect gas.
+- Replace legacy projections with the complete frozen journal/event catalog,
+  transaction-atomic replay, implicit descendant/custody effects, sealed move
+  reconciliation, cooldowns and reorg checkpoints.
+- Align npm/JSR exports, retain `./chain-addresses` (#185), remove obsolete
+  `./internal` and `./write-proof`, and rewrite all integration guides.
+- Add real protocol WASM golden-vector, builder, manifest, gas, forwarding and
+  replay tests. Driver fixtures are test-only; this release is not published here.
+
+
 ## 0.2.0 (2026-10-06)
 
 First release since 0.1.6. Entrypoints changed: `./connect` and `./local-dev` are gone; `./writes`,

@@ -1,64 +1,44 @@
-# Registration quotes and premiums
+# Registration, quotes and renewal
 
-Public re-registration of a dropped root adds a premium to the normal annual fee
-for 21 days after its previous `grace_ends_at`. The previous owner pays it too.
-Renewals, subnames, operator-issued reserved names and never-registered roots do
-not pay it.
+Discover `client.directory.registration_context()` for the selected policy,
+selection version, newest store and the two independent stop flags. Read
+`client.policy(policyId).config()` for the policy config version. Obtain the
+registration quote through the intended store's `quote_registration`; it performs
+the contract's guarded policy validation and returns base, premium, referral,
+exact total, deadline and selection/config versions. Direct policy `quote` is
+also available for inspection, but does not guarantee registration eligibility.
 
-`CoreFeeConfig.premiumStartLux` defaults to 1,000,000,000,000,000 Lux
-(1,000,000 DUSK). The router operator can change it, including for names already in
-the window, and 0 disables it. `premiumReferralRewardBps` is independent of the
-base referral share and defaults to 0.
+`registrationCalls(store, input)` takes the actor, root label, years, secret,
+original commitment store, reviewed quote, optional typed referrer, initial
+records and optional primary. It returns separate `commit` and `reveal` calls.
+Persist the secret and commitment shard privately before committing. Wait for
+confirmed commitment inclusion and a reveal age of 5–8,640 blocks inclusive;
+the SDK does not send both calls automatically. A fresh quote may be needed
+before reveal; the commitment is independent of economics. Its derivation is
+BLAKE2b-256 over the protocol domain, actor, root, label and secret.
 
-```ts
-import { quoteRegistration } from '@duskdomains/sdk'
-import { coreCompleteRegistrationRuntimeCall } from '@duskdomains/sdk/writes'
+The reveal's deposit equals `expected_fee_lux`. All fees are decimal Lux text;
+there is no separate transaction value transfer. Referrals are typed principals,
+with the contract deciding the effective claimable referrer. Self-referrals are
+permitted. Registration events record the effective value. A changed quote,
+policy version, deadline or home requires review and a newly signed call.
 
-const quote = quoteRegistration('aurora.dusk', 2, feeConfig, {
-  graceEndsAtBlockHeight: previousRecord?.graceEndsAtBlockHeight ?? null,
-  currentBlockHeight,
-  nowSeconds: Math.floor(Date.now() / 1000),
-})
-const call = coreCompleteRegistrationRuntimeCall({
-  ...registrationArgs,
-  feeLux: quote.totalLux,
-})
-```
+Renew with `client.quoteRenewal(store, { name, years })`. Follow its returned
+`store`; use the Local schedule version/total in `storeRenewCall`. Renewal binds
+the complete NameRef, exact price, schedule version and deadline. It uses the
+directory's published renewal schedule, including its referral rate, without a
+registration-policy dependency. Anyone may pay, including while the name is in
+custody or a move is preparing. The original generation referrer is preserved.
 
-The quote returns `baseLux`, `premiumLux`, `totalLux`, `nextStepBlockHeight`,
-`premiumEndsAtBlockHeight`, `nextStepAt` and `premiumEndsAt`. Dates are estimates
-using ten seconds per block; omit `nowSeconds` for a quote containing only block
-heights. `quoteRegistration` accepts only public root names.
+Lifecycle uses block heights: YEAR=3,153,600, GRACE=259,200 and a ten-year ahead
+horizon. Roots renew before `grace_end`; active resolution requires
+`height < expires_at`. A fixed-expiry descendant stops inheritance for its whole
+branch. Renewal never recreates removed descendants. Quotes are authoritative
+snapshots, not a guarantee against another transaction before inclusion.
 
-`registrationPremiumSchedule` exposes the same schedule independently of a
-registration term. It uses integer shifts with BigInt internally, then returns
-safe integer Lux. For whole 8,640-block days `d`, the premium is
-`(start >> d) - (start >> 21)` until day 21, when it becomes zero.
-
-`registrationFeeLux(label, years, config, premiumLux)` and `registrationPrice`
-include an optional quoted premium; omitting it gives the base fee for new names
-or renewals. A call builder preserves the supplied total as `fee_lux`.
-`referralRewardLux(totalLux, config, premiumLux)` calculates the two referral
-shares separately with whole-Lux rounding.
-`validateFeeConfigPrices` enforces the contract's maximum: the start premium plus
-the largest ten-year base fee must fit in 9,007,199,254,740,991 Lux.
-
-For a direct chain read, use `onChain.getRegistrationPremium(name)` or
-`coreRegistrationPremiumCall({ node })`. Pool routing selects the name's owning
-registry. `getFeeConfig()` decodes the router's current `premium_start_lux`.
-
-A quote stays constant through one daily step. A reveal after the next step fails
-the exact-fee check; refresh and retry within the commitment's existing lifetime.
-Warn users in the final ten minutes before `nextStepAt`, and offer to wait or
-confirm at the current price. Operator price changes can also invalidate a quote.
-
-Indexer search results expose `premiumLux`, `premiumEndsAt`,
-`premiumNextStepAt`, their block-height counterparts and the stored grace end.
-See [event projection](indexer-events.md#registration-premiums) for paid premiums
-and treasury income.
-
-`getRegistrationPremium(name)` reads the driver’s bare u64 decimal string and
-returns a non-negative safe-integer number, including zero for a name without a
-premium. Numeric outputs from compatible transports are also accepted. Fee
-configuration, lifecycle and record reads accept decimal strings or numbers for
-all integer fields and reject values outside their supported bounds.
+`vaultClaimReferralCall` supports `{ amount: 'All', recipient }` and
+`{ amount: { Exact: '1000000000' }, recipient }`. Protocol claims additionally
+bind the expected operator epoch. Claims remain available during registration
+pause/suspension. Contract-principal paid execution requires the authenticated
+C2C receipt adapter of that wallet; the Connect integration here submits direct
+public Moonlight calls and never inherits an outer signer's contract authority.

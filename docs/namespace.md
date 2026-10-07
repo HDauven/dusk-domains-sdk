@@ -1,35 +1,64 @@
-# Namespace control
+# Namespace, custody and moves
 
-A name's owner or manager may reassign or remove names below it through active ancestors.
-Records, setting primary names and direct child creation require the name's own owner or manager; ancestors must first reassign the name to themselves as owner or manager, clearing its identity. Clearing a primary name requires only control of its endpoint, even after transfer, take-back or removal of the name record.
-Subname holders retain their own authority, but an ancestor can reassign or remove them.
-Transfers and sales change only the root; descendants keep stored owners and records.
+Use canonical lowercase ASCII `.dusk` spellings and `nameKey(spelling)` for the
+root/node pair. Labels are 1–63 bytes; the policy independently decides root
+eligibility. Maximum depth is three below a root, with 64 immediate children and
+256 descendants. Expired stored rows count until removed.
 
-Use `coreReassignSubnameRuntimeCall({ node, owner, manager })` to reassign through
-`update_authorities_runtime`. An ancestor who is not the subname's current owner always clears that node's
-records and primary name when changing either its owner or manager. The contract rejects unchanged
-ancestor assignments, even with `clearRecords: true`. A holder transferring their own name keeps its
-data unless reset is requested.
+Create with `storeCreateSubnameCall`; reassign with `reassignSubnameCall`; take
+back 1–256 distinct selected NameRefs with `storeTakeBackSubnamesCall`; remove
+or prune a subtree with the corresponding store builder. Ordinary owner changes
+preserve descendants. Ancestor reassignment clears the selected identity;
+take-back clears each selected identity. Removing a node removes its complete
+subtree and implicitly invalidates descendant records, primaries and custody.
+`transferCall({ clear_records: true, ... })` maps to the frozen clear-identity
+flag, which clears primary identity as well as records.
 
-`coreUpdateAuthoritiesRuntimeCall({ node, owner, manager, clearRecords: true })` also
-clears the target's records and primary name at constant cost. `clearRecords` is optional
-and defaults to false; guards reject non-booleans and the wire encoder sends `clear_records`.
-To hand over full control, set both `owner` and `manager` to the recipient. Clearing does
-not visit descendants. The `name_owner_changed.dataCleared` event projects the reset.
+## Marketplace custody
 
-`coreRemoveSubnameRuntimeCall({ node })` removes an active or expired subtree.
-`coreTakeBackSubnamesRuntimeCall({ node, nodes, owner, manager })` takes back 1–256 distinct
-subnames below the ancestor `node`. Every entry must change its owner or manager and clears its data,
-even if the caller already owns it. An unchanged entry rejects the whole batch before any changes.
-Both builders are exported from `@duskdomains/sdk/writes`; calls route to the name's home
-registry. Call encoding rejects empty, duplicate and oversized batches.
+Construct `createMarketplaceCalls(marketId, directoryId, verifiedDriver)` with
+`client.release.drivers.get(marketId)`. `listFixed(intent)` and `auction(intent)`
+encode a reviewed `CustodyIntent` into store `transfer_and_call`, with an explicit
+500M callback allowance. The intent binds the next custody nonce read from root
+counters and the reviewed immutable Terms, including store, incarnation,
+recipients, fee, referral, deadline and order ID.
 
-`NamespaceSummary`, `IndexedNamespace` and `NamespaceAncestor` describe indexer namespace
-responses. Root managers may control descendants but cannot transfer the root itself.
-During marketplace escrow, the marketplace holds root authority; cancelling returns it.
+`acceptOffer(reviewedOrder, nextCustodyNonce, validUntil)` also uses
+transfer-and-call. The new custody nonce comes from the store counters, not the
+offer's stored nonce (an unaccepted offer has no custody episode). `buy`, `bid`,
+`cancel`, `settle`, `expire` and `retryReturn` bind the complete reviewed Order.
+`offer` binds reviewed Terms. `marketplaceRenewEscrowCall` binds both order and
+renewal quote; `marketplaceClaimRefundCall` is an account-level pull claim.
 
-For endpoint cleanup, `createDuskDomainsOnChainClient(...).readPrimaryName(endpoint)` reads
-the stored mapping through router `locate_primary` and registry `read_primary_name`,
-even after the name expires or disappears. It returns a decoded record or null without
-lifecycle or forward verification. Use `getPrimaryName` and `verifyPrimaryName` for
-active routing and verified display.
+Custody delegates full holder authority. Show origin owner/manager and episode
+nonce. Renewal stays open during custody. Cancelling a listing makes refunds
+available but can leave `ReturnPending`; return uses a separate retry. Changing
+the preferred marketplace does not recover old custody or erase old refunds.
+
+## Whole-tree movement
+
+1. Refresh the home, root NameRef/counters, destination admission ordinal,
+   capacity, cooldowns and lifecycle. Only the active root owner prepares;
+   custody anywhere in the tree refuses preparation.
+2. Submit `storeBeginMoveCall` at the source with the reviewed destination and
+   revision. Read its `move_status` and destination `import_status`.
+3. Export rows in the protocol's root-first, node-sorted depth-first order.
+   Verify each record snapshot, then submit `storeStageMoveRowCall` at the
+   destination. Staging is inactive. `ImportReady` seals the complete manifest.
+4. Anyone can submit `storeFinalizeMoveCall` at the source before the effective
+   deadline. Activation is a single transaction, using the full 3B wallet gas
+   envelope; it never publishes partial rows or splits final activation.
+5. Follow `RootForwarded` and refresh names, records, orders and primary mapping
+   IDs. Cleanup uses separate source, target and resolver calls.
+
+During preparation the tree is write-locked except for renewal and explicit
+primary clearing. Those advance live revision without invalidating the sealed
+manifest. Lock expiry is the earliest idle (last progress +360), absolute or
+lifecycle deadline. Equality unlocks without an event, and late renewal cannot
+revive an ended attempt. Show `MovePending` and its deadline; do not blindly
+retry edits or auto-cancel the owner's move.
+
+Owner/Idle cancellation imposes 8,640-block source root and initiator cooldowns.
+Expired/LifecycleEnded cleanup imposes neither. Destination cleanup never grants
+early source readmission. A move needs source cooperation; it is not guaranteed
+recovery from an unavailable or compromised shard.
