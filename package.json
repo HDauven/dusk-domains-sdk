@@ -1,77 +1,61 @@
 {
   "name": "@duskdomains/sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "license": "MIT",
   "type": "module",
   "description": "TypeScript SDK and integration helpers for Dusk Domains.",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    "./chain-addresses": {
-      "types": "./src/core/chainAddresses.d.mts",
-      "import": "./src/core/chainAddresses.mjs"
-    },
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
-    },
-    "./internal": {
-      "types": "./src/internal.ts",
-      "import": "./src/internal.ts"
     },
     "./writes": {
       "types": "./src/writes.ts",
       "import": "./src/writes.ts"
     },
-    "./write-proof": {
-      "types": "./src/write-proof.ts",
-      "import": "./src/write-proof.ts"
+    "./marketplace": {
+      "types": "./src/marketplace.ts",
+      "import": "./src/marketplace.ts"
     },
     "./connect-app": {
       "types": "./src/wallet/duskConnectApp.ts",
       "import": "./src/wallet/duskConnectApp.ts"
     },
-    "./marketplace": {
-      "types": "./src/marketplace.ts",
-      "import": "./src/marketplace.ts"
-    },
     "./event-catalog": {
-      "types": "./src/indexer/events/indexerEventCatalog.d.mts",
-      "import": "./src/indexer/events/indexerEventCatalog.mjs"
+      "types": "./src/indexer/events/indexerEventCatalog.ts",
+      "import": "./src/indexer/events/indexerEventCatalog.ts"
     },
     "./projection": {
-      "types": "./src/projection.d.mts",
-      "import": "./src/projection.mjs"
+      "types": "./src/projection.ts",
+      "import": "./src/projection.ts"
+    },
+    "./chain-addresses": {
+      "types": "./src/chain-addresses.ts",
+      "import": "./src/chain-addresses.ts"
     }
   },
   "files": [
     "src",
-    "!src/**/*.test.ts",
-    "!src/**/*.test.mjs",
-    "!src/**/*test-fixtures*",
-    "!src/connect.ts",
-    "!src/local-dev.ts",
-    "!src/wallet/duskConnect.ts",
-    "!src/wallet/duskDomainsConnectRuntime.ts",
-    "!src/dev",
     "docs",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/build-event-catalog.mjs",
-    "jsr:dry-run": "npx jsr publish --dry-run",
+    "jsr:dry-run": "npx jsr publish --dry-run --allow-dirty",
     "prepare": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "generate": "node scripts/generate-frozen.mjs"
   },
   "dependencies": {
-    "@noble/curves": "^2.4.0",
     "@noble/hashes": "^2.2.0"
   },
   "devDependencies": {
     "@dusk/connect": "npm:@jsr/dusk__connect@^0.2.0",
-    "@dusk/w3sper": "npm:@jsr/dusk__w3sper@^1.6.0",
     "@types/node": "^24.12.3",
     "typescript": "~6.0.2",
     "vitest": "^4.1.9"

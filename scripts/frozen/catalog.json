@@ -1,0 +1,889 @@
+{
+  "methods": {
+    "directory": [
+      {
+        "name": "init",
+        "input": "InitDirectory",
+        "output": "()"
+      },
+      {
+        "name": "propose",
+        "input": "Propose",
+        "output": "ProposalId"
+      },
+      {
+        "name": "execute",
+        "input": "ProposalKey",
+        "output": "()"
+      },
+      {
+        "name": "accept_operator",
+        "input": "ProposalKey",
+        "output": "()"
+      },
+      {
+        "name": "accept_guardian",
+        "input": "ProposalKey",
+        "output": "()"
+      },
+      {
+        "name": "cancel",
+        "input": "Cancel",
+        "output": "()"
+      },
+      {
+        "name": "set_registration_pause",
+        "input": "DirectorySetRegistrationPauseArgs",
+        "output": "()"
+      },
+      {
+        "name": "set_policy_suspension",
+        "input": "DirectorySetPolicySuspensionArgs",
+        "output": "()"
+      },
+      {
+        "name": "increase_delays",
+        "input": "IncreaseDelays",
+        "output": "()"
+      },
+      {
+        "name": "prune_proposals",
+        "input": "DirectoryPruneProposalsArgs",
+        "output": "u16"
+      },
+      {
+        "name": "config",
+        "input": "()",
+        "output": "DirectoryConfig"
+      },
+      {
+        "name": "registration_context",
+        "input": "()",
+        "output": "RegistrationContext"
+      },
+      {
+        "name": "renewal_schedule",
+        "input": "()",
+        "output": "RenewalSchedule"
+      },
+      {
+        "name": "roles",
+        "input": "()",
+        "output": "DirectoryRolesReturn"
+      },
+      {
+        "name": "member",
+        "input": "MemberQuery",
+        "output": "Option<Admission>"
+      },
+      {
+        "name": "members",
+        "input": "MemberPage",
+        "output": "Members"
+      },
+      {
+        "name": "allocation",
+        "input": "()",
+        "output": "DirectoryAllocationReturn"
+      },
+      {
+        "name": "market",
+        "input": "DirectoryMarketArgs",
+        "output": "Option<Market>"
+      },
+      {
+        "name": "proposal",
+        "input": "ProposalKey",
+        "output": "Option<Proposal>"
+      },
+      {
+        "name": "proposals",
+        "input": "ProposalPage",
+        "output": "Proposals"
+      },
+      {
+        "name": "interface_version",
+        "input": "()",
+        "output": "Interface"
+      },
+      {
+        "name": "binding",
+        "input": "()",
+        "output": "Binding"
+      },
+      {
+        "name": "capacity",
+        "input": "()",
+        "output": "Capacity"
+      }
+    ],
+    "policy": [
+      {
+        "name": "init",
+        "input": "InitPolicy",
+        "output": "()"
+      },
+      {
+        "name": "config",
+        "input": "()",
+        "output": "PolicyConfig"
+      },
+      {
+        "name": "quote",
+        "input": "QuoteRequest",
+        "output": "PolicyQuote"
+      },
+      {
+        "name": "interface_version",
+        "input": "()",
+        "output": "Interface"
+      },
+      {
+        "name": "binding",
+        "input": "()",
+        "output": "Binding"
+      }
+    ],
+    "store": [
+      {
+        "name": "init",
+        "input": "InitStore",
+        "output": "()"
+      },
+      {
+        "name": "commit",
+        "input": "CommitArgs",
+        "output": "()"
+      },
+      {
+        "name": "prune_commitments",
+        "input": "StorePruneCommitmentsArgs",
+        "output": "u16"
+      },
+      {
+        "name": "consume_commitment",
+        "input": "ConsumeCommitment",
+        "output": "Height"
+      },
+      {
+        "name": "register",
+        "input": "Register",
+        "output": "()"
+      },
+      {
+        "name": "renew",
+        "input": "Renew",
+        "output": "()"
+      },
+      {
+        "name": "receive_payment",
+        "input": "ReceiveFromContract",
+        "output": "()"
+      },
+      {
+        "name": "issue_reserved",
+        "input": "IssueReserved",
+        "output": "()"
+      },
+      {
+        "name": "update_authorities",
+        "input": "Authorities",
+        "output": "()"
+      },
+      {
+        "name": "mutate_records",
+        "input": "MutateRecords",
+        "output": "()"
+      },
+      {
+        "name": "replace_records",
+        "input": "ReplaceRecords",
+        "output": "()"
+      },
+      {
+        "name": "move_records",
+        "input": "MoveRecords",
+        "output": "()"
+      },
+      {
+        "name": "set_primary",
+        "input": "SetPrimary",
+        "output": "()"
+      },
+      {
+        "name": "clear_primary",
+        "input": "ClearPrimary",
+        "output": "()"
+      },
+      {
+        "name": "create_subname",
+        "input": "CreateSubname",
+        "output": "()"
+      },
+      {
+        "name": "remove_subname",
+        "input": "StoreRemoveSubnameArgs",
+        "output": "()"
+      },
+      {
+        "name": "prune_subname",
+        "input": "StorePruneSubnameArgs",
+        "output": "()"
+      },
+      {
+        "name": "take_back_subnames",
+        "input": "TakeBack",
+        "output": "()"
+      },
+      {
+        "name": "home",
+        "input": "StoreHomeArgs",
+        "output": "Home"
+      },
+      {
+        "name": "stats",
+        "input": "()",
+        "output": "StoreStats"
+      },
+      {
+        "name": "get_name",
+        "input": "NameKey",
+        "output": "Located<NameView>"
+      },
+      {
+        "name": "children",
+        "input": "ChildPage",
+        "output": "Located<Children>"
+      },
+      {
+        "name": "record_slot",
+        "input": "NameKey",
+        "output": "Located<Option<SlotPointer>>"
+      },
+      {
+        "name": "read_record",
+        "input": "RecordQuery",
+        "output": "Located<Option<RecordValue>>"
+      },
+      {
+        "name": "read_records",
+        "input": "NameKey",
+        "output": "Located<RecordsView>"
+      },
+      {
+        "name": "resolve_record",
+        "input": "RecordQuery",
+        "output": "Located<Option<RecordValue>>"
+      },
+      {
+        "name": "read_primary",
+        "input": "StoreReadPrimaryArgs",
+        "output": "Option<PrimaryView>"
+      },
+      {
+        "name": "resolve_primary",
+        "input": "StoreResolvePrimaryArgs",
+        "output": "Option<PrimaryView>"
+      },
+      {
+        "name": "pending_commitment",
+        "input": "CommitmentKey",
+        "output": "Option<Commitment>"
+      },
+      {
+        "name": "commitment_raw",
+        "input": "CommitmentKey",
+        "output": "Option<Commitment>"
+      },
+      {
+        "name": "quote_registration",
+        "input": "QuoteRegistration",
+        "output": "RegistrationQuote"
+      },
+      {
+        "name": "quote_renewal",
+        "input": "StoreQuoteRenewalArgs",
+        "output": "Located<RenewalQuote>"
+      },
+      {
+        "name": "slot_liveness",
+        "input": "SlotLivenessQuery",
+        "output": "SlotLiveness"
+      },
+      {
+        "name": "transfer_and_call",
+        "input": "TransferAndCall",
+        "output": "()"
+      },
+      {
+        "name": "return_custody",
+        "input": "ReturnCustody",
+        "output": "()"
+      },
+      {
+        "name": "begin_move",
+        "input": "BeginMove",
+        "output": "Digest"
+      },
+      {
+        "name": "begin_import",
+        "input": "ImportHeader",
+        "output": "()"
+      },
+      {
+        "name": "export_move_row",
+        "input": "ExportQuery",
+        "output": "ExportRow"
+      },
+      {
+        "name": "move_status",
+        "input": "MoveKey",
+        "output": "Option<MoveStatus>"
+      },
+      {
+        "name": "import_status",
+        "input": "MoveKey",
+        "output": "Option<ImportStatus>"
+      },
+      {
+        "name": "move_cooldowns",
+        "input": "MoveCooldownQuery",
+        "output": "Located<MoveCooldowns>"
+      },
+      {
+        "name": "stage_move_row",
+        "input": "StageMoveRow",
+        "output": "()"
+      },
+      {
+        "name": "confirm_move_progress",
+        "input": "ConfirmMoveProgress",
+        "output": "()"
+      },
+      {
+        "name": "finalize_move",
+        "input": "MoveKey",
+        "output": "()"
+      },
+      {
+        "name": "activate_import",
+        "input": "MoveKey",
+        "output": "()"
+      },
+      {
+        "name": "cancel_move",
+        "input": "MoveKey",
+        "output": "()"
+      },
+      {
+        "name": "prune_import",
+        "input": "PruneImport",
+        "output": "u16"
+      },
+      {
+        "name": "prune_forwarded",
+        "input": "PruneForwarded",
+        "output": "u16"
+      },
+      {
+        "name": "interface_version",
+        "input": "()",
+        "output": "Interface"
+      },
+      {
+        "name": "binding",
+        "input": "()",
+        "output": "Binding"
+      },
+      {
+        "name": "capacity",
+        "input": "()",
+        "output": "Capacity"
+      }
+    ],
+    "resolver": [
+      {
+        "name": "init",
+        "input": "InitResolver",
+        "output": "()"
+      },
+      {
+        "name": "write_slot",
+        "input": "WriteSlot",
+        "output": "SlotSnapshot"
+      },
+      {
+        "name": "apply_mutations",
+        "input": "ApplyMutations",
+        "output": "SlotSnapshot"
+      },
+      {
+        "name": "clear_slot",
+        "input": "ResolverClearSlotArgs",
+        "output": "bool"
+      },
+      {
+        "name": "prune_stale",
+        "input": "ResolverPruneStaleArgs",
+        "output": "bool"
+      },
+      {
+        "name": "read_slot_record",
+        "input": "SlotRecordQuery",
+        "output": "Option<RecordValue>"
+      },
+      {
+        "name": "read_record_slot",
+        "input": "ResolverReadRecordSlotArgs",
+        "output": "Option<SlotSnapshot>"
+      },
+      {
+        "name": "stats",
+        "input": "()",
+        "output": "ResolverStats"
+      },
+      {
+        "name": "interface_version",
+        "input": "()",
+        "output": "Interface"
+      },
+      {
+        "name": "binding",
+        "input": "()",
+        "output": "Binding"
+      },
+      {
+        "name": "capacity",
+        "input": "()",
+        "output": "Capacity"
+      }
+    ],
+    "vault": [
+      {
+        "name": "init",
+        "input": "InitVault",
+        "output": "()"
+      },
+      {
+        "name": "set_source",
+        "input": "SourceUpdate",
+        "output": "()"
+      },
+      {
+        "name": "receive_fee",
+        "input": "ReceiveFromContract",
+        "output": "()"
+      },
+      {
+        "name": "claim_referral",
+        "input": "ClaimReferral",
+        "output": "()"
+      },
+      {
+        "name": "claim_protocol",
+        "input": "ClaimProtocol",
+        "output": "()"
+      },
+      {
+        "name": "read_state",
+        "input": "()",
+        "output": "VaultState"
+      },
+      {
+        "name": "read_referral",
+        "input": "VaultReadReferralArgs",
+        "output": "Option<ReferralRow>"
+      },
+      {
+        "name": "referrals",
+        "input": "ReferralPage",
+        "output": "Referrals"
+      },
+      {
+        "name": "source",
+        "input": "VaultSourceArgs",
+        "output": "Option<FeeSource>"
+      },
+      {
+        "name": "read_balance",
+        "input": "()",
+        "output": "BalanceView"
+      },
+      {
+        "name": "interface_version",
+        "input": "()",
+        "output": "Interface"
+      },
+      {
+        "name": "binding",
+        "input": "()",
+        "output": "Binding"
+      },
+      {
+        "name": "capacity",
+        "input": "()",
+        "output": "Capacity"
+      }
+    ],
+    "marketplace": [
+      {
+        "name": "init",
+        "input": "InitMarketplace",
+        "output": "()"
+      },
+      {
+        "name": "set_pause",
+        "input": "SetPause",
+        "output": "()"
+      },
+      {
+        "name": "set_fee",
+        "input": "SetFee",
+        "output": "()"
+      },
+      {
+        "name": "on_name_received",
+        "input": "CustodyNotice",
+        "output": "CustodyAck"
+      },
+      {
+        "name": "buy_fixed",
+        "input": "Buy",
+        "output": "()"
+      },
+      {
+        "name": "place_bid",
+        "input": "PlaceBid",
+        "output": "()"
+      },
+      {
+        "name": "place_offer",
+        "input": "PlaceOffer",
+        "output": "()"
+      },
+      {
+        "name": "renew_escrow",
+        "input": "RenewOrder",
+        "output": "()"
+      },
+      {
+        "name": "receive_payment",
+        "input": "ReceiveFromContract",
+        "output": "()"
+      },
+      {
+        "name": "settle_auction",
+        "input": "Order",
+        "output": "()"
+      },
+      {
+        "name": "cancel_order",
+        "input": "Order",
+        "output": "()"
+      },
+      {
+        "name": "expire_order",
+        "input": "Order",
+        "output": "()"
+      },
+      {
+        "name": "retry_return",
+        "input": "Order",
+        "output": "()"
+      },
+      {
+        "name": "claim_refund",
+        "input": "ClaimRefund",
+        "output": "()"
+      },
+      {
+        "name": "interface_version",
+        "input": "()",
+        "output": "Interface"
+      },
+      {
+        "name": "binding",
+        "input": "()",
+        "output": "Binding"
+      },
+      {
+        "name": "capacity",
+        "input": "()",
+        "output": "Capacity"
+      },
+      {
+        "name": "config",
+        "input": "()",
+        "output": "Config"
+      },
+      {
+        "name": "wind_down_state",
+        "input": "()",
+        "output": "MarketWindDown"
+      },
+      {
+        "name": "order_api_version",
+        "input": "()",
+        "output": "u16"
+      },
+      {
+        "name": "read_order",
+        "input": "OrderKey",
+        "output": "Option<Order>"
+      },
+      {
+        "name": "read_refund",
+        "input": "RefundKey",
+        "output": "Refund"
+      },
+      {
+        "name": "read_listing",
+        "input": "ListingKey",
+        "output": "Option<Order>"
+      },
+      {
+        "name": "read_offer",
+        "input": "OfferKey",
+        "output": "Option<Order>"
+      },
+      {
+        "name": "custody_intent",
+        "input": "CustodyIntent",
+        "output": "()",
+        "metadata": true
+      },
+      {
+        "name": "payment_intent",
+        "input": "MarketPayment",
+        "output": "()",
+        "metadata": true
+      }
+    ]
+  },
+  "events": {
+    "operation_begin": {
+      "role": "*",
+      "type": "OperationBegin"
+    },
+    "operation_end": {
+      "role": "*",
+      "type": "OperationEnd"
+    },
+    "directory_initialized": {
+      "role": "directory",
+      "type": "Event<DirectoryInitialized>"
+    },
+    "store_initialized": {
+      "role": "store",
+      "type": "Event<StoreInitialized>"
+    },
+    "resolver_initialized": {
+      "role": "resolver",
+      "type": "Event<ResolverInitialized>"
+    },
+    "vault_initialized": {
+      "role": "vault",
+      "type": "Event<VaultInitialized>"
+    },
+    "policy_initialized": {
+      "role": "policy",
+      "type": "Event<PolicyInitialized>"
+    },
+    "proposal_created": {
+      "role": "directory",
+      "type": "Event<ProposalCreated>"
+    },
+    "proposal_cancelled": {
+      "role": "directory",
+      "type": "Event<ProposalCancelled>"
+    },
+    "proposal_executed": {
+      "role": "directory",
+      "type": "Event<ProposalExecuted>"
+    },
+    "proposal_pruned": {
+      "role": "directory",
+      "type": "Event<ProposalPruned>"
+    },
+    "action_applied": {
+      "role": "directory",
+      "type": "Event<ActionApplied>"
+    },
+    "operator_changed": {
+      "role": "directory",
+      "type": "Event<OperatorChanged>"
+    },
+    "guardian_changed": {
+      "role": "directory",
+      "type": "Event<GuardianChanged>"
+    },
+    "proposals_invalidated": {
+      "role": "directory",
+      "type": "Event<ProposalsInvalidated>"
+    },
+    "registration_pause_changed": {
+      "role": "directory",
+      "type": "Event<RegistrationPauseChanged>"
+    },
+    "policy_suspension_changed": {
+      "role": "directory",
+      "type": "Event<PolicySuspensionChanged>"
+    },
+    "delays_changed": {
+      "role": "directory",
+      "type": "Event<DelaysChanged>"
+    },
+    "commitment_created": {
+      "role": "store",
+      "type": "Event<CommitmentCreated>"
+    },
+    "commitment_removed": {
+      "role": "store",
+      "type": "Event<CommitmentRemoved>"
+    },
+    "root_registered": {
+      "role": "store",
+      "type": "Event<RootRegistered>"
+    },
+    "root_renewed": {
+      "role": "store",
+      "type": "Event<RootRenewed>"
+    },
+    "subname_created": {
+      "role": "store",
+      "type": "Event<SubnameCreated>"
+    },
+    "subtree_removed": {
+      "role": "store",
+      "type": "Event<SubtreeRemoved>"
+    },
+    "authorities_changed": {
+      "role": "store",
+      "type": "Event<AuthoritiesChanged>"
+    },
+    "identity_cleared": {
+      "role": "store",
+      "type": "Event<IdentityCleared>"
+    },
+    "slot_changed": {
+      "role": "store",
+      "type": "Event<SlotChanged>"
+    },
+    "primary_changed": {
+      "role": "store",
+      "type": "Event<PrimaryChanged>"
+    },
+    "custody_started": {
+      "role": "store",
+      "type": "Event<CustodyStarted>"
+    },
+    "custody_ended": {
+      "role": "store",
+      "type": "Event<CustodyEnded>"
+    },
+    "root_counters_changed": {
+      "role": "store",
+      "type": "Event<RootCountersChanged>"
+    },
+    "store_watermarks_changed": {
+      "role": "store",
+      "type": "Event<StoreWatermarksChanged>"
+    },
+    "resolver_slot_written": {
+      "role": "resolver",
+      "type": "Event<ResolverSlotWritten>"
+    },
+    "resolver_slot_pruned": {
+      "role": "resolver",
+      "type": "Event<ResolverSlotPruned>"
+    },
+    "fee_source_changed": {
+      "role": "vault",
+      "type": "Event<FeeSourceChanged>"
+    },
+    "beneficiary_reserved": {
+      "role": "vault",
+      "type": "Event<BeneficiaryReserved>"
+    },
+    "fee_received": {
+      "role": "vault",
+      "type": "Event<FeeReceived>"
+    },
+    "referral_claimed": {
+      "role": "vault",
+      "type": "Event<ReferralClaimed>"
+    },
+    "protocol_claimed": {
+      "role": "vault",
+      "type": "Event<ProtocolClaimed>"
+    },
+    "move_started": {
+      "role": "store",
+      "type": "Event<MoveStarted>"
+    },
+    "move_progressed": {
+      "role": "store",
+      "type": "Event<MoveProgressed>"
+    },
+    "import_prepared": {
+      "role": "store",
+      "type": "Event<ImportPrepared>"
+    },
+    "import_row_staged": {
+      "role": "store",
+      "type": "Event<ImportRowStaged>"
+    },
+    "import_ready": {
+      "role": "store",
+      "type": "Event<ImportReady>"
+    },
+    "root_imported": {
+      "role": "store",
+      "type": "Event<RootImported>"
+    },
+    "root_forwarded": {
+      "role": "store",
+      "type": "Event<RootForwarded>"
+    },
+    "move_cancelled": {
+      "role": "store",
+      "type": "Event<MoveCancelled>"
+    },
+    "import_rows_pruned": {
+      "role": "store",
+      "type": "Event<ImportRowsPruned>"
+    },
+    "forwarded_rows_pruned": {
+      "role": "store",
+      "type": "Event<ForwardedRowsPruned>"
+    },
+    "market_configured": {
+      "role": "marketplace",
+      "type": "Event<MarketConfigured>"
+    },
+    "order_changed": {
+      "role": "marketplace",
+      "type": "Event<OrderChanged>"
+    },
+    "order_closed": {
+      "role": "marketplace",
+      "type": "Event<OrderClosed>"
+    },
+    "trade_settled": {
+      "role": "marketplace",
+      "type": "Event<TradeSettled>"
+    },
+    "refund_changed": {
+      "role": "marketplace",
+      "type": "Event<RefundChanged>"
+    },
+    "refund_claimed": {
+      "role": "marketplace",
+      "type": "Event<RefundClaimed>"
+    },
+    "escrow_renewed": {
+      "role": "marketplace",
+      "type": "Event<EscrowRenewed>"
+    }
+  }
+}

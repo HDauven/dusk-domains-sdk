@@ -1,34 +1,29 @@
 {
   "name": "@duskdomains/sdk",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "license": "MIT",
   "exports": {
     ".": "./src/index.ts",
-    "./internal": "./src/internal.ts",
     "./writes": "./src/writes.ts",
-    "./write-proof": "./src/write-proof.ts",
     "./marketplace": "./src/marketplace.ts",
     "./connect-app": "./src/wallet/duskConnectApp.ts",
     "./event-catalog": "./src/indexer/events/indexerEventCatalog.ts",
-    "./projection": "./src/projection.ts"
+    "./projection": "./src/projection.ts",
+    "./chain-addresses": "./src/chain-addresses.ts"
   },
   "publish": {
     "include": [
       "LICENSE",
       "README.md",
+      "CHANGELOG.md",
+      "docs/**/*.md",
       "src/**/*.ts",
       "src/**/*.mts",
       "src/**/*.mjs"
     ],
     "exclude": [
       "src/**/*.test.ts",
-      "src/**/*.test.mjs",
-      "src/**/*test-fixtures*",
-      "src/connect.ts",
-      "src/local-dev.ts",
-      "src/wallet/duskConnect.ts",
-      "src/wallet/duskDomainsConnectRuntime.ts",
-      "src/dev/**"
+      "src/**/*.test.mjs"
     ]
   }
 }

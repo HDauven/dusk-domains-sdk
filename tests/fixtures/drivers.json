@@ -1,0 +1,26 @@
+{
+  "directory": {
+    "sha256": "559878a0d8d10fcc7cb005d73f388adb7a96cbfd7e8a5c81dda582372933839f",
+    "bytes": 1768787
+  },
+  "store": {
+    "sha256": "f4421b2b099f9d7b0d2ea2750ccd1d388333366b22b04d0626a8e7e535c58046",
+    "bytes": 1768756
+  },
+  "resolver": {
+    "sha256": "4d1c0b24404375bc22e31d1316fb26b7b2664b4107ab2f1f193b4060d1e457d0",
+    "bytes": 1768832
+  },
+  "vault": {
+    "sha256": "0306d0aee3294b680039abd0501ee1b2e0f6b0a8888df9d45c0b0f744f369896",
+    "bytes": 1768756
+  },
+  "policy": {
+    "sha256": "09d70fc24e17ff5d42d77d47b08f3614659f00455433a163146e17431e6c1473",
+    "bytes": 1768764
+  },
+  "marketplace": {
+    "sha256": "eb31c92cc7c94abf56d5ce363b744b190dae3dc3a1190d001a09cb5b2738da66",
+    "bytes": 1356690
+  }
+}
