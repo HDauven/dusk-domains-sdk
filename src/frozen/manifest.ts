@@ -247,10 +247,24 @@ export async function loadReleaseManifest(
     throw new Error('artifactBaseUrl is required for an in-memory manifest')
   const manifest = validateReleaseManifest(value, options),
     drivers = new Map<string, DataDriver>(),
-    contracts = new Map<string, ReleaseContract>()
+    contracts = new Map<string, ReleaseContract>(),
+    artifacts = new Map<string, DataDriver>()
   for (const c of manifest.contracts) {
     contracts.set(c.contractId, c)
-    drivers.set(c.contractId, await fetchDriver(c, base, f))
+    // Drivers are synchronous codecs with detached results. Identical verified
+    // artifacts can share an instance within this release; never cache across
+    // releases or weaken a descriptor's hash, size or role checks.
+    const a = c.dataDriver
+    const key = JSON.stringify([
+      c.role, new URL(a.path, base).href, a.bytes,
+      a.sha256, a.blake2b256, a.blake3,
+    ])
+    let driver = artifacts.get(key)
+    if (!driver) {
+      driver = await fetchDriver(c, base, f)
+      artifacts.set(key, driver)
+    }
+    drivers.set(c.contractId, driver)
   }
   return { manifest, contracts, drivers, artifactBaseUrl: base }
 }

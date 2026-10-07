@@ -31,8 +31,9 @@ retry is performed.
 
 The wallet integration is direct public Moonlight. A contract wallet must supply
 its authenticated C2C adapter and preserve the protocol's immediate-caller
-identity/payment rules. Gas policy is explicit, provisional and separated from
-the refundable principal deposit. Included failures may consume the full limit.
+identity/payment rules. Gas policy uses measured VM workloads and admission
+reserves, separately from the refundable principal deposit. Included failures
+may consume the full limit; see the [gas policy](gas-policy.md) for coverage bounds.
 
 ## Upgrade from 0.2
 

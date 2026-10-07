@@ -10,6 +10,8 @@ import {
   primaryStateKey,
   slotStateKey,
   projectedPrimary,
+  projectedHome,
+  projectedName,
   projectedSlotLiveness,
   effectiveMoveLock,
   moveLockEndsAt,
@@ -2105,5 +2107,34 @@ it('keeps both directory revisions current after every configuration event', () 
     expect(state.directory?.revision, topic).toBe(revision)
     expect(state.directory?.registration.revision, topic).toBe(revision)
     expect(projectReceipt(state, tx)).toBe(state)
+  }
+})
+
+
+it('reads primaries and move homes without enumerating unrelated history', () => {
+  const n = makeName(), s = createProjectionState(options)
+  projectReceipt(s, receipt(1n, [[4, 'root_registered', registered(n)]]))
+  const started = sample('MoveStarted')
+  started.ticket = { ...started.ticket, source: bytes(4), destination: bytes(8),
+    root: ref(n), created_at: 2n, expires_at: 900n }
+  started.lifecycle_deadline = 1000n
+  projectReceipt(s, receipt(2n, [[4, 'move_started', started]]))
+  const status = sample('ImportStatus')
+  status.ticket = started.ticket
+  status.activated = false
+  status.cancelled = false
+  projectReceipt(s, receipt(3n, [[8, 'import_prepared', { status }]]))
+  const restored = restoreProjection(snapshotProjection(s))
+  for (const state of [s, restored]) {
+    const noScan = { ownKeys(): never { throw new Error('Full history scan') } }
+    state.primaries = new Proxy(state.primaries, noScan)
+    state.moves = new Proxy(state.moves, noScan)
+    state.imports = new Proxy(state.imports, noScan)
+    expect(projectedPrimary(state, bytes(9, 96), 3n)).toBeNull()
+    expect(projectedHome(state, id(8), n.key.root)).toEqual({ Staged: started.ticket.id })
+    expect(projectedHome(state, id(8), bytes(99))).toBe('Absent')
+    const view = projectedName(state, id(4), n.key, 3n)
+    expect(view).toMatchObject({ Local: { move_pending: started.ticket.id } })
+    expect(projectedName(state, id(4), n.key, 400n)).toMatchObject({ Local: { move_pending: null } })
   }
 })

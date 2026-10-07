@@ -2,7 +2,7 @@
 import { methodCatalog } from './catalog.ts'
 import { contractId } from './bytes.ts'
 import { wireValue } from './wire.ts'
-import { gasLimit } from './gas.ts'
+import { walletGasLimit } from './wallet-gas.ts'
 import type { Methods } from './types.ts'
 import type { ContractRole } from './manifest.ts'
 export type Method<R extends ContractRole> = keyof Methods[R] & string
@@ -79,6 +79,6 @@ export function buildCall<R extends ContractRole, M extends Method<R>>(
     functionName: method,
     args: checked,
     deposit,
-    gasLimit: gasLimit(role, method),
+    gasLimit: walletGasLimit(role, method, checked),
   }) as FrozenCall<R, M>
 }

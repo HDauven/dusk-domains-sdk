@@ -18,6 +18,7 @@ import type {
   CustodyIntent,
   RegistrationQuote,
   NameRef,
+  CreateSubname,
 } from '../src/frozen/types.ts'
 const rows = { ...fixtures(), ...fixtures('market-v1') }
 function input(type: string): unknown {
@@ -45,7 +46,7 @@ for (const [role, methods] of Object.entries(methodCatalog))
       expect(wireValue(m.input, driver.decodeInput(m.name, encoded))).toEqual(
         args,
       )
-      expect(call.gasLimit).toBe(GAS_LIMITS[`${role}.${m.name}`])
+      expect(call.gasLimit).toBeLessThanOrEqual(GAS_LIMITS[`${role}.${m.name}`])
       expect(call.gasLimit).toBeGreaterThan(0n)
       expect(call.gasLimit).toBeLessThanOrEqual(3_000_000_000n)
       let deposit = '0'
@@ -68,7 +69,31 @@ it('gas table covers exactly the public wallet actions', () => {
       )
       .sort(),
   )
-  expect(GAS_LIMITS['store.finalize_move']).toBe(3_000_000_000n)
+  expect(GAS_LIMITS['store.finalize_move']).toBe(2_000_000_000n)
+})
+it('reserves subtree cleanup when creating a subname without reading its old state', () => {
+  const args = input('CreateSubname') as CreateSubname
+  for (const expires_at of [100n, 1_000_000n]) {
+    const reviewed = { ...args, expires_at }
+    const call = builders.storeCreateSubnameCall(id(4), reviewed)
+    // An expired child may retain 255 descendants and their primaries. Its
+    // small creation input cannot distinguish that case from a fresh child.
+    expect(call.gasLimit).toBe(20_000_000n)
+    expect(call.args).toEqual(reviewed)
+  }
+})
+it('reserves full stored-proposal scans even for repeated or absent pruning IDs', () => {
+  const proposal = { operator_epoch: 1n, nonce: 999n }
+  for (const [count, budget] of [[0, 5n], [1, 9n], [16, 69n], [64, 261n]] as const) {
+    const ids = Array(count).fill(proposal)
+    const call = builders.directoryPruneProposalsCall(id(1), { ids })
+    expect(call.gasLimit).toBe(budget * 1_000_000n)
+    expect(call.args.ids).toEqual(ids)
+  }
+  expect(builders.directoryAcceptOperatorCall(id(1), { id: proposal }).gasLimit).toBe(20_000_000n)
+  expect(builders.directoryAcceptGuardianCall(id(1), { id: proposal }).gasLimit).toBe(16_000_000n)
+  expect(builders.directoryCancelCall(id(1), { id: proposal }).gasLimit).toBe(12_000_000n)
+  expect(builders.directoryExecuteCall(id(1), { id: proposal }).gasLimit).toBe(16_000_000n)
 })
 it('never submits callbacks or fabricated gas/deposit', async () => {
   expect(() =>
@@ -219,4 +244,24 @@ it('transfer exposes clear_records and registration preserves original commitmen
     kind: 'Contract',
     bytes: bytes(9),
   })
+})
+
+it('preserves admission reserves and sizes bounded wallet inputs', () => {
+  const records = Array.from({ length: 16 }, (_, i) => ({
+    key: `key${i}`.padEnd(64, 'a'), value: bytes(1, 512), ttl_seconds: 86400n,
+  }))
+  const registration = input('Register') as any
+  expect(buildCall('store', id(4), 'register', { ...registration, records: [], referrer: null }).gasLimit).toBe(80_000_000n)
+  expect(buildCall('store', id(4), 'register', { ...registration, records }).gasLimit).toBe(164_000_000n)
+  const name = input('NameRef') as NameRef
+  expect(buildCall('store', id(4), 'replace_records', { name, records }).gasLimit).toBe(40_000_000n)
+  const mutations = records.slice(0, 8).map(r => ({ ...r, action: 'Set' as const, value: bytes(1, 448) }))
+  expect(buildCall('store', id(4), 'mutate_records', { name, mutations }).gasLimit).toBe(39_000_000n)
+  const custody = buildCall('store', id(4), 'transfer_and_call', { name, target: bytes(6), callback_gas: 500_000_000n, data: [] })
+  expect(custody.gasLimit).toBe(615_000_000n)
+  expect(custody.args.callback_gas).toBe(500_000_000n)
+  expect(custody.gasLimit * 93n * 93n / 10000n).toBeGreaterThan(510_000_000n)
+  const fullTakeback = buildCall('store', id(4), 'take_back_subnames', { ancestor: name, targets: Array(256).fill(name), owner: bytes(11), manager: bytes(12) })
+  expect(fullTakeback.gasLimit).toBe(77_000_000n)
+  expect(buildCall('store', id(4), 'finalize_move', { id: bytes(3) }).gasLimit * 93n * 93n / 10000n).toBeGreaterThan(1_650_000_000n)
 })

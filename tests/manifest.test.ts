@@ -138,3 +138,26 @@ it('rejects a correctly hashed driver assigned to the wrong contract role', asyn
     }),
   ).rejects.toThrow('Driver schema')
 })
+
+it('reuses identical verified artifacts only within a release and checks every descriptor', async () => {
+  const r = await release(), store = r.contracts.get(id(4))!
+  const manifest = { ...r.manifest, contracts: [...r.manifest.contracts,
+    { ...store, contractId: id(8) }, { ...store, contractId: id(9) }] }
+  let fetches = 0
+  const options = { artifactBaseUrl: 'https://release.invalid/', fetch: async (url: RequestInfo | URL) => {
+    fetches++
+    const role = r.manifest.contracts.find(c => String(url).endsWith(c.dataDriver.path))!.role
+    return new Response(new Uint8Array(driverBytes(role)))
+  } }
+  const loaded = await loadReleaseManifest(manifest, options)
+  expect(fetches).toBe(6)
+  const a = loaded.drivers.get(id(4))!, b = loaded.drivers.get(id(8))!
+  const first = a.encodeInput('commit', JSON.stringify({ hash: Array(32).fill(1) }))
+  const saved = first.slice()
+  b.encodeInput('commit', JSON.stringify({ hash: Array(32).fill(2) }))
+  expect(first).toEqual(saved)
+  await loadReleaseManifest(manifest, options)
+  expect(fetches).toBe(12)
+  manifest.contracts.at(-1)!.dataDriver = { ...store.dataDriver, sha256: '0'.repeat(64) }
+  await expect(loadReleaseManifest(manifest, options)).rejects.toThrow('sha256')
+})
