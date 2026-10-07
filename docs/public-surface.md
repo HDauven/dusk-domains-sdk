@@ -1,4 +1,4 @@
-# Public surface in 0.3.0
+# Public surface in 0.3.1
 
 The npm and JSR export maps contain the same eight entrypoints. npm resolves
 runtime imports to compiled JavaScript and types to declarations in `dist`; its

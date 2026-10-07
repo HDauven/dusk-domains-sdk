@@ -1,9 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.3.1 (2026-10-07)
 
 - Calibrate wallet gas budgets against VM measurements, admission reserves and
   bounded existing state, including expired subtrees and full proposal tables.
+  A failed call is charged its full limit, so the old limits (up to 1e9) could cost
+  a user about 1 DUSK when they lost a race for a listing. See `docs/gas-policy.md`.
+- Answer projected identity reads, such as `projectedPrimary`, from the existing
+  projection indexes instead of scanning every entity.
+- Reuse identical verified data drivers within one release instead of loading one
+  per admitted contract.
+- Mark modules as free of import side effects so bundlers can tree-shake them.
 
 ## 0.3.0 (2026-10-07)
 
