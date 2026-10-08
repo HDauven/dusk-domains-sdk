@@ -3,25 +3,50 @@ import { nameKey, validateLabel } from '../frozen/bytes.ts'
 import type { LabelStatus, NameView } from '../frozen/types.ts'
 import { u64 } from '../frozen/json.ts'
 
-/** Launch policy list from frozen/mod.rs. Replaced policies may publish a different list. */
+/** Launch policy list from protocol scripts/frozen/plan.mjs. Replacements may differ. */
 export const RESERVED_LABELS: readonly string[] = Object.freeze([
+  'admin',
+  'airdrop',
   'bridge',
   'citadel',
+  'claim',
+  'connect',
   'docs',
   'dusk',
+  'duskdomains',
+  'duskds',
+  'duskevm',
+  'duskfoundation',
+  'dusknetwork',
+  'duskwallet',
   'exchange',
   'explorer',
   'faucet',
   'foundation',
   'grants',
+  'hedger',
+  'help',
+  'helpdesk',
+  'mainnet',
+  'moderator',
+  'moonlight',
   'npex',
+  'official',
+  'phoenix',
+  'piecrust',
+  'provisioner',
+  'refund',
   'rusk',
   'security',
   'staking',
   'support',
+  'team',
+  'testnet',
   'trade',
+  'verify',
   'wallet',
   'webwallet',
+  'zedger',
 ])
 export interface RootEligibilityPolicy {
   minimum_root_bytes: number

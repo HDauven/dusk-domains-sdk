@@ -8,6 +8,17 @@ import {
 } from '../src/core/names.ts'
 import { namehashHex, nameKey } from '../src/frozen/bytes.ts'
 import { sample } from './helpers.ts'
+const reserved = [
+  'admin', 'airdrop', 'bridge', 'citadel', 'claim', 'connect', 'docs', 'dusk',
+  'duskdomains', 'duskds', 'duskevm', 'duskfoundation', 'dusknetwork', 'duskwallet',
+  'exchange', 'explorer', 'faucet', 'foundation', 'grants', 'hedger', 'help',
+  'helpdesk', 'mainnet', 'moderator', 'moonlight', 'npex', 'official', 'phoenix',
+  'piecrust', 'provisioner', 'refund', 'rusk', 'security', 'staking', 'support',
+  'team', 'testnet', 'trade', 'verify', 'wallet', 'webwallet', 'zedger',
+]
+it('pins the exact launch reserved list', () => {
+  expect(RESERVED_LABELS).toEqual(reserved)
+})
 it.each([
   ['  ALIce  ', 'alice.dusk'],
   ['ALICE.DUSK', 'alice.dusk'],
@@ -48,7 +59,7 @@ it.each([
 ])('rejects frozen structure %j', (name) =>
   expect(validateName(name).ok).toBe(false),
 )
-it.each(RESERVED_LABELS)(
+it.each(reserved)(
   'launch root %s is reserved while structure remains valid',
   (label) => {
     expect(rootLabelStatus(label)).toBe('Reserved')
@@ -56,7 +67,11 @@ it.each(RESERVED_LABELS)(
       ok: true,
       rootEligibility: 'Reserved',
     })
-    expect(analyzeName(label).status).toBe('reserved')
+    expect(analyzeName(label)).toMatchObject({ status: 'reserved', canRegister: false })
+    expect(analyzeName(label, { current: null, height: 100n })).toMatchObject({
+      status: 'reserved',
+      canRegister: false,
+    })
     expect(analyzeName(`${label}.example`).status).toBe('subname')
   },
 )
