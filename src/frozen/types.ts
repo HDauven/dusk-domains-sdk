@@ -48,14 +48,14 @@ export type PolicyConfig = { config_version: bigint; registration_open: boolean;
 export type InitPolicy = { binding: Binding; config: PolicyConfig }
 export type RenewalSchedule = { version: bigint; effective_at: bigint; annual_lux: string[]; referral_bps: number }
 export type MemberKind = "Store" | "Resolver"
-export type Admission = { id: Contract; interface_version: number; code_hash: Digest; init_hash: Digest; ordinal: number; admitted_at: bigint; accepts_moves: boolean; retiring: boolean }
+export type Admission = { id: Contract; interface_version: number; code_hash: Digest; init_hash: Digest; ordinal: number; admitted_at: bigint; accepts_moves: boolean; retiring: boolean; governance_version: bigint }
 export type MarketState = "Listed" | "Draining" | "Retired"
 export type Market = { id: Contract; state: MarketState; version: bigint; interface_version: number; code_hash: Digest; init_hash: Digest }
 export type MarketWindDown = { version: number; new_orders_disabled: boolean; unsettled_orders: bigint; refundable_lux: string }
 export type OperatorPair = { principal: TypedPrincipal; recipient: Endpoint }
 export type RegistrationContext = { revision: bigint; policy: Contract; policy_version: bigint; operator: TypedPrincipal; operator_paused: boolean; guardian_suspended: boolean; allocation_version: bigint; newest_store: Contract }
-export type DirectoryConfig = { binding: Binding; operator: OperatorPair; guardian: TypedPrincipal; operator_epoch: bigint; guardian_epoch: bigint; revision: bigint; proposal_delay: bigint; guardian_delay: bigint; registration: RegistrationContext; renewal: RenewalSchedule; preferred_marketplace: (Contract | null); market_version: bigint; store_count: number; resolver_count: number; source_version: bigint }
-export type Action = { SetPolicy: { expected_version: bigint; admission: Admission } } | { AddStore: { expected_allocation_version: bigint; admission: Admission } } | { AddResolver: { expected_count: number; admission: Admission } } | { SetAcceptsMoves: { store: Contract; expected: boolean; value: boolean } } | { SetRenewal: { expected_version: bigint; annual_lux: string[]; referral_bps: number } } | { SetPreferredMarketplace: { expected_version: bigint; market: (Contract | null) } } | { SetMarketplace: { expected_version: bigint; market: Contract; state: MarketState; interface_version: number; code_hash: Digest; init_hash: Digest } } | { SetRecipient: { expected_operator_epoch: bigint; expected_recipient: Endpoint; recipient: Endpoint } } | { ReplaceOperator: { expected_epoch: bigint; next: OperatorPair } } | { ReplaceGuardian: { expected_epoch: bigint; next: TypedPrincipal } } | { AddController: { contract: Contract; scopes: number; expected_version: bigint } } | { RemoveController: { contract: Contract; expected_version: bigint } } | { SetRetiring: { store: Contract; expected: boolean; value: boolean } }
+export type DirectoryConfig = { binding: Binding; operator: OperatorPair; guardian: TypedPrincipal; operator_epoch: bigint; guardian_epoch: bigint; revision: bigint; proposal_delay: bigint; guardian_delay: bigint; registration: RegistrationContext; renewal: RenewalSchedule; preferred_marketplace: (Contract | null); market_version: bigint; store_count: number; resolver_count: number; source_version: bigint; recipient_version: bigint }
+export type Action = { SetPolicy: { expected_version: bigint; admission: Admission } } | { AddStore: { expected_allocation_version: bigint; admission: Admission } } | { AddResolver: { expected_count: number; admission: Admission } } | { SetAcceptsMoves: { store: Contract; value: boolean; expected_version: bigint } } | { SetRenewal: { expected_version: bigint; annual_lux: string[]; referral_bps: number } } | { SetPreferredMarketplace: { expected_version: bigint; market: (Contract | null) } } | { SetMarketplace: { expected_version: bigint; market: Contract; state: MarketState; interface_version: number; code_hash: Digest; init_hash: Digest } } | { SetRecipient: { expected_operator_epoch: bigint; recipient: Endpoint; expected_recipient_version: bigint } } | { ReplaceOperator: { expected_epoch: bigint; next: OperatorPair } } | { ReplaceGuardian: { expected_epoch: bigint; next: TypedPrincipal } } | { AddController: { contract: Contract; scopes: number; expected_version: bigint } } | { RemoveController: { contract: Contract; expected_version: bigint } } | { SetRetiring: { store: Contract; value: boolean; expected_version: bigint } }
 export type ProposalStatus = "Pending" | "Executed" | "Cancelled" | "Expired" | "Invalidated"
 export type Proposal = { id: ProposalId; action: Action; action_hash: Digest; proposed_at: bigint; ready_at: bigint; expires_at: bigint; status: ProposalStatus }
 export type Propose = { action: Action }
@@ -166,7 +166,7 @@ export type ProposalCancelled = { id: ProposalId; actor: TypedPrincipal }
 export type ProposalExecuted = { id: ProposalId; action_hash: Digest }
 export type ProposalPruned = { id: ProposalId; final_status: ProposalStatus }
 export type ActionApplied = { id: ProposalId; action: Action; config: DirectoryConfig; admission: (Admission | null); market: (Market | null) }
-export type OperatorChanged = { id: ProposalId; previous: OperatorPair; current: OperatorPair; operator_epoch: bigint }
+export type OperatorChanged = { id: ProposalId; previous: OperatorPair; current: OperatorPair; operator_epoch: bigint; recipient_version: bigint }
 export type GuardianChanged = { id: ProposalId; previous: TypedPrincipal; current: TypedPrincipal; guardian_epoch: bigint; suspended: boolean }
 export type ProposalsInvalidated = { previous_operator_epoch: bigint; operator_epoch: bigint }
 export type RegistrationPauseChanged = { paused: boolean; revision: bigint; actor: TypedPrincipal }
@@ -249,15 +249,12 @@ export type DirectoryPayoutKey = { account: string }
 export type Controller = { contract: Contract; scopes: number; admitted_at: bigint; suspended: boolean }
 export type Controllers = { version: bigint; rows: (Controller)[] }
 export type ControllerQuery = { contract: Contract }
-export type ApproveController = { controller: Contract; approved: boolean }
-export type ControllerApproval = { authority: Authority; controller: Contract }
 export type ControllerSuspension = { controller: Contract; suspended: boolean }
 export type Delegated = { principal: TypedPrincipal; op: DelegatedOp }
 export type RegisterFor = { registration: Register; owner: Authority; manager: Authority }
 export type CedeReleased = { root: Node; destination: Contract }
 export type ReleasedRoot = { counters: RootCounters; grace_end: bigint }
 export type ControllerChanged = { controller: Controller; listed: boolean; version: bigint }
-export type ControllerApprovalChanged = { authority: Authority; controller: Contract; approved: boolean; admission_version: bigint }
 export type ControllerSuspensionChanged = { controller: Contract; suspended: boolean; actor: TypedPrincipal; version: bigint }
 export type ControllerUsed = { principal: TypedPrincipal; via: Contract; scope: number }
 export type RootCeded = { forward: Forward; counters: RootCounters; grace_end: bigint }
@@ -601,22 +598,18 @@ export interface WireTypes {
   "Controller": Controller
   "Controllers": Controllers
   "ControllerQuery": ControllerQuery
-  "ApproveController": ApproveController
-  "ControllerApproval": ControllerApproval
   "ControllerSuspension": ControllerSuspension
   "Delegated": Delegated
   "RegisterFor": RegisterFor
   "CedeReleased": CedeReleased
   "ReleasedRoot": ReleasedRoot
   "ControllerChanged": ControllerChanged
-  "ControllerApprovalChanged": ControllerApprovalChanged
   "ControllerSuspensionChanged": ControllerSuspensionChanged
   "ControllerUsed": ControllerUsed
   "RootCeded": RootCeded
   "Vec<Controller>": (Controller)[]
   "Option<Controller>": (Controller | null)
   "Event<ControllerChanged>": Event<ControllerChanged>
-  "Event<ControllerApprovalChanged>": Event<ControllerApprovalChanged>
   "Event<ControllerSuspensionChanged>": Event<ControllerSuspensionChanged>
   "Event<ControllerUsed>": Event<ControllerUsed>
   "Event<RootCeded>": Event<RootCeded>
@@ -638,6 +631,7 @@ export interface Methods {
     registration_context: { input: null; output: RegistrationContext }
     renewal_schedule: { input: null; output: RenewalSchedule }
     roles: { input: null; output: DirectoryRolesReturn }
+    operator_payout_key: { input: null; output: DirectoryPayoutKey }
     member: { input: MemberQuery; output: (Admission | null) }
     members: { input: MemberPage; output: Members }
     allocation: { input: null; output: DirectoryAllocationReturn }
@@ -649,8 +643,6 @@ export interface Methods {
     capacity: { input: null; output: Capacity }
     controllers: { input: null; output: Controllers }
     controller: { input: ControllerQuery; output: (Controller | null) }
-    controller_approval: { input: ControllerApproval; output: boolean }
-    approve_controller: { input: ApproveController; output: null }
     set_controller_suspension: { input: ControllerSuspension; output: null }
   }
   policy: {
@@ -831,7 +823,6 @@ export interface EventTypes {
   refund_claimed: Event<RefundClaimed>
   escrow_renewed: Event<EscrowRenewed>
   controller_changed: Event<ControllerChanged>
-  controller_approval_changed: Event<ControllerApprovalChanged>
   controller_suspension_changed: Event<ControllerSuspensionChanged>
   controller_used: Event<ControllerUsed>
   root_ceded: Event<RootCeded>

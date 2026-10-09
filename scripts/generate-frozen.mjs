@@ -84,7 +84,7 @@ await writeFile(
     `export const definitions: Record<string, unknown> = ${JSON.stringify(defs, null, 2)}\n`,
 )
 const reads = new Set(
-  'controllers controller controller_approval released_root config registration_context renewal_schedule roles member members allocation market proposal proposals interface_version binding capacity quote home stats get_name children record_slot read_record read_records resolve_record read_primary resolve_primary pending_commitment commitment_raw quote_registration quote_renewal slot_liveness export_move_row move_status import_status move_cooldowns read_slot_record read_record_slot read_state read_referral referrals source read_balance wind_down_state order_api_version read_order read_refund read_listing read_offer'.split(
+  'controllers controller released_root config registration_context renewal_schedule roles operator_payout_key member members allocation market proposal proposals interface_version binding capacity quote home stats get_name children record_slot read_record read_records resolve_record read_primary resolve_primary pending_commitment commitment_raw quote_registration quote_renewal slot_liveness export_move_row move_status import_status move_cooldowns read_slot_record read_record_slot read_state read_referral referrals source read_balance wind_down_state order_api_version read_order read_refund read_listing read_offer'.split(
     ' ',
   ),
 )

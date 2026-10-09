@@ -11,7 +11,6 @@ import {
   slotStateKey,
   projectedPrimary,
   projectedControllers,
-  projectedControllerApproval,
   projectedHome,
   projectedName,
   projectedSlotLiveness,
@@ -1990,7 +1989,7 @@ it('preserves the store role and initial admission history for SetAcceptsMoves',
           action: {
             SetAcceptsMoves: {
               store: bytes(4),
-              expected: true,
+              expected_version: 1n,
               value: false,
             },
           },
@@ -2142,7 +2141,7 @@ it('reads primaries and move homes without enumerating unrelated history', () =>
   }
 })
 
-it('projects controller admissions, consent, suspension and re-admission tokens', () => {
+it('projects controller admissions, suspension and re-admission', () => {
   const s = createProjectionState(options), initialized = sample('DirectoryInitialized')
   initialized.config.revision = initialized.config.registration.revision = 1n
   initialized.args.initial_store.id = bytes(4)
@@ -2154,30 +2153,20 @@ it('projects controller admissions, consent, suspension and re-admission tokens'
   const change = (height: bigint, topic: string, body: unknown) => projectReceipt(s, receipt(height, [[1, topic, body]]))
   change(2n, 'controller_changed', { controller, listed: true, version: 2n })
   expect(projectedControllers(s)).toEqual({ version: 2n, rows: [controller] })
-  change(3n, 'controller_approval_changed', { authority: bytes(10), controller: bytes(41), approved: true, admission_version: 2n })
-  expect(projectedControllerApproval(s, { authority: bytes(10), controller: bytes(41) })).toBe(true)
-  expect(projectedControllerApproval(s, { authority: bytes(11), controller: bytes(41) })).toBe(false)
   const revision = s.directory!.revision
   change(4n, 'controller_suspension_changed', { controller: bytes(41), suspended: true, actor: { kind: 'Contract', bytes: bytes(42) }, version: 3n })
   expect(projectedControllers(s).rows[0].suspended).toBe(true)
   expect(s.directory!.revision).toBe(revision + 1n)
-  expect(projectedControllerApproval(s, { authority: bytes(10), controller: bytes(41) })).toBe(true)
   change(5n, 'controller_changed', { controller: { ...controller, suspended: true }, listed: false, version: 4n })
   expect(projectedControllers(s).rows).toEqual([])
-  expect(projectedControllerApproval(s, { authority: bytes(10), controller: bytes(41) })).toBe(false)
   change(5n, 'controller_changed', { controller: { ...controller, admitted_at: 5n, suspended: true }, listed: true, version: 5n })
-  expect(projectedControllerApproval(s, { authority: bytes(10), controller: bytes(41) })).toBe(false)
-  change(6n, 'controller_approval_changed', { authority: bytes(10), controller: bytes(41), approved: true, admission_version: 5n })
-  expect(projectedControllerApproval(restoreProjection(snapshotProjection(s)), { authority: bytes(10), controller: bytes(41) })).toBe(true)
-  change(7n, 'controller_approval_changed', { authority: bytes(10), controller: bytes(41), approved: false, admission_version: 5n })
-  expect(projectedControllerApproval(s, { authority: bytes(10), controller: bytes(41) })).toBe(false)
   change(8n, 'controller_changed', { controller: { ...controller, suspended: true }, listed: false, version: 6n })
   change(9n, 'controller_suspension_changed', { controller: bytes(41), suspended: false, actor: { kind: 'Contract', bytes: bytes(42) }, version: 7n })
   expect(projectedControllers(s)).toEqual({ version: 7n, rows: [] })
 })
 it('projects retirement admissions as stores', () => {
   const s = createProjectionState(options), a = { ...sample('Admission'), id: bytes(4), ordinal: 0, retiring: true }
-  projectReceipt(s, receipt(1n, [[1, 'action_applied', { ...sample('ActionApplied'), action: { SetRetiring: { store: bytes(4), expected: false, value: true } }, admission: a }]]))
+  projectReceipt(s, receipt(1n, [[1, 'action_applied', { ...sample('ActionApplied'), action: { SetRetiring: { store: bytes(4), expected_version: 1n, value: true } }, admission: a }]]))
   expect(s.admissions[id(4)].retiring).toBe(true)
   expect(s.scope[id(4)]).toBe('store')
 })
@@ -2222,4 +2211,40 @@ it('keeps journal occurrence identity when a store reuses op_seq', () => {
   for (const e of r.events) (e.data as any).op_seq = 1n
   const effects = committedEvents(r, scope)
   expect(effects.map(e => e.operationOrdinal)).toEqual([0, 3])
+})
+
+it('projects shared store governance versions from initialization and both flag actions', () => {
+  const s = createProjectionState(options), initialized = initializedDirectory()
+  initialized.args.initial_store.governance_version = 1n
+  initialized.config.recipient_version = 1n
+  projectReceipt(s, receipt(1n, [[1, 'directory_initialized', initialized]]))
+  expect(s.admissions[id(4)].governance_version).toBe(1n)
+  expect(s.directory!.recipient_version).toBe(1n)
+  for (const [variant, field, version] of [
+    ['SetAcceptsMoves', 'accepts_moves', 2n],
+    ['SetRetiring', 'retiring', 3n],
+  ] as const) {
+    const admission = { ...s.admissions[id(4)], [field]: true, governance_version: version }
+    projectReceipt(s, receipt(version, [[1, 'action_applied', {
+      ...sample('ActionApplied'), config: { ...initialized.config, recipient_version: version },
+      action: { [variant]: { store: bytes(4), expected_version: version - 1n, value: true } }, admission,
+    }]]))
+    expect(s.admissions[id(4)]).toEqual(admission)
+    expect(s.directory!.recipient_version).toBe(version)
+  }
+  const restored = restoreProjection(snapshotProjection(s))
+  expect(restored.admissions[id(4)].governance_version).toBe(3n)
+  expect(restored.directory!.recipient_version).toBe(3n)
+})
+it('projects the recipient version on a same-recipient operator handover', () => {
+  const s = createProjectionState(options), initialized = initializedDirectory()
+  initialized.config.operator_epoch = 1n
+  initialized.config.recipient_version = 9007199254740993n
+  projectReceipt(s, receipt(1n, [[1, 'directory_initialized', initialized]]))
+  projectReceipt(s, receipt(2n, [[1, 'operator_changed', {
+    ...sample('OperatorChanged'), previous: initialized.config.operator, current: initialized.config.operator,
+    operator_epoch: initialized.config.operator_epoch + 1n, recipient_version: 9007199254740994n,
+  }]]))
+  expect(s.directory!.recipient_version).toBe(9007199254740994n)
+  expect(restoreProjection(snapshotProjection(s)).directory!.recipient_version).toBe(9007199254740994n)
 })

@@ -139,14 +139,47 @@ lack the original frozen directory/store binding.
 
 `client.listControllers()` returns the directory's version and current controller
 rows, including scope bits (MANAGE=1, AUTHORITY=2, REGISTER_FOR=4) and suspension.
-`client.controllerApproval(authority, controller)` reads recorded consent for the
-current admission; suspension does not erase it. Build consent changes with
-`directoryApproveControllerCall(directoryId, { controller, approved })`.
 The guardian uses `directorySetControllerSuspensionCall`.
 
 The typed `Delegated` port and `PaidOperation.RegisterFor` are contract integration
 inputs. They do not confer direct wallet authority: delegated operations require
-an admitted, approved controller, and RegisterFor uses an authenticated payment
+an admitted, unsuspended controller with the required scope, and RegisterFor uses an authenticated payment
 receipt with that controller as payer and commitment actor. `cede_released` is a
 store-only call. Their wire schemas are exposed for decoding and driver encoding;
 no public wallet builder is provided for these internal calls.
+
+For every delegated operation, the principal must be the controller's own caller.
+A Moonlight user signs a **root call to the controller**, never a call routed
+through another contract. The controller passes that user's principal to
+`store.delegated`; the store checks it against the controller's caller. A contract
+principal consents by calling the controller directly. Controller admission is
+not standing consent, and there is no approval transaction or approval read.
+Use the controller's own ABI and transaction builder for the root call; the SDK's
+store port is an internal contract API, not a wallet call to the store.
+
+Controllers must export `controller_interface(()) -> u64` returning
+`CONTROLLER_INTERFACE` (`0x4444534354524c01n`, exported by the SDK). Directory
+admission requires a successful canonical reply with that exact marker.
+`RegisterFor` still needs no beneficiary consent. Autonomous logic can instead
+receive custody through `transfer_and_call` and act directly as a contract.
+
+## Governance version guards
+
+`setAcceptsMovesProposalCall(directoryId, admission, value)` and
+`setRetiringProposalCall(directoryId, admission, value)` fill `expected_version`
+from the admission's current `governance_version`. Both flags share one counter,
+starting at 1 and advancing even when a successful action repeats the same value.
+Obtain the admission from `client.directory.member({ kind: 'Store', id: storeId })`
+or `state.admissions[storeHex]` in a current projection; require a non-null read.
+
+`setRecipientProposalCall(directoryId, config, recipient)` fills both
+`expected_operator_epoch` and `expected_recipient_version` from
+`await client.directory.config()` or `state.directory`. Recipient version starts
+at 1 and advances on recipient changes and operator acceptance, including a
+handover to the same recipient. These helpers return a `directory.propose` call;
+`directoryProposeCall` remains available for an explicitly guarded Action.
+
+The protocol checks every action's guard at proposal creation as well as
+execution. Stale or future guards are refused. Refresh state before proposing;
+concurrent governance can still stale a call after it is built. Older checkpoints
+without these counters require a fresh read before using the helpers.

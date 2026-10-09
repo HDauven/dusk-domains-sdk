@@ -315,7 +315,7 @@ it('admits directory actions under the role their admission belongs to', async (
   // Disabling moves on an existing store re-admits that store, not a policy.
   await t.client.admitDirectoryEvent(
     'action_applied',
-    applied({ SetAcceptsMoves: { store: store.id, expected: true, value: false } }, store) as never,
+    applied({ SetAcceptsMoves: { store: store.id, expected_version: 1n, value: false } }, store) as never,
   )
   await expect(
     t.client.admitDirectoryEvent(
@@ -374,13 +374,10 @@ it('prepares retirement commitment and reveal at the successor with the released
   expect(resumed.calls.commit.contractId).toBe(id(4))
   expect(resumed.calls.reveal.contractId).toBe(id(9))
 })
-it('lists controllers and reads approval independently of suspension', async () => {
+it('lists controllers including suspended entries', async () => {
   const t = await setup(), row = { contract: bytes(41), scopes: 7, admitted_at: 9n, suspended: true }
   t.responses.set(`${id(1)}:controllers`, { version: 4n, rows: [row] })
-  t.responses.set(`${id(1)}:controller_approval`, true)
   expect(await t.client.listControllers()).toEqual({ version: 4n, rows: [row] })
-  expect(await t.client.controllerApproval(bytes(10), bytes(41))).toBe(true)
-  expect(t.calls.at(-1)?.args).toEqual({ authority: bytes(10), controller: bytes(41) })
 })
 it.each(['sealed', 'retiring'])('selects the newest eligible retirement destination when the newest is %s', async reason => {
   const t = await registrationSetup()
@@ -430,5 +427,5 @@ it('rejects a successor quote that omits the previous lifecycle', async () => {
 })
 it('verifies SetRetiring admission events as stores', async () => {
   const t = await setup(), a = { ...t.admissions[0], retiring: true }
-  await expect(t.client.admitDirectoryEvent('action_applied', { version: 1, op_seq: 1n, body: { ...sample('ActionApplied'), action: { SetRetiring: { store: a.id, expected: false, value: true } }, admission: a } })).resolves.toBeUndefined()
+  await expect(t.client.admitDirectoryEvent('action_applied', { version: 1, op_seq: 1n, body: { ...sample('ActionApplied'), action: { SetRetiring: { store: a.id, expected_version: 1n, value: true } }, admission: a } })).resolves.toBeUndefined()
 })

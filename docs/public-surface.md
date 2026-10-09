@@ -30,7 +30,7 @@ types. Unit reads take no arguments.
 
 | Scope       | Read families                                                                                                                                                                                                                                                             |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| directory   | `config`, `registration_context`, `renewal_schedule`, `roles`, `member`, `members`, `allocation`, `market`, `proposal`, `proposals`, `controllers`, `controller`, `controller_approval`, common interface/binding/capacity                                                                                                    |
+| directory   | `config`, `registration_context`, `renewal_schedule`, `roles`, `operator_payout_key`, `member`, `members`, `allocation`, `market`, `proposal`, `proposals`, `controllers`, `controller`, common interface/binding/capacity                                                                                                    |
 | store       | `home`, `released_root`, `get_name`, `children`, `record_slot`, `read_record`, `read_records`, `resolve_record`, `read_primary`, `resolve_primary`, `pending_commitment`, `commitment_raw`, both quotes, slot liveness, move/import status, cooldowns, export rows, stats and common reads |
 | resolver    | `read_slot_record`, `read_record_slot`, stats and common reads                                                                                                                                                                                                            |
 | policy      | `quote`, `config`, `interface_version`, `binding`                                                                                                                                                                                                                         |
@@ -120,3 +120,8 @@ Checkpoint schema version 2 includes incremental indexes and import row counts;
 old snapshots must be rebuilt from receipts. See the
 [indexer migration notes](./indexer-events.md#explicit-checkpoints-and-indexer-migration)
 for persistence and reorg ordering.
+
+Governance helpers `setAcceptsMovesProposalCall`, `setRetiringProposalCall` and
+`setRecipientProposalCall` derive guards from current admission/config state.
+`CONTROLLER_INTERFACE` identifies the controller marker ABI. See
+[controller consent and governance guards](registration.md#controllers).
