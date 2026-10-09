@@ -229,10 +229,6 @@ export const indexerEventCatalog = {
     "role": "directory",
     "type": "Event<ControllerChanged>"
   },
-  "controller_approval_changed": {
-    "role": "directory",
-    "type": "Event<ControllerApprovalChanged>"
-  },
   "controller_suspension_changed": {
     "role": "directory",
     "type": "Event<ControllerSuspensionChanged>"

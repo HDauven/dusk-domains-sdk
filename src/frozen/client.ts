@@ -560,12 +560,6 @@ export class FrozenClient {
   async listControllers(): Promise<Controllers> {
     return this.directory.controllers()
   }
-  async controllerApproval(
-    authority: Authority,
-    controller: Contract,
-  ): Promise<boolean> {
-    return this.directory.controller_approval({ authority, controller })
-  }
   /** Check every home before choosing a released root's cession destination. */
   async registrationPlacement(root: Contract): Promise<RegistrationPlacement> {
     await this.verifyContract('directory', this.directoryId)

@@ -10,8 +10,6 @@ import { fixtures, release, id, bytes } from './helpers.ts'
 const methods = [
   ['directory', 'controllers', '()', 'Controllers', 'read'],
   ['directory', 'controller', 'ControllerQuery', 'Option<Controller>', 'read'],
-  ['directory', 'controller_approval', 'ControllerApproval', 'bool', 'read'],
-  ['directory', 'approve_controller', 'ApproveController', '()', 'write'],
   ['directory', 'set_controller_suspension', 'ControllerSuspension', '()', 'write'],
   ['store', 'delegated', 'Delegated', '()', 'internal'],
   ['store', 'released_root', 'StoreHomeArgs', 'ReleasedRoot', 'read'],
@@ -47,7 +45,6 @@ for (const suite of ['frozen-v1', 'frozen-v1-max']) {
 }
 for (const [topic, type, role] of [
   ['controller_changed', 'ControllerChanged', 'directory'],
-  ['controller_approval_changed', 'ControllerApprovalChanged', 'directory'],
   ['controller_suspension_changed', 'ControllerSuspensionChanged', 'directory'],
   ['controller_used', 'ControllerUsed', 'store'],
   ['root_ceded', 'RootCeded', 'store'],
@@ -59,16 +56,14 @@ for (const [topic, type, role] of [
     expect(wireValue(row.type, driver.decodeEvent(topic, Uint8Array.from(fromHex(row.rkyv))))).toEqual(wireValue(row.type, row.json))
   })
 }
-it('builds approvals and guardian suspension, but keeps contract-only ports out of wallet calls', () => {
+it('builds guardian suspension, but keeps contract-only ports out of wallet calls', () => {
   for (const [method, args] of [
-    ['approve_controller', { controller: bytes(41), approved: true }],
     ['set_controller_suspension', { controller: bytes(41), suspended: true }],
   ] as const) {
     const call = buildCall('directory', id(1), method, args)
     expect(call.deposit).toBe('0')
     expect(call.gasLimit).toBeGreaterThan(0n)
   }
-  expect((builders as any).directoryApproveControllerCall(id(1), { controller: bytes(41), approved: false }).args.approved).toBe(false)
   for (const method of ['delegated', 'cede_released'])
     expect(() => buildCall('store', id(4), method as never, {} as never)).toThrow('public wallet action')
   expect(builders).not.toHaveProperty('storeCedeReleasedCall')
@@ -81,10 +76,12 @@ it.each(Object.entries(fixtures()).filter(([key]) => key.startsWith('DelegatedOp
     expect(wireValue('Delegated', driver.decodeInput('delegated', driver.encodeInput('delegated', stringifyJson(value))))).toEqual(value)
   },
 )
-it.each(['AddController', 'RemoveController', 'SetRetiring'])('encodes and decodes the %s proposal action', async variant => {
+it.each(Object.keys(fixtures()).filter(key => key.startsWith('Action::')).map(key => key.slice('Action::'.length)))('matches the golden archive for the %s proposal action', async variant => {
   const rows = fixtures(), driver = (await release()).drivers.get(id(1))!
   const propose = wireValue('Propose', { ...rows.Propose.json as object, action: rows[`Action::${variant}`].json })
   const encoded = driver.encodeInput('propose', stringifyJson(propose))
+  // Propose wraps one Action, so its archive has the same layout as that Action.
+  expect(hex(encoded)).toBe(rows[`Action::${variant}`].rkyv)
   expect(wireValue('Propose', driver.decodeInput('propose', encoded))).toEqual(propose)
 })
 it('decodes both controller query option replies', async () => {

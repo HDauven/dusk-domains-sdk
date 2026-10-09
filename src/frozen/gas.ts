@@ -42,7 +42,6 @@ export const MAX_AUTO_GAS_PRICE: bigint = 10n
  */
 export const GAS_LIMITS: Readonly<Record<string, bigint>> = Object.freeze({
   // New controller writes use the protocol ceiling until measured wallet budgets exist.
-  'directory.approve_controller': MAX_GAS_LIMIT,
   'directory.set_controller_suspension': MAX_GAS_LIMIT,
   'directory.propose': 250_000_000n,
   'directory.execute': 16_000_000n,

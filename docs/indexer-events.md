@@ -159,10 +159,18 @@ rebuild the index from the fresh deployment's first block.
 ## Logic port and cession
 
 `projectedControllers(state)` lists current controllers with scopes and suspension.
-`projectedControllerApproval(state, { authority, controller })` checks consent
-against the current admission token. Keep `controllerVersion`, `controllers` and
-`controllerApprovals` with every checkpoint. Removal invalidates consent even when
-the same contract is admitted again; suspension alone does not revoke it.
+Keep `controllerVersion` and `controllers` with each checkpoint. There is no
+per-authority consent state: consent comes from each direct call to the controller.
+
+`restoreProjection` accepts schema-2 checkpoints containing the retired
+`controllerApprovals` map, clones the snapshot, and drops that map. It preserves
+all other state, indexes and historical effects without modifying the saved
+snapshot. Missing `governance_version` or `recipient_version` fields remain
+unknown; they are optional on projected admissions/config for this compatibility
+case. Proposal helpers require fresh reads instead of guessing those counters.
+Current initialization/action events supply both counters, and `operator_changed`
+updates the recipient version. New wire decoding uses only the current protocol;
+old predeployment event archives are not a replay format for the new ABI.
 
 Committed effects include `operationOrdinal`, the receipt ordinal of their
 operation begin. Associate `controller_used` with effects by receipt, emitter,

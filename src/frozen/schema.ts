@@ -994,7 +994,8 @@ export const definitions: Record<string, unknown> = {
       "ordinal",
       "admitted_at",
       "accepts_moves",
-      "retiring"
+      "retiring",
+      "governance_version"
     ],
     "properties": {
       "id": {
@@ -1020,6 +1021,11 @@ export const definitions: Record<string, unknown> = {
       },
       "retiring": {
         "$ref": "#/$defs/bool"
+      },
+      "governance_version": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": "18446744073709551615"
       }
     }
   },
@@ -1166,7 +1172,8 @@ export const definitions: Record<string, unknown> = {
       "market_version",
       "store_count",
       "resolver_count",
-      "source_version"
+      "source_version",
+      "recipient_version"
     ],
     "properties": {
       "binding": {
@@ -1213,6 +1220,11 @@ export const definitions: Record<string, unknown> = {
       },
       "source_version": {
         "$ref": "#/$defs/u64"
+      },
+      "recipient_version": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": "18446744073709551615"
       }
     }
   },
@@ -1315,18 +1327,20 @@ export const definitions: Record<string, unknown> = {
             "additionalProperties": false,
             "required": [
               "store",
-              "expected",
+              "expected_version",
               "value"
             ],
             "properties": {
               "store": {
                 "$ref": "#/$defs/Contract"
               },
-              "expected": {
-                "$ref": "#/$defs/bool"
-              },
               "value": {
                 "$ref": "#/$defs/bool"
+              },
+              "expected_version": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": "18446744073709551615"
               }
             }
           }
@@ -1439,18 +1453,20 @@ export const definitions: Record<string, unknown> = {
             "additionalProperties": false,
             "required": [
               "expected_operator_epoch",
-              "expected_recipient",
+              "expected_recipient_version",
               "recipient"
             ],
             "properties": {
               "expected_operator_epoch": {
                 "$ref": "#/$defs/u64"
               },
-              "expected_recipient": {
-                "$ref": "#/$defs/Endpoint"
-              },
               "recipient": {
                 "$ref": "#/$defs/Endpoint"
+              },
+              "expected_recipient_version": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": "18446744073709551615"
               }
             }
           }
@@ -1572,18 +1588,20 @@ export const definitions: Record<string, unknown> = {
             "additionalProperties": false,
             "required": [
               "store",
-              "expected",
+              "expected_version",
               "value"
             ],
             "properties": {
               "store": {
                 "$ref": "#/$defs/Contract"
               },
-              "expected": {
-                "$ref": "#/$defs/bool"
-              },
               "value": {
                 "$ref": "#/$defs/bool"
+              },
+              "expected_version": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": "18446744073709551615"
               }
             }
           }
@@ -4037,7 +4055,8 @@ export const definitions: Record<string, unknown> = {
       "id",
       "previous",
       "current",
-      "operator_epoch"
+      "operator_epoch",
+      "recipient_version"
     ],
     "properties": {
       "id": {
@@ -4051,6 +4070,11 @@ export const definitions: Record<string, unknown> = {
       },
       "operator_epoch": {
         "$ref": "#/$defs/u64"
+      },
+      "recipient_version": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": "18446744073709551615"
       }
     }
   },
@@ -7327,38 +7351,6 @@ export const definitions: Record<string, unknown> = {
       }
     }
   },
-  "ApproveController": {
-    "type": "object",
-    "additionalProperties": false,
-    "required": [
-      "controller",
-      "approved"
-    ],
-    "properties": {
-      "controller": {
-        "$ref": "#/$defs/Contract"
-      },
-      "approved": {
-        "$ref": "#/$defs/bool"
-      }
-    }
-  },
-  "ControllerApproval": {
-    "type": "object",
-    "additionalProperties": false,
-    "required": [
-      "authority",
-      "controller"
-    ],
-    "properties": {
-      "authority": {
-        "$ref": "#/$defs/Authority"
-      },
-      "controller": {
-        "$ref": "#/$defs/Contract"
-      }
-    }
-  },
   "ControllerSuspension": {
     "type": "object",
     "additionalProperties": false,
@@ -7463,30 +7455,6 @@ export const definitions: Record<string, unknown> = {
       }
     }
   },
-  "ControllerApprovalChanged": {
-    "type": "object",
-    "additionalProperties": false,
-    "required": [
-      "authority",
-      "controller",
-      "approved",
-      "admission_version"
-    ],
-    "properties": {
-      "authority": {
-        "$ref": "#/$defs/Authority"
-      },
-      "controller": {
-        "$ref": "#/$defs/Contract"
-      },
-      "approved": {
-        "$ref": "#/$defs/bool"
-      },
-      "admission_version": {
-        "$ref": "#/$defs/u64"
-      }
-    }
-  },
   "ControllerSuspensionChanged": {
     "type": "object",
     "additionalProperties": false,
@@ -7585,26 +7553,6 @@ export const definitions: Record<string, unknown> = {
       },
       "body": {
         "$ref": "#/$defs/ControllerChanged"
-      }
-    }
-  },
-  "Event<ControllerApprovalChanged>": {
-    "type": "object",
-    "additionalProperties": false,
-    "required": [
-      "version",
-      "op_seq",
-      "body"
-    ],
-    "properties": {
-      "version": {
-        "$ref": "#/$defs/u16"
-      },
-      "op_seq": {
-        "$ref": "#/$defs/u64"
-      },
-      "body": {
-        "$ref": "#/$defs/ControllerApprovalChanged"
       }
     }
   },

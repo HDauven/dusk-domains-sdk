@@ -72,6 +72,11 @@
         "output": "DirectoryRolesReturn"
       },
       {
+        "name": "operator_payout_key",
+        "input": "()",
+        "output": "DirectoryPayoutKey"
+      },
+      {
         "name": "member",
         "input": "MemberQuery",
         "output": "Option<Admission>"
@@ -125,16 +130,6 @@
         "name": "controller",
         "input": "ControllerQuery",
         "output": "Option<Controller>"
-      },
-      {
-        "name": "controller_approval",
-        "input": "ControllerApproval",
-        "output": "bool"
-      },
-      {
-        "name": "approve_controller",
-        "input": "ApproveController",
-        "output": "()"
       },
       {
         "name": "set_controller_suspension",
@@ -928,10 +923,6 @@
     "controller_changed": {
       "role": "directory",
       "type": "Event<ControllerChanged>"
-    },
-    "controller_approval_changed": {
-      "role": "directory",
-      "type": "Event<ControllerApprovalChanged>"
     },
     "controller_suspension_changed": {
       "role": "directory",

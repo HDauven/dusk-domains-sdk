@@ -25,7 +25,71 @@ import type {
   CustodyIntent,
   Order,
   Terms,
+  Admission,
+  DirectoryConfig,
+  Endpoint,
 } from './types.ts'
+
+type StoreGovernance = Pick<Admission, 'id'> &
+  Partial<Pick<Admission, 'governance_version'>>
+type RecipientGovernance = Pick<DirectoryConfig, 'operator_epoch'> &
+  Partial<Pick<DirectoryConfig, 'recipient_version'>>
+
+function currentVersion(version: bigint | undefined, field: string): bigint {
+  if (version === undefined || version < 1n)
+    throw new Error(
+      `Read the current ${field} before proposing governance changes`,
+    )
+  return u64(version)
+}
+/** Use a current directory member read or projected admission for the shared flag guard. */
+export function setAcceptsMovesProposalCall(
+  directory: string,
+  admission: StoreGovernance,
+  value: boolean,
+): FrozenCall<'directory', 'propose'> {
+  return buildCall('directory', directory, 'propose', {
+    action: {
+      SetAcceptsMoves: {
+        store: admission.id,
+        expected_version: currentVersion(admission.governance_version, 'governance_version'),
+        value,
+      },
+    },
+  })
+}
+/** Retirement and move acceptance share the same per-store governance version. */
+export function setRetiringProposalCall(
+  directory: string,
+  admission: StoreGovernance,
+  value: boolean,
+): FrozenCall<'directory', 'propose'> {
+  return buildCall('directory', directory, 'propose', {
+    action: {
+      SetRetiring: {
+        store: admission.id,
+        expected_version: currentVersion(admission.governance_version, 'governance_version'),
+        value,
+      },
+    },
+  })
+}
+/** Use a current directory config read or projection, including the operator epoch. */
+export function setRecipientProposalCall(
+  directory: string,
+  config: RecipientGovernance,
+  recipient: Endpoint,
+): FrozenCall<'directory', 'propose'> {
+  return buildCall('directory', directory, 'propose', {
+    action: {
+      SetRecipient: {
+        expected_operator_epoch: config.operator_epoch,
+        expected_recipient_version: currentVersion(config.recipient_version, 'recipient_version'),
+        recipient,
+      },
+    },
+  })
+}
 export interface TransferInput {
   name: NameRef
   owner: Authority

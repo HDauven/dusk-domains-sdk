@@ -86,6 +86,12 @@ export const methodCatalog = {
       "mode": "read"
     },
     {
+      "name": "operator_payout_key",
+      "input": "()",
+      "output": "DirectoryPayoutKey",
+      "mode": "read"
+    },
+    {
       "name": "member",
       "input": "MemberQuery",
       "output": "Option<Admission>",
@@ -150,18 +156,6 @@ export const methodCatalog = {
       "input": "ControllerQuery",
       "output": "Option<Controller>",
       "mode": "read"
-    },
-    {
-      "name": "controller_approval",
-      "input": "ControllerApproval",
-      "output": "bool",
-      "mode": "read"
-    },
-    {
-      "name": "approve_controller",
-      "input": "ApproveController",
-      "output": "()",
-      "mode": "write"
     },
     {
       "name": "set_controller_suspension",

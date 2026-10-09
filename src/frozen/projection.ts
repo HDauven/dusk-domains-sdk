@@ -46,6 +46,11 @@ interface MarketTotals {
   escrowLux: bigint
   nextOrderId: bigint
 }
+/** Pre-consent-change checkpoints can lack counters; refresh before proposing. */
+export type ProjectedAdmission = Omit<T.Admission, 'governance_version'> &
+  Partial<Pick<T.Admission, 'governance_version'>>
+export type ProjectedDirectoryConfig = Omit<T.DirectoryConfig, 'recipient_version'> &
+  Partial<Pick<T.DirectoryConfig, 'recipient_version'>>
 export interface ProjectionState {
   schemaVersion: 2
   /** Disable effect retention when the indexer persists its own event history. */
@@ -62,11 +67,10 @@ export interface ProjectionState {
   height: bigint
   directoryId: string
   scope: Record<string, ContractRole>
-  directory: T.DirectoryConfig | null
-  admissions: Record<string, T.Admission>
+  directory: ProjectedDirectoryConfig | null
+  admissions: Record<string, ProjectedAdmission>
   controllerVersion: bigint
   controllers: Record<string, { controller: T.Controller; admissionVersion: bigint }>
-  controllerApprovals: Record<string, Record<string, bigint>>
   markets: Record<string, T.Market>
   proposals: Record<string, T.Proposal>
   initializations: Record<string, unknown>
@@ -174,7 +178,6 @@ export function createProjectionState(
     admissions: {},
     controllerVersion: 1n,
     controllers: {},
-    controllerApprovals: {},
     markets: {},
     proposals: {},
     initializations: {},
@@ -301,11 +304,11 @@ function tree(s: ProjectionState, store: string, n: T.Name): T.Name[] {
   visit(n)
   return rows
 }
-function directory(s: ProjectionState): T.DirectoryConfig {
+function directory(s: ProjectionState): ProjectedDirectoryConfig {
   requireHistory(s.directory, 'directory initialization')
   return s.directory
 }
-function setDirectoryRevision(d: T.DirectoryConfig, revision: bigint): void {
+function setDirectoryRevision(d: ProjectedDirectoryConfig, revision: bigint): void {
   d.revision = d.registration.revision = u64(revision)
 }
 function actionAdmissionRole(action: T.Action): ContractRole {
@@ -568,6 +571,7 @@ function apply(
       const d = directory(s)
       d.operator = e.body.current
       d.operator_epoch = e.body.operator_epoch
+      d.recipient_version = e.body.recipient_version
       d.registration.operator = e.body.current.principal
       setDirectoryRevision(d, d.revision + 1n)
       break
@@ -611,18 +615,6 @@ function apply(
       s.controllerVersion = b.version
       if (b.listed) s.controllers[id] = { controller: b.controller, admissionVersion: b.version }
       else delete s.controllers[id]
-      break
-    }
-    case 'controller_approval_changed': {
-      const b = e.body, authority = hex(b.authority), id = contractId(b.controller)
-      if (b.approved) {
-        requireHistory(s.controllers[id]?.admissionVersion === b.admission_version, 'controller approval admission')
-        s.controllerApprovals[authority] ??= {}
-        s.controllerApprovals[authority][id] = b.admission_version
-      } else if (s.controllerApprovals[authority]) {
-        delete s.controllerApprovals[authority][id]
-        if (!Object.keys(s.controllerApprovals[authority]).length) delete s.controllerApprovals[authority]
-      }
       break
     }
     case 'controller_suspension_changed': {
@@ -1262,7 +1254,12 @@ export function restoreProjection(
     throw new Error(
       'Unsupported projection snapshot; replay receipts with schema version 2',
     )
-  return snapshotProjection(snapshot)
+  const restored = snapshotProjection(snapshot)
+  // Schema-2 checkpoints from the earlier predeployment ABI remain readable.
+  // Approval rows have no meaning under call consent. Never infer version guards
+  // from the old value-only state; helpers require a fresh read when absent.
+  Reflect.deleteProperty(restored, 'controllerApprovals')
+  return restored
 }
 export interface Projector {
   /** Live state; use snapshotProjection for an independent view. */
@@ -1551,9 +1548,4 @@ export function projectedCooldowns(
 /** Current listed controllers; removal never exposes suspension tombstones. */
 export function projectedControllers(state: ProjectionState): T.Controllers {
   return { version: state.controllerVersion, rows: Object.values(state.controllers).map(row => structuredClone(row.controller)) }
-}
-/** Consent is tied to an admission and remains recorded during suspension. */
-export function projectedControllerApproval(state: ProjectionState, query: T.ControllerApproval): boolean {
-  const id = contractId(query.controller), row = state.controllers[id]
-  return !!row && state.controllerApprovals[hex(query.authority)]?.[id] === row.admissionVersion
 }
