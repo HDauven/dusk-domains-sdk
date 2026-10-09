@@ -155,3 +155,20 @@ The TypeScript catalog is the source for the committed standalone
 entrypoint. `npm run build` regenerates it;
 CI checks it for drift. Frozen projection schemas replace all legacy event rows:
 rebuild the index from the fresh deployment's first block.
+
+## Logic port and cession
+
+`projectedControllers(state)` lists current controllers with scopes and suspension.
+`projectedControllerApproval(state, { authority, controller })` checks consent
+against the current admission token. Keep `controllerVersion`, `controllers` and
+`controllerApprovals` with every checkpoint. Removal invalidates consent even when
+the same contract is admitted again; suspension alone does not revoke it.
+
+Committed effects include `operationOrdinal`, the receipt ordinal of their
+operation begin. Associate `controller_used` with effects by receipt, emitter,
+operation ordinal and `op_seq`; callback operations have independent provenance.
+
+`root_ceded` retires the old tree and its raw primaries, keeps history, and installs
+a permanent forward. The same receipt must register the next generation at the
+destination. Cleanup never removes that forward; by-name projected reads return
+`Forwarded` at the source, including for old descendants.

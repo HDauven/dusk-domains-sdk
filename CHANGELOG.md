@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.2 (2026-10-09)
+
+- Support the frozen logic port: retiring admissions, controller governance and consent,
+  delegated operations, RegisterFor, released-root reads and cession events.
+- Prepare registration at the eligible successor of a retiring canonical home,
+  preserving the released generation and grace end in quote verification.
+- Project controller admission tokens, approvals and suspension; retain permanent
+  cession forwards and operation occurrence identity for controller provenance.
+
 ## 0.3.1 (2026-10-07)
 
 - Calibrate wallet gas budgets against VM measurements, admission reserves and

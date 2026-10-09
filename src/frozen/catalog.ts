@@ -138,6 +138,36 @@ export const methodCatalog = {
       "input": "()",
       "output": "Capacity",
       "mode": "read"
+    },
+    {
+      "name": "controllers",
+      "input": "()",
+      "output": "Controllers",
+      "mode": "read"
+    },
+    {
+      "name": "controller",
+      "input": "ControllerQuery",
+      "output": "Option<Controller>",
+      "mode": "read"
+    },
+    {
+      "name": "controller_approval",
+      "input": "ControllerApproval",
+      "output": "bool",
+      "mode": "read"
+    },
+    {
+      "name": "approve_controller",
+      "input": "ApproveController",
+      "output": "()",
+      "mode": "write"
+    },
+    {
+      "name": "set_controller_suspension",
+      "input": "ControllerSuspension",
+      "output": "()",
+      "mode": "write"
     }
   ],
   "policy": [
@@ -478,6 +508,24 @@ export const methodCatalog = {
       "input": "()",
       "output": "Capacity",
       "mode": "read"
+    },
+    {
+      "name": "delegated",
+      "input": "Delegated",
+      "output": "()",
+      "mode": "internal"
+    },
+    {
+      "name": "released_root",
+      "input": "StoreHomeArgs",
+      "output": "ReleasedRoot",
+      "mode": "read"
+    },
+    {
+      "name": "cede_released",
+      "input": "CedeReleased",
+      "output": "ReleasedRoot",
+      "mode": "internal"
     }
   ],
   "resolver": [

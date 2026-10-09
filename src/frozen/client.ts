@@ -1,5 +1,11 @@
 /** Canonical frozen-layer reads, admission discovery and monotone forwarding. @module */
-import { contractId, equalBytes, fromHex, hex, nameKey } from './bytes.ts'
+import { contractId, equalBytes, fromHex, hex, nameKey, hash } from './bytes.ts'
+import {
+  registrationCalls,
+  type RegistrationInput,
+  type RegistrationCalls,
+} from './actions.ts'
+import { canonicalBytes } from './digests.ts'
 import { methodCatalog } from './catalog.ts'
 import {
   methodDefinition,
@@ -23,6 +29,11 @@ import { createHttpTransport, type ReadTransport } from './transport.ts'
 import type { ReadMethods } from './read-types.ts'
 import type {
   Admission,
+  Authority,
+  Home,
+  Controllers,
+  ReleasedRoot,
+  QuoteRequest,
   Contract,
   Forward,
   Located,
@@ -73,6 +84,18 @@ export interface DirectoryState {
   config: DirectoryConfig
   stores: Admission[]
   resolvers: Admission[]
+}
+
+export interface RegistrationPlacement {
+  store: string
+  canonicalStore: string | null
+  releasedRoot: ReleasedRoot | null
+  height: bigint
+}
+export interface PreparedRegistration extends RegistrationPlacement {
+  quoteRequest: QuoteRequest
+  quote: RegistrationQuote
+  calls: RegistrationCalls
 }
 
 export class FrozenClient {
@@ -339,9 +362,11 @@ export class FrozenClient {
     } else {
       const body = (event as EventTypes['action_applied']).body
       if (body.admission) {
-        // SetAcceptsMoves carries the updated store admission, like AddStore.
+        // Store flag changes carry the updated admission, like AddStore.
         const role =
-          'AddStore' in body.action || 'SetAcceptsMoves' in body.action
+          'AddStore' in body.action ||
+          'SetAcceptsMoves' in body.action ||
+          'SetRetiring' in body.action
             ? 'store'
             : 'AddResolver' in body.action
               ? 'resolver'
@@ -529,6 +554,164 @@ export class FrozenClient {
         value: 'Absent',
         forwards: [],
         height,
+      }
+    })
+  }
+  async listControllers(): Promise<Controllers> {
+    return this.directory.controllers()
+  }
+  async controllerApproval(
+    authority: Authority,
+    controller: Contract,
+  ): Promise<boolean> {
+    return this.directory.controller_approval({ authority, controller })
+  }
+  /** Check every home before choosing a released root's cession destination. */
+  async registrationPlacement(root: Contract): Promise<RegistrationPlacement> {
+    await this.verifyContract('directory', this.directoryId)
+    return this.snapshot(async (height) => {
+      await this.storeAdmissions()
+      const homes = new Map<string, Home>()
+      for (const a of this.stores) {
+        const id = contractId(a.id),
+          home = await this.raw('store', id, 'home', { root })
+        if (typeof home === 'object' && 'Staged' in home)
+          throw new Error('Registration root has a staged import')
+        homes.set(id, home)
+      }
+      const locals = [...homes].filter(([, home]) => home === 'Local')
+      if (locals.length > 1) throw new Error('Multiple canonical registration homes')
+      const canonicalStore = locals[0]?.[0] ?? null
+      for (const [start, home] of homes) {
+        if (typeof home !== 'object' || !('Forwarded' in home)) continue
+        let at = start,
+          current: Home = home,
+          hops = 0
+        const seen = new Set([start])
+        while (typeof current === 'object' && 'Forwarded' in current) {
+          if (hops++ === this.hopLimit)
+            throw new Error('Forwarding hop limit exceeded')
+          at = this.checkForward(at, root, current.Forwarded, seen)
+          seen.add(at)
+          current = homes.get(at)!
+        }
+        if (at !== canonicalStore || current !== 'Local')
+          throw new Error('Forward does not terminate at the canonical home')
+      }
+      let releasedRoot: ReleasedRoot | null = null
+      let store: string | null = canonicalStore
+      if (canonicalStore) {
+        const source = this.stores.find(
+          (a) => contractId(a.id) === canonicalStore,
+        )!
+        const view = await this.raw('store', canonicalStore, 'get_name', {
+          root,
+          node: root,
+        })
+        if (
+          typeof view !== 'object' ||
+          !('Local' in view) ||
+          height < view.Local.name.grace_end
+        )
+          throw new Error('Registration root is not released')
+        if (source.retiring) {
+          store = null
+          for (const a of [...this.stores].reverse()) {
+            if (a.retiring) continue
+            const capacity = await this.raw(
+              'store', contractId(a.id), 'capacity', null,
+            )
+            if (!capacity.sealed) {
+              if (a.ordinal > source.ordinal) store = contractId(a.id)
+              break
+            }
+          }
+          if (!store) throw new Error('No eligible retirement successor')
+          releasedRoot = await this.raw(
+            'store', canonicalStore, 'released_root', { root },
+          )
+          if (
+            releasedRoot.grace_end !== view.Local.name.grace_end ||
+            releasedRoot.counters.generation !== view.Local.name.incarnation.generation
+          )
+            throw new Error('Released root lineage changed')
+        }
+      } else {
+        const newest = this.stores.at(-1)
+        if (!newest || newest.retiring)
+          throw new Error('Newest registration store is unavailable')
+        store = contractId(newest.id)
+        if ((await this.raw('store', store, 'capacity', null)).sealed)
+          throw new Error('Newest registration store is sealed')
+      }
+      return { store: store!, canonicalStore, releasedRoot, height }
+    })
+  }
+  /** Quote at the selected store and bind its request to the previous lifecycle. */
+  async prepareRegistration(
+    input: Omit<RegistrationInput, 'quote' | 'commitmentStore'> & {
+      commitmentStore?: string
+    },
+  ): Promise<PreparedRegistration> {
+    const key = nameKey(`${input.label}.dusk`)
+    if (!equalBytes(key.root, key.node))
+      throw new Error('Registration requires a root label')
+    return this.snapshot(async (height) => {
+      const placement = await this.registrationPlacement(key.root)
+      const context = await this.directory.registration_context()
+      const policy = contractId(context.policy)
+      const config = await this.policy(policy).config()
+      let previousGeneration = placement.releasedRoot?.counters.generation ?? 0n
+      let previousGraceEnd = placement.releasedRoot?.grace_end ?? null
+      if (placement.canonicalStore && !placement.releasedRoot) {
+        const view = await this.raw(
+          'store', placement.canonicalStore, 'get_name', key,
+        )
+        if (typeof view !== 'object' || !('Local' in view))
+          throw new Error('Registration home changed')
+        previousGeneration = view.Local.name.incarnation.generation
+        previousGraceEnd = view.Local.name.grace_end
+      }
+      const quoteRequest: QuoteRequest = {
+        version: 1,
+        directory: fromHex(this.directoryId, 32),
+        store: fromHex(placement.store, 32),
+        node: key.node,
+        label: input.label,
+        actor: input.actor,
+        years: input.years,
+        height,
+        previous_generation: previousGeneration,
+        previous_grace_end: previousGraceEnd,
+        policy_version: context.policy_version,
+      }
+      const quote = await this.quoteRegistration(placement.store, {
+        node: key.node,
+        label: input.label,
+        actor: input.actor,
+        years: input.years,
+        expected_policy_version: context.policy_version,
+        expected_policy_config_version: config.config_version,
+      })
+      if (
+        !equalBytes(quote.quote.request_hash,
+          hash('duskds:quote:v1', canonicalBytes('QuoteRequest', quoteRequest))) ||
+        quote.height !== height ||
+        quote.policy_version !== context.policy_version ||
+        quote.quote.config_version !== config.config_version ||
+        contractId(quote.policy) !== policy
+      )
+        throw new Error('Registration quote does not match placement and previous lifecycle')
+      return {
+        ...placement,
+        height,
+        quoteRequest,
+        quote,
+        calls: registrationCalls(placement.store, {
+          ...input,
+          commitmentStore: input.commitmentStore ?? placement.store,
+          quote,
+        }),
       }
     })
   }

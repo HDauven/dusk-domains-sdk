@@ -64,6 +64,9 @@ export interface ProjectionState {
   scope: Record<string, ContractRole>
   directory: T.DirectoryConfig | null
   admissions: Record<string, T.Admission>
+  controllerVersion: bigint
+  controllers: Record<string, { controller: T.Controller; admissionVersion: bigint }>
+  controllerApprovals: Record<string, Record<string, bigint>>
   markets: Record<string, T.Market>
   proposals: Record<string, T.Proposal>
   initializations: Record<string, unknown>
@@ -169,6 +172,9 @@ export function createProjectionState(
     scope,
     directory: null,
     admissions: {},
+    controllerVersion: 1n,
+    controllers: {},
+    controllerApprovals: {},
     markets: {},
     proposals: {},
     initializations: {},
@@ -303,7 +309,7 @@ function setDirectoryRevision(d: T.DirectoryConfig, revision: bigint): void {
   d.revision = d.registration.revision = u64(revision)
 }
 function actionAdmissionRole(action: T.Action): ContractRole {
-  if ('AddStore' in action || 'SetAcceptsMoves' in action) return 'store'
+  if ('AddStore' in action || 'SetAcceptsMoves' in action || 'SetRetiring' in action) return 'store'
   if ('AddResolver' in action) return 'resolver'
   if ('SetPolicy' in action) return 'policy'
   throw new Error('Unexpected directory admission')
@@ -600,6 +606,35 @@ function apply(
       setDirectoryRevision(d, e.body.revision)
       break
     }
+    case 'controller_changed': {
+      const b = e.body, id = contractId(b.controller.contract)
+      s.controllerVersion = b.version
+      if (b.listed) s.controllers[id] = { controller: b.controller, admissionVersion: b.version }
+      else delete s.controllers[id]
+      break
+    }
+    case 'controller_approval_changed': {
+      const b = e.body, authority = hex(b.authority), id = contractId(b.controller)
+      if (b.approved) {
+        requireHistory(s.controllers[id]?.admissionVersion === b.admission_version, 'controller approval admission')
+        s.controllerApprovals[authority] ??= {}
+        s.controllerApprovals[authority][id] = b.admission_version
+      } else if (s.controllerApprovals[authority]) {
+        delete s.controllerApprovals[authority][id]
+        if (!Object.keys(s.controllerApprovals[authority]).length) delete s.controllerApprovals[authority]
+      }
+      break
+    }
+    case 'controller_suspension_changed': {
+      const b = e.body, row = s.controllers[contractId(b.controller)]
+      if (row) row.controller.suspended = b.suspended
+      s.controllerVersion = b.version
+      const d = directory(s)
+      setDirectoryRevision(d, d.revision + 1n)
+      break
+    }
+    case 'controller_used':
+      break
     case 'commitment_created': {
       const c = e.body.commitment
       s.commitments[`${store}:${hex(c.key.actor)}:${hex(c.key.hash)}`] = c
@@ -958,6 +993,23 @@ function apply(
       activated.add(id)
       break
     }
+    case 'root_ceded': {
+      const b = e.body, key = { root: b.forward.root, node: b.forward.root }
+      const root = s.names[nameStateKey(store, key)]
+      const source = s.admissions[store], destination = s.admissions[contractId(b.forward.destination)]
+      requireHistory(root && source?.retiring && destination && !destination.retiring &&
+        destination.ordinal > source.ordinal && destination.ordinal === b.forward.destination_ordinal &&
+        b.forward.completed_at === e.height && root.grace_end === b.grace_end && e.height >= b.grace_end &&
+        root.incarnation.generation === b.forward.generation && b.counters.generation === b.forward.generation &&
+        equal(s.counters[rootStateKey(store, b.forward.root)], b.counters), 'released-root cession')
+      for (const row of tree(s, store, root)) {
+        requireHistory(!row.custody, 'cession custody')
+        clearNamePrimaries(s, store, row)
+        removeName(s, store, row)
+      }
+      s.forwards[rootStateKey(store, b.forward.root)] = b.forward
+      break
+    }
     case 'root_forwarded': {
       const b = e.body,
         id = hex(b.ticket.id),
@@ -1178,6 +1230,17 @@ export function projectReceipt(
         [...activated].every((id) => forwarded.has(id)),
       'incomplete atomic move',
     )
+    for (const event of effects.filter(e => e.topic === 'root_ceded')) {
+      const b = (event.data as T.Event<T.RootCeded>).body
+      requireHistory(effects.some(e => {
+        if (e.topic !== 'root_registered' || e.emitter !== contractId(b.forward.destination)) return false
+        const registration = (e.data as T.Event<T.RootRegistered>).body
+        return equalBytes(registration.name.key.root, b.forward.root) &&
+          equalBytes(registration.name.key.node, b.forward.root) &&
+          registration.previous_generation === b.counters.generation &&
+          registration.name.incarnation.generation === b.counters.generation + 1n
+      }), 'incomplete atomic cession')
+    }
     next.height = receipt.height
     next.receipts[receipt.id] = true
     journal.commit()
@@ -1483,4 +1546,14 @@ export function projectedCooldowns(
       ),
     },
   }
+}
+
+/** Current listed controllers; removal never exposes suspension tombstones. */
+export function projectedControllers(state: ProjectionState): T.Controllers {
+  return { version: state.controllerVersion, rows: Object.values(state.controllers).map(row => structuredClone(row.controller)) }
+}
+/** Consent is tied to an admission and remains recorded during suspension. */
+export function projectedControllerApproval(state: ProjectionState, query: T.ControllerApproval): boolean {
+  const id = contractId(query.controller), row = state.controllers[id]
+  return !!row && state.controllerApprovals[hex(query.authority)]?.[id] === row.admissionVersion
 }
