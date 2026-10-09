@@ -10,6 +10,21 @@ exact total, quote height and selection/config versions. The policy quote’s
 Direct policy `quote` is also available for inspection, but does not guarantee
 registration eligibility.
 
+`client.registrationPlacement(root)` checks admitted homes and selects the store
+for registration. A released root at a retiring canonical home goes to the newest
+unsealed, non-retiring store with a higher ordinal. Failed reads, staged imports,
+conflicting homes and unavailable successors refuse placement. Unseen roots still
+use the newest admitted store; ordinary canonical homes can re-register when sealed.
+
+`client.prepareRegistration(input)` returns placement, `releasedRoot`, `quoteRequest`,
+the authoritative store `quote`, and `calls` containing commitment and reveal.
+It checks the quote request hash against the old generation and grace end from
+`released_root`, preserving the dropped-name premium. Both calls default to the
+selected store. Supply `commitmentStore` when resuming an existing commitment;
+its original shard is preserved. Reads never call `cede_released`; registration
+performs cession atomically on chain. As with `registrationCalls`, use the observed
+`commitHeight` to build the reveal after commitment inclusion.
+
 `registrationCalls(store, input)` takes the actor, root label, years, secret,
 original commitment store, observed `commitHeight`, reviewed quote, optional
 `validUntil` transaction deadline, typed referrer, initial records and primary.
@@ -119,3 +134,19 @@ overwritten. The adapter is not a cross-tab transaction system. Local storage
 contains the secret; do not include it in logs or telemetry. Legacy 0.2 entries
 cannot be automatically recovered into a fresh frozen deployment because they
 lack the original frozen directory/store binding.
+
+## Controllers
+
+`client.listControllers()` returns the directory's version and current controller
+rows, including scope bits (MANAGE=1, AUTHORITY=2, REGISTER_FOR=4) and suspension.
+`client.controllerApproval(authority, controller)` reads recorded consent for the
+current admission; suspension does not erase it. Build consent changes with
+`directoryApproveControllerCall(directoryId, { controller, approved })`.
+The guardian uses `directorySetControllerSuspensionCall`.
+
+The typed `Delegated` port and `PaidOperation.RegisterFor` are contract integration
+inputs. They do not confer direct wallet authority: delegated operations require
+an admitted, approved controller, and RegisterFor uses an authenticated payment
+receipt with that controller as payer and commitment actor. `cede_released` is a
+store-only call. Their wire schemas are exposed for decoding and driver encoding;
+no public wallet builder is provided for these internal calls.

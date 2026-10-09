@@ -10,6 +10,8 @@ import {
   primaryStateKey,
   slotStateKey,
   projectedPrimary,
+  projectedControllers,
+  projectedControllerApproval,
   projectedHome,
   projectedName,
   projectedSlotLiveness,
@@ -1306,6 +1308,7 @@ it('replays all directory configuration, proposals and effective admissions', ()
   const initialized = sample('DirectoryInitialized')
   initialized.config.binding.directory = bytes(1)
   initialized.config.revision = initialized.config.registration.revision = 1n
+  initialized.config.revision = initialized.config.registration.revision = 1n
   initialized.args.initial_store.id = bytes(4)
   initialized.args.initial_resolver.id = bytes(5)
   initialized.args.policy.id = bytes(3)
@@ -2137,4 +2140,86 @@ it('reads primaries and move homes without enumerating unrelated history', () =>
     expect(view).toMatchObject({ Local: { move_pending: started.ticket.id } })
     expect(projectedName(state, id(4), n.key, 400n)).toMatchObject({ Local: { move_pending: null } })
   }
+})
+
+it('projects controller admissions, consent, suspension and re-admission tokens', () => {
+  const s = createProjectionState(options), initialized = sample('DirectoryInitialized')
+  initialized.config.revision = initialized.config.registration.revision = 1n
+  initialized.args.initial_store.id = bytes(4)
+  initialized.args.initial_resolver.id = bytes(5)
+  initialized.args.policy.id = bytes(3)
+  initialized.args.initial_market = null
+  projectReceipt(s, receipt(1n, [[1, 'directory_initialized', initialized]]))
+  const controller = { contract: bytes(41), scopes: 7, admitted_at: 2n, suspended: false }
+  const change = (height: bigint, topic: string, body: unknown) => projectReceipt(s, receipt(height, [[1, topic, body]]))
+  change(2n, 'controller_changed', { controller, listed: true, version: 2n })
+  expect(projectedControllers(s)).toEqual({ version: 2n, rows: [controller] })
+  change(3n, 'controller_approval_changed', { authority: bytes(10), controller: bytes(41), approved: true, admission_version: 2n })
+  expect(projectedControllerApproval(s, { authority: bytes(10), controller: bytes(41) })).toBe(true)
+  expect(projectedControllerApproval(s, { authority: bytes(11), controller: bytes(41) })).toBe(false)
+  const revision = s.directory!.revision
+  change(4n, 'controller_suspension_changed', { controller: bytes(41), suspended: true, actor: { kind: 'Contract', bytes: bytes(42) }, version: 3n })
+  expect(projectedControllers(s).rows[0].suspended).toBe(true)
+  expect(s.directory!.revision).toBe(revision + 1n)
+  expect(projectedControllerApproval(s, { authority: bytes(10), controller: bytes(41) })).toBe(true)
+  change(5n, 'controller_changed', { controller: { ...controller, suspended: true }, listed: false, version: 4n })
+  expect(projectedControllers(s).rows).toEqual([])
+  expect(projectedControllerApproval(s, { authority: bytes(10), controller: bytes(41) })).toBe(false)
+  change(5n, 'controller_changed', { controller: { ...controller, admitted_at: 5n, suspended: true }, listed: true, version: 5n })
+  expect(projectedControllerApproval(s, { authority: bytes(10), controller: bytes(41) })).toBe(false)
+  change(6n, 'controller_approval_changed', { authority: bytes(10), controller: bytes(41), approved: true, admission_version: 5n })
+  expect(projectedControllerApproval(restoreProjection(snapshotProjection(s)), { authority: bytes(10), controller: bytes(41) })).toBe(true)
+  change(7n, 'controller_approval_changed', { authority: bytes(10), controller: bytes(41), approved: false, admission_version: 5n })
+  expect(projectedControllerApproval(s, { authority: bytes(10), controller: bytes(41) })).toBe(false)
+  change(8n, 'controller_changed', { controller: { ...controller, suspended: true }, listed: false, version: 6n })
+  change(9n, 'controller_suspension_changed', { controller: bytes(41), suspended: false, actor: { kind: 'Contract', bytes: bytes(42) }, version: 7n })
+  expect(projectedControllers(s)).toEqual({ version: 7n, rows: [] })
+})
+it('projects retirement admissions as stores', () => {
+  const s = createProjectionState(options), a = { ...sample('Admission'), id: bytes(4), ordinal: 0, retiring: true }
+  projectReceipt(s, receipt(1n, [[1, 'action_applied', { ...sample('ActionApplied'), action: { SetRetiring: { store: bytes(4), expected: false, value: true } }, admission: a }]]))
+  expect(s.admissions[id(4)].retiring).toBe(true)
+  expect(s.scope[id(4)]).toBe('store')
+})
+function cessionFixture() {
+  const root = makeName(), descendant = child(root, 'child', 2n), s = startState([root, descendant])
+  s.admissions[id(4)] = { ...sample('Admission'), id: bytes(4), ordinal: 0, retiring: true }
+  s.admissions[id(8)] = { ...sample('Admission'), id: bytes(8), ordinal: 1, retiring: false }
+  const forward = { root: root.key.root, destination: bytes(8), destination_ordinal: 1, generation: 7n, move_id: bytes(45), completed_at: 2000n }
+  const ceded = { forward, counters, grace_end: 2000n }
+  const fresh = { ...root, incarnation: { generation: 8n, serial: counters.next_serial }, expires_at: 3000n, grace_end: 4000n }
+  const effects: [number, string, unknown][] = [[4, 'root_ceded', ceded], [8, 'root_registered', { ...registered(fresh), previous_generation: 7n }]]
+  return { s, root, descendant, forward, fresh, effects }
+}
+it('cedes the released tree atomically, preserving history and permanent forwarding after cleanup', () => {
+  const t = cessionFixture()
+  const primary = { endpoint: bytes(12, 96), name: ref(t.root), mapping_id: 1n, updated_at: 100n }
+  projectReceipt(t.s, receipt(100n, [[4, 'primary_changed', { endpoint: primary.endpoint, previous: null, current: primary, reason: 'Set' }]]))
+  projectReceipt(t.s, receipt(2000n, t.effects))
+  expect(projectedHome(t.s, id(4), t.root.key.root)).toEqual({ Forwarded: t.forward })
+  expect(projectedName(t.s, id(4), t.descendant.key, 2000n)).toEqual({ Forwarded: t.forward })
+  expect(t.s.names[nameStateKey(id(4), t.root.key)]).toBeUndefined()
+  expect(t.s.names[nameStateKey(id(4), t.descendant.key)]).toBeUndefined()
+  expect(t.s.primaries[primaryStateKey(id(4), primary.endpoint)]).toBeUndefined()
+  expect(t.s.names[nameStateKey(id(8), t.root.key)]).toEqual(t.fresh)
+  expect(Object.values(t.s.history)).toContainEqual(t.root)
+  projectReceipt(t.s, receipt(2001n, [[4, 'forwarded_rows_pruned', { root: t.root.key.root, move_id: t.forward.move_id, names: [ref(t.root), ref(t.descendant)], remaining: 0 }]]))
+  expect(projectedHome(restoreProjection(snapshotProjection(t.s)), id(4), t.root.key.root)).toEqual({ Forwarded: t.forward })
+})
+it.each(['missing-registration', 'wrong-generation', 'backward', 'active'])('rolls back an inconsistent cession: %s', failure => {
+  const t = cessionFixture()
+  if (failure === 'missing-registration') t.effects.pop()
+  if (failure === 'wrong-generation') t.fresh.incarnation.generation = 7n
+  if (failure === 'backward') t.forward.destination_ordinal = 0
+  if (failure === 'active') t.s.names[nameStateKey(id(4), t.root.key)].grace_end = 2001n
+  const before = snapshotProjection(t.s)
+  expect(() => projectReceipt(t.s, receipt(2000n, t.effects))).toThrow()
+  expect(t.s).toEqual(before)
+})
+it('keeps journal occurrence identity when a store reuses op_seq', () => {
+  const used = { principal: { kind: 'Contract', bytes: bytes(10) }, via: bytes(41), scope: 1 }
+  const r = receipt(1n, [[4, 'controller_used', used], [4, 'controller_used', { ...used, via: bytes(42) }]])
+  for (const e of r.events) (e.data as any).op_seq = 1n
+  const effects = committedEvents(r, scope)
+  expect(effects.map(e => e.operationOrdinal)).toEqual([0, 3])
 })

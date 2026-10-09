@@ -21,6 +21,8 @@ export interface Receipt {
   events: ReceiptEvent[]
 }
 export interface CommittedEvent extends ReceiptEvent {
+  /** Receipt ordinal of this operation begin, even when op_seq is reused. */
+  operationOrdinal?: number
   topic: EventTopic
   height: bigint
   data: unknown
@@ -117,6 +119,7 @@ export function committedEvents(
       if (frame)
         frame.events.push({
           ...raw,
+          operationOrdinal: frame.ordinal,
           emitter,
           topic,
           data: event,

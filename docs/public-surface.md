@@ -1,4 +1,4 @@
-# Public surface in 0.3.1
+# Public surface in 0.3.2
 
 The npm and JSR export maps contain the same eight entrypoints. npm resolves
 runtime imports to compiled JavaScript and types to declarations in `dist`; its
@@ -30,8 +30,8 @@ types. Unit reads take no arguments.
 
 | Scope       | Read families                                                                                                                                                                                                                                                             |
 | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| directory   | `config`, `registration_context`, `renewal_schedule`, `roles`, `member`, `members`, `allocation`, `market`, `proposal`, `proposals`, common interface/binding/capacity                                                                                                    |
-| store       | `home`, `get_name`, `children`, `record_slot`, `read_record`, `read_records`, `resolve_record`, `read_primary`, `resolve_primary`, `pending_commitment`, `commitment_raw`, both quotes, slot liveness, move/import status, cooldowns, export rows, stats and common reads |
+| directory   | `config`, `registration_context`, `renewal_schedule`, `roles`, `member`, `members`, `allocation`, `market`, `proposal`, `proposals`, `controllers`, `controller`, `controller_approval`, common interface/binding/capacity                                                                                                    |
+| store       | `home`, `released_root`, `get_name`, `children`, `record_slot`, `read_record`, `read_records`, `resolve_record`, `read_primary`, `resolve_primary`, `pending_commitment`, `commitment_raw`, both quotes, slot liveness, move/import status, cooldowns, export rows, stats and common reads |
 | resolver    | `read_slot_record`, `read_record_slot`, stats and common reads                                                                                                                                                                                                            |
 | policy      | `quote`, `config`, `interface_version`, `binding`                                                                                                                                                                                                                         |
 | vault       | `read_state`, `read_balance`, `read_referral`, `referrals`, `source` and common reads                                                                                                                                                                                     |

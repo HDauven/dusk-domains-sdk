@@ -115,6 +115,31 @@
         "name": "capacity",
         "input": "()",
         "output": "Capacity"
+      },
+      {
+        "name": "controllers",
+        "input": "()",
+        "output": "Controllers"
+      },
+      {
+        "name": "controller",
+        "input": "ControllerQuery",
+        "output": "Option<Controller>"
+      },
+      {
+        "name": "controller_approval",
+        "input": "ControllerApproval",
+        "output": "bool"
+      },
+      {
+        "name": "approve_controller",
+        "input": "ApproveController",
+        "output": "()"
+      },
+      {
+        "name": "set_controller_suspension",
+        "input": "ControllerSuspension",
+        "output": "()"
       }
     ],
     "policy": [
@@ -399,6 +424,21 @@
         "name": "capacity",
         "input": "()",
         "output": "Capacity"
+      },
+      {
+        "name": "delegated",
+        "input": "Delegated",
+        "output": "()"
+      },
+      {
+        "name": "released_root",
+        "input": "StoreHomeArgs",
+        "output": "ReleasedRoot"
+      },
+      {
+        "name": "cede_released",
+        "input": "CedeReleased",
+        "output": "ReleasedRoot"
       }
     ],
     "resolver": [
@@ -884,6 +924,26 @@
     "escrow_renewed": {
       "role": "marketplace",
       "type": "Event<EscrowRenewed>"
+    },
+    "controller_changed": {
+      "role": "directory",
+      "type": "Event<ControllerChanged>"
+    },
+    "controller_approval_changed": {
+      "role": "directory",
+      "type": "Event<ControllerApprovalChanged>"
+    },
+    "controller_suspension_changed": {
+      "role": "directory",
+      "type": "Event<ControllerSuspensionChanged>"
+    },
+    "controller_used": {
+      "role": "store",
+      "type": "Event<ControllerUsed>"
+    },
+    "root_ceded": {
+      "role": "store",
+      "type": "Event<RootCeded>"
     }
   }
 }

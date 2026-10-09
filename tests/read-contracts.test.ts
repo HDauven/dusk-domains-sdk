@@ -9,6 +9,8 @@ import type { DataDriver } from '../src/frozen/driver.ts'
 const rows = [
   ...Object.values(fixtures()),
   ...Object.values(fixtures('market-v1')),
+  // rkyv Option<Controller>::None: tag plus padding and the 56-byte payload.
+  { type: 'Option<Controller>', json: null, rkyv: '00'.repeat(64) },
 ]
 const jsonDriver: DataDriver = {
   encodeInput: (_, json) => new TextEncoder().encode(json),

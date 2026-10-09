@@ -41,7 +41,7 @@ for (const [topic, spec] of Object.entries(indexerEventCatalog)) {
   })
   it(`${topic}: committed golden event retains its occurrence and payload`, () =>
     expect(committedEvents(receipt(), scope)).toEqual([
-      { ...receipt().events[1], topic, height: 9n },
+      { ...receipt().events[1], topic, height: 9n, operationOrdinal: 0 },
     ]))
   it(`${topic}: reverted effects never mutate the projection`, () => {
     const tx = receipt()

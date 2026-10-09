@@ -1,7 +1,8 @@
 # Frozen wallet gas policy
 
 Every public write has an explicit entry in `GAS_LIMITS`; there is no generic
-wallet fallback. Calls cannot override the limit. The direct public wallet path
+wallet fallback. Controller approval and suspension builders use the protocol
+ceiling of 3,000,000,000 gas. Calls cannot override the limit. The direct public wallet path
 is supported; arbitrary additional contract-wallet nesting needs its own budget.
 
 `src/frozen/gas.ts` contains conservative no-input ceilings. Normal builders use

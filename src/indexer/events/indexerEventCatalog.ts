@@ -224,6 +224,26 @@ export const indexerEventCatalog = {
   "escrow_renewed": {
     "role": "marketplace",
     "type": "Event<EscrowRenewed>"
+  },
+  "controller_changed": {
+    "role": "directory",
+    "type": "Event<ControllerChanged>"
+  },
+  "controller_approval_changed": {
+    "role": "directory",
+    "type": "Event<ControllerApprovalChanged>"
+  },
+  "controller_suspension_changed": {
+    "role": "directory",
+    "type": "Event<ControllerSuspensionChanged>"
+  },
+  "controller_used": {
+    "role": "store",
+    "type": "Event<ControllerUsed>"
+  },
+  "root_ceded": {
+    "role": "store",
+    "type": "Event<RootCeded>"
   }
 } as const
 export type EventTopic = keyof typeof indexerEventCatalog

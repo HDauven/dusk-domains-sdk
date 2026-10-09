@@ -994,7 +994,8 @@
         "init_hash",
         "ordinal",
         "admitted_at",
-        "accepts_moves"
+        "accepts_moves",
+        "retiring"
       ],
       "properties": {
         "id": {
@@ -1016,6 +1017,9 @@
           "$ref": "#/$defs/Height"
         },
         "accepts_moves": {
+          "$ref": "#/$defs/bool"
+        },
+        "retiring": {
           "$ref": "#/$defs/bool"
         }
       }
@@ -1502,6 +1506,89 @@
               }
             }
           }
+        },
+        {
+          "type": "object",
+          "required": [
+            "AddController"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "AddController": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "contract",
+                "scopes",
+                "expected_version"
+              ],
+              "properties": {
+                "contract": {
+                  "$ref": "#/$defs/Contract"
+                },
+                "scopes": {
+                  "$ref": "#/$defs/u8"
+                },
+                "expected_version": {
+                  "$ref": "#/$defs/u64"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "RemoveController"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "RemoveController": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "contract",
+                "expected_version"
+              ],
+              "properties": {
+                "contract": {
+                  "$ref": "#/$defs/Contract"
+                },
+                "expected_version": {
+                  "$ref": "#/$defs/u64"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "SetRetiring"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "SetRetiring": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "store",
+                "expected",
+                "value"
+              ],
+              "properties": {
+                "store": {
+                  "$ref": "#/$defs/Contract"
+                },
+                "expected": {
+                  "$ref": "#/$defs/bool"
+                },
+                "value": {
+                  "$ref": "#/$defs/bool"
+                }
+              }
+            }
+          }
         }
       ]
     },
@@ -1945,6 +2032,18 @@
           "properties": {
             "Renew": {
               "$ref": "#/$defs/Renew"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "RegisterFor"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "RegisterFor": {
+              "$ref": "#/$defs/RegisterFor"
             }
           }
         }
@@ -7163,6 +7262,536 @@
           "$ref": "#/$defs/Authority"
         }
       }
+    },
+    "DirectoryPayoutKey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "account"
+      ],
+      "properties": {
+        "account": {
+          "type": "string",
+          "description": "Base58 encoding of the canonical 96-byte compressed BLS public key."
+        }
+      }
+    },
+    "Controller": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract",
+        "scopes",
+        "admitted_at",
+        "suspended"
+      ],
+      "properties": {
+        "contract": {
+          "$ref": "#/$defs/Contract"
+        },
+        "scopes": {
+          "$ref": "#/$defs/u8"
+        },
+        "admitted_at": {
+          "$ref": "#/$defs/Height"
+        },
+        "suspended": {
+          "$ref": "#/$defs/bool"
+        }
+      }
+    },
+    "Controllers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "rows"
+      ],
+      "properties": {
+        "version": {
+          "$ref": "#/$defs/u64"
+        },
+        "rows": {
+          "$ref": "#/$defs/Vec<Controller>"
+        }
+      }
+    },
+    "ControllerQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract"
+      ],
+      "properties": {
+        "contract": {
+          "$ref": "#/$defs/Contract"
+        }
+      }
+    },
+    "ApproveController": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "controller",
+        "approved"
+      ],
+      "properties": {
+        "controller": {
+          "$ref": "#/$defs/Contract"
+        },
+        "approved": {
+          "$ref": "#/$defs/bool"
+        }
+      }
+    },
+    "ControllerApproval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authority",
+        "controller"
+      ],
+      "properties": {
+        "authority": {
+          "$ref": "#/$defs/Authority"
+        },
+        "controller": {
+          "$ref": "#/$defs/Contract"
+        }
+      }
+    },
+    "ControllerSuspension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "controller",
+        "suspended"
+      ],
+      "properties": {
+        "controller": {
+          "$ref": "#/$defs/Contract"
+        },
+        "suspended": {
+          "$ref": "#/$defs/bool"
+        }
+      }
+    },
+    "Delegated": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "principal",
+        "op"
+      ],
+      "properties": {
+        "principal": {
+          "$ref": "#/$defs/TypedPrincipal"
+        },
+        "op": {
+          "$ref": "#/$defs/DelegatedOp"
+        }
+      }
+    },
+    "RegisterFor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "registration",
+        "owner",
+        "manager"
+      ],
+      "properties": {
+        "registration": {
+          "$ref": "#/$defs/Register"
+        },
+        "owner": {
+          "$ref": "#/$defs/Authority"
+        },
+        "manager": {
+          "$ref": "#/$defs/Authority"
+        }
+      }
+    },
+    "CedeReleased": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "root",
+        "destination"
+      ],
+      "properties": {
+        "root": {
+          "$ref": "#/$defs/Node"
+        },
+        "destination": {
+          "$ref": "#/$defs/Contract"
+        }
+      }
+    },
+    "ReleasedRoot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "counters",
+        "grace_end"
+      ],
+      "properties": {
+        "counters": {
+          "$ref": "#/$defs/RootCounters"
+        },
+        "grace_end": {
+          "$ref": "#/$defs/Height"
+        }
+      }
+    },
+    "ControllerChanged": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "controller",
+        "listed",
+        "version"
+      ],
+      "properties": {
+        "controller": {
+          "$ref": "#/$defs/Controller"
+        },
+        "listed": {
+          "$ref": "#/$defs/bool"
+        },
+        "version": {
+          "$ref": "#/$defs/u64"
+        }
+      }
+    },
+    "ControllerApprovalChanged": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "authority",
+        "controller",
+        "approved",
+        "admission_version"
+      ],
+      "properties": {
+        "authority": {
+          "$ref": "#/$defs/Authority"
+        },
+        "controller": {
+          "$ref": "#/$defs/Contract"
+        },
+        "approved": {
+          "$ref": "#/$defs/bool"
+        },
+        "admission_version": {
+          "$ref": "#/$defs/u64"
+        }
+      }
+    },
+    "ControllerSuspensionChanged": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "controller",
+        "suspended",
+        "actor",
+        "version"
+      ],
+      "properties": {
+        "controller": {
+          "$ref": "#/$defs/Contract"
+        },
+        "suspended": {
+          "$ref": "#/$defs/bool"
+        },
+        "actor": {
+          "$ref": "#/$defs/TypedPrincipal"
+        },
+        "version": {
+          "$ref": "#/$defs/u64"
+        }
+      }
+    },
+    "ControllerUsed": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "principal",
+        "via",
+        "scope"
+      ],
+      "properties": {
+        "principal": {
+          "$ref": "#/$defs/TypedPrincipal"
+        },
+        "via": {
+          "$ref": "#/$defs/Contract"
+        },
+        "scope": {
+          "$ref": "#/$defs/u8"
+        }
+      }
+    },
+    "RootCeded": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "forward",
+        "counters",
+        "grace_end"
+      ],
+      "properties": {
+        "forward": {
+          "$ref": "#/$defs/Forward"
+        },
+        "counters": {
+          "$ref": "#/$defs/RootCounters"
+        },
+        "grace_end": {
+          "$ref": "#/$defs/Height"
+        }
+      }
+    },
+    "Vec<Controller>": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "$ref": "#/$defs/Controller"
+      }
+    },
+    "Option<Controller>": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/Controller"
+        }
+      ]
+    },
+    "Event<ControllerChanged>": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "op_seq",
+        "body"
+      ],
+      "properties": {
+        "version": {
+          "$ref": "#/$defs/u16"
+        },
+        "op_seq": {
+          "$ref": "#/$defs/u64"
+        },
+        "body": {
+          "$ref": "#/$defs/ControllerChanged"
+        }
+      }
+    },
+    "Event<ControllerApprovalChanged>": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "op_seq",
+        "body"
+      ],
+      "properties": {
+        "version": {
+          "$ref": "#/$defs/u16"
+        },
+        "op_seq": {
+          "$ref": "#/$defs/u64"
+        },
+        "body": {
+          "$ref": "#/$defs/ControllerApprovalChanged"
+        }
+      }
+    },
+    "Event<ControllerSuspensionChanged>": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "op_seq",
+        "body"
+      ],
+      "properties": {
+        "version": {
+          "$ref": "#/$defs/u16"
+        },
+        "op_seq": {
+          "$ref": "#/$defs/u64"
+        },
+        "body": {
+          "$ref": "#/$defs/ControllerSuspensionChanged"
+        }
+      }
+    },
+    "Event<ControllerUsed>": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "op_seq",
+        "body"
+      ],
+      "properties": {
+        "version": {
+          "$ref": "#/$defs/u16"
+        },
+        "op_seq": {
+          "$ref": "#/$defs/u64"
+        },
+        "body": {
+          "$ref": "#/$defs/ControllerUsed"
+        }
+      }
+    },
+    "Event<RootCeded>": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "op_seq",
+        "body"
+      ],
+      "properties": {
+        "version": {
+          "$ref": "#/$defs/u16"
+        },
+        "op_seq": {
+          "$ref": "#/$defs/u64"
+        },
+        "body": {
+          "$ref": "#/$defs/RootCeded"
+        }
+      }
+    },
+    "DelegatedOp": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "UpdateAuthorities"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "UpdateAuthorities": {
+              "$ref": "#/$defs/Authorities"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "TransferAndCall"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "TransferAndCall": {
+              "$ref": "#/$defs/TransferAndCall"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "CreateSubname"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "CreateSubname": {
+              "$ref": "#/$defs/CreateSubname"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "ReassignSubname"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "ReassignSubname": {
+              "$ref": "#/$defs/Authorities"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "RemoveSubname"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "RemoveSubname": {
+              "$ref": "#/$defs/StoreRemoveSubnameArgs"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "PruneSubname"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "PruneSubname": {
+              "$ref": "#/$defs/StorePruneSubnameArgs"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "TakeBackSubnames"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "TakeBackSubnames": {
+              "$ref": "#/$defs/TakeBack"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "MutateRecords"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "MutateRecords": {
+              "$ref": "#/$defs/MutateRecords"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "ReplaceRecords"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "ReplaceRecords": {
+              "$ref": "#/$defs/ReplaceRecords"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "MoveRecords"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "MoveRecords": {
+              "$ref": "#/$defs/MoveRecords"
+            }
+          }
+        }
+      ]
     }
   }
 }

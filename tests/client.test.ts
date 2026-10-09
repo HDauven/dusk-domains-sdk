@@ -1,4 +1,5 @@
 import { it, expect } from 'vitest'
+import { estimateRegistrationQuote, launchPolicyConfig } from '../src/core/pricing.ts'
 import { FrozenClient } from '../src/frozen/client.ts'
 import { createHttpTransport } from '../src/frozen/transport.ts'
 import { parseJson, stringifyJson } from '../src/frozen/json.ts'
@@ -328,4 +329,106 @@ it('admits directory actions under the role their admission belongs to', async (
       applied({ SetRenewal: { expected_version: 1n, annual_lux: [], referral_bps: 0 } }, store) as never,
     ),
   ).rejects.toThrow('Unexpected admission for SetRenewal')
+})
+
+async function registrationSetup() {
+  const t = await setup()
+  for (const a of t.admissions) a.retiring = false
+  t.admissions[0].retiring = true
+  for (const [who, home] of [[4, 'Local'], [8, 'Absent'], [9, 'Absent']] as const) {
+    t.responses.set(`${id(who)}:home`, home)
+    t.responses.set(`${id(who)}:capacity`, { ...sample('Capacity'), sealed: false })
+  }
+  t.n.name.key = { root: t.key.root, node: t.key.root }
+  t.n.name.grace_end = 100n
+  t.n.name.expires_at = 90n
+  t.n.counters = { ...sample('RootCounters'), generation: 7n }
+  const released = { counters: t.n.counters, grace_end: 100n }
+  t.responses.set(`${id(4)}:released_root`, released)
+  t.responses.set(`${id(1)}:registration_context`, { ...sample('RegistrationContext'), policy: bytes(3), policy_version: 1n })
+  t.responses.set(`${id(3)}:config`, launchPolicyConfig())
+  const request = {
+    version: 1, directory: bytes(1), store: bytes(9), node: t.key.root, label: 'example',
+    actor: bytes(10), years: 1, height: 100n, previous_generation: 7n, previous_grace_end: 100n, policy_version: 1n,
+  }
+  const { estimate, total_lux, ...quote } = estimateRegistrationQuote(launchPolicyConfig(), request)
+  const registrationQuote = { policy: bytes(3), policy_version: 1n, quote, total_lux, height: 100n }
+  t.responses.set(`${id(9)}:quote_registration`, registrationQuote)
+  return { ...t, released, request, registrationQuote }
+}
+const registrationInput = { actor: bytes(10), label: 'example', years: 1, secret: bytes(33), commitHeight: 100n }
+it('prepares retirement commitment and reveal at the successor with the released-root premium', async () => {
+  const t = await registrationSetup()
+  const p = await t.client.prepareRegistration(registrationInput)
+  expect(p.store).toBe(id(9))
+  expect(p.canonicalStore).toBe(id(4))
+  expect(p.releasedRoot).toEqual(t.released)
+  expect(p.quoteRequest).toEqual(t.request)
+  expect(p.calls.commit.contractId).toBe(id(9))
+  expect(p.calls.reveal.contractId).toBe(id(9))
+  expect(p.calls.reveal.args.commitment_store).toEqual(bytes(9))
+  expect(p.quote.quote.premium_lux).toBe('999999523162842')
+  expect(t.calls.filter(c => c.fn === 'quote_registration').map(c => c.id)).toEqual([id(9)])
+  expect(t.calls.some(c => c.fn === 'cede_released')).toBe(false)
+  const resumed = await t.client.prepareRegistration({ ...registrationInput, commitmentStore: id(4) })
+  expect(resumed.calls.commit.contractId).toBe(id(4))
+  expect(resumed.calls.reveal.contractId).toBe(id(9))
+})
+it('lists controllers and reads approval independently of suspension', async () => {
+  const t = await setup(), row = { contract: bytes(41), scopes: 7, admitted_at: 9n, suspended: true }
+  t.responses.set(`${id(1)}:controllers`, { version: 4n, rows: [row] })
+  t.responses.set(`${id(1)}:controller_approval`, true)
+  expect(await t.client.listControllers()).toEqual({ version: 4n, rows: [row] })
+  expect(await t.client.controllerApproval(bytes(10), bytes(41))).toBe(true)
+  expect(t.calls.at(-1)?.args).toEqual({ authority: bytes(10), controller: bytes(41) })
+})
+it.each(['sealed', 'retiring'])('selects the newest eligible retirement destination when the newest is %s', async reason => {
+  const t = await registrationSetup()
+  if (reason === 'retiring') t.admissions[2].retiring = true
+  else t.responses.set(`${id(9)}:capacity`, { ...sample('Capacity'), sealed: true })
+  expect((await t.client.registrationPlacement(t.key.root)).store).toBe(id(8))
+})
+it.each(['successors', 'capacity', 'home', 'staged', 'duplicate', 'active', 'released', 'dangling'])('refuses unsafe retirement placement: %s', async failure => {
+  const t = await registrationSetup()
+  if (failure === 'successors') for (const a of t.admissions) a.retiring = true
+  if (failure === 'capacity') t.responses.delete(`${id(9)}:capacity`)
+  if (failure === 'home') t.responses.set(`${id(9)}:home`, { Forwarded: { ...sample('Forward'), root: t.key.root, destination: bytes(9), destination_ordinal: 2 } })
+  if (failure === 'staged') t.responses.set(`${id(8)}:home`, { Staged: bytes(42) })
+  if (failure === 'duplicate') t.responses.set(`${id(8)}:home`, 'Local')
+  if (failure === 'active') t.n.name.grace_end = 101n
+  if (failure === 'released') t.responses.delete(`${id(4)}:released_root`)
+  if (failure === 'dangling') t.responses.set(`${id(4)}:home`, { Forwarded: { ...sample('Forward'), root: t.key.root, destination: bytes(8), destination_ordinal: 1 } })
+  await expect(t.client.registrationPlacement(t.key.root)).rejects.toThrow()
+})
+it('follows historical forwards to the retiring canonical home', async () => {
+  const t = await registrationSetup()
+  t.responses.set(`${id(4)}:home`, { Forwarded: { ...sample('Forward'), root: t.key.root, destination: bytes(8), destination_ordinal: 1 } })
+  t.responses.set(`${id(8)}:home`, 'Local')
+  t.admissions[1].retiring = true
+  t.responses.set(`${id(8)}:released_root`, t.released)
+  const p = await t.client.registrationPlacement(t.key.root)
+  expect(p).toMatchObject({ canonicalStore: id(8), store: id(9), releasedRoot: t.released })
+})
+it('keeps a non-retiring canonical home even when sealed and refuses unseen-root fallback', async () => {
+  const t = await registrationSetup()
+  t.admissions[0].retiring = false
+  t.responses.set(`${id(4)}:capacity`, { ...sample('Capacity'), sealed: true })
+  expect((await t.client.registrationPlacement(t.key.root)).store).toBe(id(4))
+  t.responses.set(`${id(4)}:home`, 'Absent')
+  expect((await t.client.registrationPlacement(t.key.root)).store).toBe(id(9))
+  t.admissions[2].retiring = true
+  await expect(t.client.registrationPlacement(t.key.root)).rejects.toThrow()
+  t.admissions[2].retiring = false
+  t.responses.set(`${id(9)}:capacity`, { ...sample('Capacity'), sealed: true })
+  await expect(t.client.registrationPlacement(t.key.root)).rejects.toThrow()
+})
+it('rejects a successor quote that omits the previous lifecycle', async () => {
+  const t = await registrationSetup()
+  const { estimate, total_lux, ...quote } = estimateRegistrationQuote(launchPolicyConfig(), { ...t.request, previous_generation: 0n, previous_grace_end: null })
+  t.responses.set(`${id(9)}:quote_registration`, { ...t.registrationQuote, quote, total_lux })
+  await expect(t.client.prepareRegistration(registrationInput)).rejects.toThrow('quote')
+})
+it('verifies SetRetiring admission events as stores', async () => {
+  const t = await setup(), a = { ...t.admissions[0], retiring: true }
+  await expect(t.client.admitDirectoryEvent('action_applied', { version: 1, op_seq: 1n, body: { ...sample('ActionApplied'), action: { SetRetiring: { store: a.id, expected: false, value: true } }, admission: a } })).resolves.toBeUndefined()
 })

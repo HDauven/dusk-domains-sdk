@@ -23,6 +23,7 @@ const basic = (name) =>
 function ref(name) {
   if (basic(name)) return basic(name)
   if (name.startsWith('Option<')) return `(${ref(name.slice(7, -1))} | null)`
+  if (name.startsWith('Vec<')) return `(${ref(name.slice(4, -1))})[]`
   if (name.startsWith('Located<')) return `Located<${ref(name.slice(8, -1))}>`
   if (name.startsWith('Event<')) return `Event<${ref(name.slice(6, -1))}>`
   if (name.startsWith('['))
@@ -83,12 +84,12 @@ await writeFile(
     `export const definitions: Record<string, unknown> = ${JSON.stringify(defs, null, 2)}\n`,
 )
 const reads = new Set(
-  'config registration_context renewal_schedule roles member members allocation market proposal proposals interface_version binding capacity quote home stats get_name children record_slot read_record read_records resolve_record read_primary resolve_primary pending_commitment commitment_raw quote_registration quote_renewal slot_liveness export_move_row move_status import_status move_cooldowns read_slot_record read_record_slot read_state read_referral referrals source read_balance wind_down_state order_api_version read_order read_refund read_listing read_offer'.split(
+  'controllers controller controller_approval released_root config registration_context renewal_schedule roles member members allocation market proposal proposals interface_version binding capacity quote home stats get_name children record_slot read_record read_records resolve_record read_primary resolve_primary pending_commitment commitment_raw quote_registration quote_renewal slot_liveness export_move_row move_status import_status move_cooldowns read_slot_record read_record_slot read_state read_referral referrals source read_balance wind_down_state order_api_version read_order read_refund read_listing read_offer'.split(
     ' ',
   ),
 )
 const internal = new Set(
-  'init consume_commitment receive_payment write_slot apply_mutations clear_slot set_source receive_fee on_name_received begin_import confirm_move_progress activate_import'.split(
+  'delegated cede_released init consume_commitment receive_payment write_slot apply_mutations clear_slot set_source receive_fee on_name_received begin_import confirm_move_progress activate_import'.split(
     ' ',
   ),
 )
