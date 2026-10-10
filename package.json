@@ -54,8 +54,10 @@
     "jsr:dry-run": "npx jsr publish --dry-run --allow-dirty",
     "prepare": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run",
-    "generate": "node scripts/generate-frozen.mjs"
+    "test": "vitest run --exclude='**/finding_*'",
+    "test:findings": "vitest run finding_",
+    "generate": "node scripts/generate-frozen.mjs",
+    "test:fuzz": "node scripts/run-fuzz.mjs"
   },
   "dependencies": {
     "@noble/curves": "^2.4.0",
@@ -64,6 +66,7 @@
   "devDependencies": {
     "@dusk/connect": "npm:@jsr/dusk__connect@^0.2.0",
     "@types/node": "^24.12.3",
+    "fast-check": "^4.10.2",
     "typescript": "~6.0.2",
     "vitest": "^4.1.9"
   }

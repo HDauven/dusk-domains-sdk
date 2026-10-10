@@ -198,3 +198,14 @@ Golden tests run the protocol's real, pinned WASM data drivers and JSON/rkyv
 fixtures locally. No test contacts a chain. `npm run generate` regenerates the
 TypeScript types, builders and catalog from reviewed schema snapshots. This
 repository does not publish or deploy as part of the build.
+
+Property tests in `tests/fuzz` (fast-check) compare every catalog input with
+the pinned drivers byte for byte, check that the strict schemas and the drivers
+accept the same values and JSON text, decode mutated envelopes, and replay
+arbitrary event sequences through the projection. `npm test` runs them with a
+fixed seed and 20 cases each. For a long campaign, use
+`npm run test:fuzz -- --duration 900 --numRuns 100 --seed 20261010`; it repeats
+the properties with a new seed per batch and writes counts to `.fuzz/`.
+`FUZZ_NUM_RUNS`, `FUZZ_SEED` and `FUZZ_PATH` replay a reported failure with
+`npm test`. Open findings are pinned as intentionally failing `finding_*` tests,
+excluded from `npm test`, and can be reproduced with `npm run test:findings`.
