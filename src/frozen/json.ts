@@ -10,7 +10,10 @@ export type JsonValue =
 export const U64_MAX: bigint = 18_446_744_073_709_551_615n
 
 /** Parse integer tokens without passing unsafe values through Number. Duplicate keys reject. */
-export function parseJson(text: string): unknown {
+export function parseJson(
+  text: string,
+  options: { canonicalIntegers?: boolean } = {},
+): unknown {
   let at = 0
   const fail = (): never => {
     throw new Error(`Invalid JSON at offset ${at}`)
@@ -83,6 +86,11 @@ export function parseJson(text: string): unknown {
     )?.[0]
     if (!token) return fail()
     at += token.length
+    if (
+      options.canonicalIntegers &&
+      (token === '-0' || /[.eE]/u.test(token))
+    )
+      return fail()
     if (/^-?\d+$/u.test(token)) {
       const n = BigInt(token)
       return n >= BigInt(Number.MIN_SAFE_INTEGER) &&

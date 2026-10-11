@@ -4,7 +4,7 @@ These test-only gzip files are copied from the read-only frozen protocol worktre
 They are excluded from npm/JSR releases. They are data drivers, not deployable
 contracts. Tests exercise their actual WASM encode/decode implementations.
 
-Reference HEAD: `58049149ba8aa0a1999bcd9d77d77a10ad3f832d` (protocol #268). Sources:
+Reference HEAD: `4e7eff846445a80160804e6e99ab3f0c7d957dfd` (`fix/frozen-verification`). Sources:
 
 - `contracts/crates/dusk-domains-types/tests/fixtures/frozen-v1.json`
 - `contracts/crates/dusk-domains-types/tests/fixtures/frozen-v1-max.json`
@@ -13,9 +13,9 @@ Reference HEAD: `58049149ba8aa0a1999bcd9d77d77a10ad3f832d` (protocol #268). Sour
 
 `drivers.json` pins each uncompressed WASM's SHA-256 and byte count. The source
 `schema.rs` SHA-256 is
-`7f5aed0c3a27a30b310394ecd763c397b175b294f7eaa743d0165c4a003d9ebd`;
+`2ee0be6fbbc3596f82b7b2dc1348402f6d22b90245661ee65c69a4bc4e5a9eae`;
 shared `driver.rs` is
-`f4504328995185413e514881eb913d1c8d8033c37a004611cb3b352aa2ac831a`.
+`38dd40c8a4aac0b49612a665a901a86f5eb0d4a2af24f4418a3f29047c48372e`.
 The digest tests additionally transcribe pinned results from
 `dusk-domains-types/tests/frozen_wire.rs`.
 

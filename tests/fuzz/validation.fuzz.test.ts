@@ -1,10 +1,10 @@
 import { beforeAll, expect, it, vi } from 'vitest'
 import fc from 'fast-check'
 import { methodCatalog } from '../../src/frozen/catalog.ts'
-import { wireValue, decodeJson } from '../../src/frozen/wire.ts'
+import { decodeInputJson, wireInput, wireValue } from '../../src/frozen/wire.ts'
 import { stringifyJson } from '../../src/frozen/json.ts'
-import { arbitrary, examples, mutate, choices, mutateText, textChoice, nonCanonicalNumbers, canonicalNumbers } from './arbitraries.ts'
-import { reportKnown, serdeCanonical } from './findings.ts'
+import { arbitrary, examples, mutate, choices, mutateText, textChoice } from './arbitraries.ts'
+import { serdeCanonical } from './findings.ts'
 import { driverFor, known, loadDrivers } from './catalog.ts'
 import { accepts, check, count, testTimeout } from './support.ts'
 
@@ -26,7 +26,7 @@ for (const [role, methods] of Object.entries(methodCatalog)) {
       const metrics: Record<string, number> = {}
       const agree = (candidate: unknown) => {
         let normalized: unknown
-        const sdk = accepts(() => { normalized = wireValue(type, candidate) })
+        const sdk = accepts(() => { normalized = wireInput(role, method.name, type, candidate) })
         let json: string | undefined
         try { json = stringifyJson(candidate) } catch { json = undefined }
         const rust = json !== undefined && accepts(() => driver().encodeInput(method.name, json!))
@@ -38,7 +38,6 @@ for (const [role, methods] of Object.entries(methodCatalog)) {
               !accepts(() => expect(driver().encodeInput(method.name, stringifyJson(canonical))).toEqual(driver().encodeInput(method.name, json!))))
             throw new Error(`Driver accepts a value the SDK rejects: ${json}`)
           count(metrics, 'known:driver_serde_spellings')
-          if (reportKnown) throw new Error(`Known finding driver_serde_spellings: ${json}`)
           return
         }
         const { value, hits } = known(role, method.name, normalized, metrics)
@@ -58,7 +57,7 @@ for (const [role, methods] of Object.entries(methodCatalog)) {
         let text = mutateText(stringifyJson(valid), choice)
         for (let attempt = 0; attempt < 2; attempt++) {
           let value: unknown, bytes: Uint8Array | undefined
-          const sdk = accepts(() => { value = decodeJson(type as never, text) })
+          const sdk = accepts(() => { value = decodeInputJson(role, method.name, type, text) })
           const rust = accepts(() => { bytes = driver().encodeInput(method.name, text) })
           count(metrics, `${sdk ? 'sdk' : 'no-sdk'}/${rust ? 'driver' : 'no-driver'}`)
           if (sdk && rust) {
@@ -67,12 +66,6 @@ for (const [role, methods] of Object.entries(methodCatalog)) {
           }
           if (sdk === rust) return
           if (!sdk) throw new Error(`Driver accepts JSON text the SDK rejects: ${text}`)
-          if (attempt === 0 && nonCanonicalNumbers(text)) {
-            count(metrics, 'known:json_number_spelling')
-            if (reportKnown) throw new Error(`Known finding json_number_spelling: ${text}`)
-            text = canonicalNumbers(text)
-            continue
-          }
           const { value: repaired, hits } = known(role, method.name, value, metrics)
           if (!hits.length) throw new Error(`SDK accepts JSON text the driver rejects: ${text}`)
           expect(accepts(() => driver().encodeInput(method.name, stringifyJson(repaired)))).toBe(true)

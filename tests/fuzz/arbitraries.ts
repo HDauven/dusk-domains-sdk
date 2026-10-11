@@ -1,6 +1,7 @@
 import fc from 'fast-check'
 import { definitions } from '../../src/frozen/schema.ts'
 import { U64_MAX } from '../../src/frozen/json.ts'
+import { wireValue } from '../../src/frozen/wire.ts'
 
 // Generators are compiled from the SDK's own frozen schema snapshot, so every
 // catalog type is covered without a hand-written list. Valid values are biased
@@ -56,7 +57,17 @@ const cache = new Map<string, fc.Arbitrary<any>>()
 export function arbitrary(type: string): fc.Arbitrary<any> {
   if (!cache.has(type)) {
     if (!(type in definitions)) throw new Error(`Unknown frozen type ${type}`)
-    cache.set(type, compile((definitions as any)[type]))
+    cache.set(
+      type,
+      compile((definitions as any)[type]).filter((value) => {
+        try {
+          wireValue(type, value)
+          return true
+        } catch {
+          return false
+        }
+      }),
+    )
   }
   return cache.get(type)!
 }
@@ -156,7 +167,16 @@ export function boundaries(s: Schema): any[] {
 /** Explicit edge examples for a type: one-at-a-time boundaries plus all-maximum values. */
 export function examples(type: string): any[][] {
   const s = (definitions as any)[type]
-  return [...boundaries(s), maximal(s), maximal(s, 'é'), maximal(s, '😀')].map(value => [value])
+  return [...boundaries(s), maximal(s), maximal(s, 'é'), maximal(s, '😀')]
+    .filter((value) => {
+      try {
+        wireValue(type, value)
+        return true
+      } catch {
+        return false
+      }
+    })
+    .map(value => [value])
 }
 
 /** Find the oneOf branch that a value structurally belongs to. */

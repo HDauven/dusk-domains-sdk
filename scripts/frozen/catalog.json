@@ -515,6 +515,11 @@
         "output": "()"
       },
       {
+        "name": "prune_referrals",
+        "input": "ReferralPage",
+        "output": "()"
+      },
+      {
         "name": "claim_protocol",
         "input": "ClaimProtocol",
         "output": "()"
@@ -839,6 +844,10 @@
     "beneficiary_reserved": {
       "role": "vault",
       "type": "Event<BeneficiaryReserved>"
+    },
+    "beneficiary_released": {
+      "role": "vault",
+      "type": "Event<BeneficiaryReleased>"
     },
     "fee_received": {
       "role": "vault",

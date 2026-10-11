@@ -207,5 +207,6 @@ fixed seed and 20 cases each. For a long campaign, use
 `npm run test:fuzz -- --duration 900 --numRuns 100 --seed 20261010`; it repeats
 the properties with a new seed per batch and writes counts to `.fuzz/`.
 `FUZZ_NUM_RUNS`, `FUZZ_SEED` and `FUZZ_PATH` replay a reported failure with
-`npm test`. Open findings are pinned as intentionally failing `finding_*` tests,
-excluded from `npm test`, and can be reproduced with `npm run test:findings`.
+`npm test`. Both the SDK and frozen data drivers accept only canonical object-form
+structs and string-form unit enums; serde's positional structs and
+`{ "Variant": null }` spellings are rejected with regression coverage.

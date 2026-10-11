@@ -3,7 +3,7 @@ import fc from 'fast-check'
 import { methodCatalog } from '../../src/frozen/catalog.ts'
 import { definitions } from '../../src/frozen/schema.ts'
 import { indexerEventCatalog } from '../../src/indexer/events/indexerEventCatalog.ts'
-import { wireValue } from '../../src/frozen/wire.ts'
+import { wireInput, wireValue } from '../../src/frozen/wire.ts'
 import { stringifyJson } from '../../src/frozen/json.ts'
 import { arbitrary, resolve } from './arbitraries.ts'
 import { repairKnown } from './findings.ts'
@@ -17,20 +17,23 @@ for (const [role, methods] of Object.entries(methodCatalog)) {
   for (const method of methods) {
     const name = `${role}.${method.name}`, type = method.input
     const driver = () => driverFor(role)
+    const inputs = arbitrary(type).filter((value) => {
+      try { wireInput(role, method.name, type, value); return true } catch { return false }
+    })
 
     // Decoding agreement: any input envelope the driver decodes, the SDK accepts and re-encodes exactly.
     it(`decode ${name}: mutated input envelopes the driver decodes are SDK-valid and canonical`, async () => {
       const metrics: Record<string, number> = {}
       const seeds = seedsFor(type)
-      await check(`decode-input/${name}`, fc.property(arbitrary(type), fc.nat(), byteChoices, (raw, seed, steps) => {
-        const { value } = repairKnown(role, method.name, wireValue(type, raw))
+      await check(`decode-input/${name}`, fc.property(inputs, fc.nat(), byteChoices, (raw, seed, steps) => {
+        const { value } = repairKnown(role, method.name, wireInput(role, method.name, type, raw))
         const original = seeds.length && seed % 2 ? seeds[(seed >> 1) % seeds.length]
           : driver().encodeInput(method.name, stringifyJson(value))
         const bytes = mutateBytes(original, steps)
         let decoded: unknown
         try { decoded = driver().decodeInput(method.name, bytes) } catch { count(metrics, 'driver-rejects'); return }
         count(metrics, 'driver-decodes')
-        const checked = wireValue(type, decoded)
+        const checked = wireInput(role, method.name, type, decoded)
         expect(driver().encodeInput(method.name, stringifyJson(checked))).toEqual(bytes)
         lossless(type, checked)
       }), { metrics })

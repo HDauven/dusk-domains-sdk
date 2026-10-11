@@ -46,6 +46,8 @@ export function canonicalBytes(type: string, value: unknown): number[] {
               : 4,
       )
     if (s.type === 'boolean') return [v ? 1 : 0]
+    if ('const' in s)
+      return typeof s.const === 'number' ? integer(v, 2) : []
     if (s.format === 'uint64-lux') return integer(v, 8)
     if (s.type === 'string') {
       const b = Array.from(new TextEncoder().encode(v as string))

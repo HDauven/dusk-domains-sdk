@@ -1,7 +1,7 @@
 import { beforeAll, expect, it, vi } from 'vitest'
 import fc from 'fast-check'
 import { methodCatalog } from '../../src/frozen/catalog.ts'
-import { wireValue } from '../../src/frozen/wire.ts'
+import { wireInput, wireValue } from '../../src/frozen/wire.ts'
 import { stringifyJson } from '../../src/frozen/json.ts'
 import { buildCall } from '../../src/frozen/calls.ts'
 import { arbitrary, examples } from './arbitraries.ts'
@@ -15,33 +15,39 @@ for (const [role, methods] of Object.entries(methodCatalog)) {
   for (const method of methods) {
     const name = `${role}.${method.name}`, type = method.input
     const driver = () => driverFor(role)
+    const inputs = arbitrary(type).filter((value) => {
+      try { wireInput(role, method.name, type, value); return true } catch { return false }
+    })
+    const inputExamples = examples(type).filter(([value]) => {
+      try { wireInput(role, method.name, type, value); return true } catch { return false }
+    })
 
     // Differential encoding of SDK-valid values, both directions.
     it(`input ${name}: SDK normalization encodes to the driver's bytes and decodes back exactly`, async () => {
       const metrics: Record<string, number> = {}
-      await check(`input/${name}`, fc.property(arbitrary(type), raw => {
-        const checked = wireValue(type, raw)
+      await check(`input/${name}`, fc.property(inputs, raw => {
+        const checked = wireInput(role, method.name, type, raw)
         const { value, hits } = known(role, method.name, checked, metrics)
         if (hits.length) expect(() => driver().encodeInput(method.name, stringifyJson(checked))).toThrow()
         const input = hits.length ? value : raw
         const direct = driver().encodeInput(method.name, stringifyJson(input))
-        const normalized = wireValue(type, input)
+        const normalized = wireInput(role, method.name, type, input)
         const bytes = driver().encodeInput(method.name, stringifyJson(normalized))
         expect(bytes).toEqual(direct)
         const decoded = driver().decodeInput(method.name, bytes)
-        expect(wireValue(type, decoded)).toEqual(normalized)
+        expect(wireInput(role, method.name, type, decoded)).toEqual(normalized)
         expect(driver().encodeInput(method.name, stringifyJson(decoded))).toEqual(bytes)
         count(metrics, 'encoded')
-      }), { examples: examples(type), metrics })
+      }), { examples: inputExamples, metrics })
     })
 
     // Builders: every public write call encodes and keeps exact u64 values.
     if (method.mode === 'write') it(`builder ${name}: immutable args, exact deposits and driver-encodable calls`, async () => {
       const metrics: Record<string, number> = {}
       const target = () => contractFor(role)
-      await check(`builder/${name}`, fc.property(arbitrary(type), raw => {
+      await check(`builder/${name}`, fc.property(inputs, raw => {
         const call = (buildCall as Function)(role, target(), method.name, raw)
-        expect(call.args).toEqual(wireValue(type, raw))
+        expect(call.args).toEqual(wireInput(role, method.name, type, raw))
         expect(Object.isFrozen(call.args)).toBe(true)
         expect(typeof call.gasLimit).toBe('bigint')
         const { value, hits } = known(role, method.name, call.args, metrics)

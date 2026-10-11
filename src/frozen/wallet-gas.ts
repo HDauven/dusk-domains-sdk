@@ -48,6 +48,9 @@ export function walletGasLimit(
     case 'store.prune_forwarded':
       limit = 5n * million + 125_000n * BigInt(args.limit as number)
       break
+    case 'vault.prune_referrals':
+      limit = 5n * million + 125_000n * BigInt(args.limit as number)
+      break
     case 'marketplace.buy_fixed':
       limit = (args.order as { terms: { referral: unknown } }).terms.referral === null
         ? 10n * million : 130n * million

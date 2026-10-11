@@ -1,7 +1,7 @@
 // Long, seeded property campaign. Repeats every `*.fuzz.test.*` property in
 // batches with a raised FUZZ_NUM_RUNS and a fresh seed per batch (seed, seed+1,
-// ...) until --duration seconds have elapsed. The pinned `finding_*` tests are
-// excluded; they fail by design until their findings are fixed.
+// ...) until --duration seconds have elapsed. Minimized regressions remain in
+// the normal property suite under behavior-oriented names.
 //
 //   npm run test:fuzz -- --duration 900 --numRuns 100 --seed 20261010 --workers 2
 //
@@ -34,7 +34,7 @@ console.log(`Fuzz results: ${directory}`)
 do {
   const index = batches.length, batchSeed = (seed + index) | 0, report = resolve(directory, `batch-${index}.json`)
   const log = createWriteStream(resolve(directory, `batch-${index}.log`))
-  const child = spawn(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', values.filter, '--exclude=**/finding_*',
+  const child = spawn(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', values.filter,
     `--maxWorkers=${workers}`, '--reporter=dot', '--reporter=json', `--outputFile.json=${report}`], {
     env: { ...process.env, FUZZ_NUM_RUNS: String(numRuns), FUZZ_SEED: String(batchSeed), FUZZ_STATS_FILE: stats,
       FUZZ_TIME_LIMIT_MS: process.env.FUZZ_TIME_LIMIT_MS ?? '600000' },

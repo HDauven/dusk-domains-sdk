@@ -616,6 +616,12 @@ export const methodCatalog = {
       "mode": "write"
     },
     {
+      "name": "prune_referrals",
+      "input": "ReferralPage",
+      "output": "()",
+      "mode": "write"
+    },
+    {
       "name": "claim_protocol",
       "input": "ClaimProtocol",
       "output": "()",

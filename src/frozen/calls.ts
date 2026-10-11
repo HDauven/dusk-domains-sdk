@@ -1,7 +1,7 @@
 /** Immutable calls with exact deposits and reviewed wire arguments. @module */
 import { methodCatalog } from './catalog.ts'
 import { contractId } from './bytes.ts'
-import { wireValue } from './wire.ts'
+import { wireInput } from './wire.ts'
 import { walletGasLimit } from './wallet-gas.ts'
 import type { Methods } from './types.ts'
 import type { ContractRole } from './manifest.ts'
@@ -58,7 +58,12 @@ export function buildCall<R extends ContractRole, M extends Method<R>>(
   const definition = methodDefinition(role, method)
   if (definition.mode !== 'write')
     throw new Error('Method is not a public wallet action')
-  const checked = wireValue(definition.input, args) as Record<string, unknown>
+  const checked = wireInput(
+    role,
+    method,
+    definition.input,
+    args,
+  ) as Record<string, unknown>
   let deposit = '0'
   if (role === 'store' && (method === 'register' || method === 'renew'))
     deposit = checked.expected_fee_lux as string
