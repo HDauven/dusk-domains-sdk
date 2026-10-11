@@ -24,7 +24,7 @@ import {
 } from '../src/frozen/journal.ts'
 import { recordsDigest, moveManifestDigest } from '../src/frozen/digests.ts'
 import { stringifyJson } from '../src/frozen/json.ts'
-import { hex, nameKey } from '../src/frozen/bytes.ts'
+import { authority, hex, nameKey } from '../src/frozen/bytes.ts'
 import type * as T from '../src/frozen/types.ts'
 import type { ProjectionState } from '../src/frozen/projection.ts'
 import { bytes, id, sample, fixtures } from './helpers.ts'
@@ -327,6 +327,7 @@ it('raw primaries resolve only through current records and old cleanup cannot er
       },
     ],
     root = makeName()
+  root.owner = authority({ kind: 'Moonlight', bytes: endpoint })
   root.records = {
     resolver: bytes(5),
     epoch: 1n,
@@ -359,6 +360,11 @@ it('raw primaries resolve only through current records and old cleanup cannot er
       ],
     ]),
   )
+  expect(projectedPrimary(s, endpoint, 11n)?.name.key).toEqual(root.key)
+  const live = s.names[nameStateKey(id(4), root.key)]
+  live.owner = bytes(10)
+  expect(projectedPrimary(s, endpoint, 11n)).toBeNull()
+  live.manager = authority({ kind: 'Moonlight', bytes: endpoint })
   expect(projectedPrimary(s, endpoint, 11n)?.name.key).toEqual(root.key)
   expect(projectedPrimary(s, endpoint, 1000n)).toBeNull()
   const replacement = { ...p, mapping_id: 2n }
@@ -875,6 +881,9 @@ it('vault balance and referral reservations replay from vault effects, independe
   expect(s.vault.accountedLux).toBe('0')
   expect(s.vault.reservedBeneficiaries).toBe(1)
   expect(Object.values(s.referrals)[0].claimable_lux).toBe('0')
+  s = projectReceipt(s, receipt(12n, [[2, 'beneficiary_released', { beneficiary: p, reserved_beneficiaries: 0 }]]))
+  expect(s.vault.reservedBeneficiaries).toBe(0)
+  expect(s.referrals).toEqual({})
 })
 it('market cancellation retains ReturnPending and refund claims remain independent of custody return', () => {
   const order = fixtures('market-v1')['input:cancel_order'].json as T.Order
@@ -914,7 +923,7 @@ it('market cancellation retains ReturnPending and refund claims remain independe
     ]),
   )
   expect(s.orders[`${id(6)}:1`].status).toBe('ReturnPending')
-  expect(s.refunds[`${id(6)}:${hex(bytes(12))}`].amount_lux).toBe('0')
+  expect(s.refunds[`${id(6)}:${hex(bytes(12))}`]).toBeUndefined()
   s = projectReceipt(
     s,
     receipt(12n, [
@@ -922,6 +931,7 @@ it('market cancellation retains ReturnPending and refund claims remain independe
     ]),
   )
   expect(s.orders[`${id(6)}:1`]).toBeUndefined()
+  expect(s.refunds[`${id(6)}:${hex(bytes(12))}`]).toBeUndefined()
 })
 it('reorg rollback restores full transactions and replay is idempotent', () => {
   const projector = createProjector(options),
@@ -1207,6 +1217,22 @@ it('maintains market totals incrementally across replacements, closes, refunds a
     ),
   ).toThrow('name incarnation')
   expect(stringifyJson(s)).toBe(before)
+})
+
+it('rejects an impossible market payer as inconsistent history atomically', () => {
+  const order = structuredClone(
+      fixtures('market-v1')['input:cancel_order'].json,
+    ) as T.Order,
+    state = createProjectionState(options),
+    before = snapshotProjection(state)
+  order.payer = { kind: 'Phoenix', bytes: [] }
+  expect(() =>
+    projectReceipt(
+      state,
+      receipt(10n, [[6, 'order_changed', { order }]]),
+    ),
+  ).toThrow('Missing or inconsistent event history: market payer authority')
+  expect(state).toEqual(before)
 })
 
 it('scales roughly linearly from 10000 to 20000 receipts over 1000 names', () => {

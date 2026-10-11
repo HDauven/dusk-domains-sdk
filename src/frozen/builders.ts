@@ -37,6 +37,7 @@ export function storePruneImportCall(target: string, args: Methods['store']['pru
 export function storePruneForwardedCall(target: string, args: Methods['store']['prune_forwarded']['input']): FrozenCall<'store', 'prune_forwarded'> { return buildCall('store', target, 'prune_forwarded', args) }
 export function resolverPruneStaleCall(target: string, args: Methods['resolver']['prune_stale']['input']): FrozenCall<'resolver', 'prune_stale'> { return buildCall('resolver', target, 'prune_stale', args) }
 export function vaultClaimReferralCall(target: string, args: Methods['vault']['claim_referral']['input']): FrozenCall<'vault', 'claim_referral'> { return buildCall('vault', target, 'claim_referral', args) }
+export function vaultPruneReferralsCall(target: string, args: Methods['vault']['prune_referrals']['input']): FrozenCall<'vault', 'prune_referrals'> { return buildCall('vault', target, 'prune_referrals', args) }
 export function vaultClaimProtocolCall(target: string, args: Methods['vault']['claim_protocol']['input']): FrozenCall<'vault', 'claim_protocol'> { return buildCall('vault', target, 'claim_protocol', args) }
 export function marketplaceSetPauseCall(target: string, args: Methods['marketplace']['set_pause']['input']): FrozenCall<'marketplace', 'set_pause'> { return buildCall('marketplace', target, 'set_pause', args) }
 export function marketplaceSetFeeCall(target: string, args: Methods['marketplace']['set_fee']['input']): FrozenCall<'marketplace', 'set_fee'> { return buildCall('marketplace', target, 'set_fee', args) }

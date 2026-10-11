@@ -2,6 +2,12 @@
 
 ## 0.3.2 (2026-10-09)
 
+- Follow the frozen verification ABI and semantics: compressed payout-key bytes,
+  referral pruning/release events, reclaimable marketplace refunds, and
+  authority-aware primary resolution.
+- Match data-driver validation for wire-version literals, vault fee metadata,
+  aggregate record mutations, Unicode strings and integer JSON spellings.
+
 - Align controller call consent and governance version guards with protocol
   [#268](https://github.com/HDauven/dusk-domains-protocol/pull/268).
 

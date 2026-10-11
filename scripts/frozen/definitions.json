@@ -4735,6 +4735,22 @@
         }
       }
     },
+    "BeneficiaryReleased": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "beneficiary",
+        "reserved_beneficiaries"
+      ],
+      "properties": {
+        "beneficiary": {
+          "$ref": "#/$defs/TypedPrincipal"
+        },
+        "reserved_beneficiaries": {
+          "$ref": "#/$defs/u32"
+        }
+      }
+    },
     "FeeReceived": {
       "type": "object",
       "additionalProperties": false,
@@ -6199,6 +6215,26 @@
         }
       }
     },
+    "Event<BeneficiaryReleased>": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "op_seq",
+        "body"
+      ],
+      "properties": {
+        "version": {
+          "$ref": "#/$defs/u16"
+        },
+        "op_seq": {
+          "$ref": "#/$defs/u64"
+        },
+        "body": {
+          "$ref": "#/$defs/BeneficiaryReleased"
+        }
+      }
+    },
     "Event<FeeReceived>": {
       "type": "object",
       "additionalProperties": false,
@@ -7296,7 +7332,7 @@
       "properties": {
         "account": {
           "type": "string",
-          "description": "Base58 encoding of the canonical 96-byte compressed BLS public key."
+          "description": "Base58 JSON encoding of the canonical compressed BLS public key; the frozen archive contains only its 96 canonical bytes."
         }
       }
     },

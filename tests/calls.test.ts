@@ -70,6 +70,19 @@ it('gas table covers exactly the public wallet actions', () => {
       .sort(),
   )
   expect(GAS_LIMITS['store.finalize_move']).toBe(2_000_000_000n)
+  expect(builders.vaultClaimProtocolCall(id(2), { amount: 'All', expected_operator_epoch: 1n }).gasLimit).toBe(242_000_000n)
+  expect(builders.vaultPruneReferralsCall(id(2), { after: null, limit: 1 }).gasLimit).toBe(6_000_000n)
+  expect(builders.vaultPruneReferralsCall(id(2), { after: null, limit: 16 }).gasLimit).toBe(7_000_000n)
+})
+it('rejects the transfer contract as an authority but preserves ignored registration referrers', async () => {
+  const transfer = [1, ...Array(31).fill(0)]
+  const update = input('Authorities') as any
+  expect(() => builders.storeUpdateAuthoritiesCall(id(4), { ...update, owner: transfer })).toThrow()
+  const register = input('Register') as any
+  const call = builders.storeRegisterCall(id(4), { ...register, referrer: { kind: 'Contract', bytes: transfer } })
+  expect(call.args.referrer).toEqual({ kind: 'Contract', bytes: transfer })
+  const driver = (await release()).drivers.get(id(4))!
+  expect(() => driver.encodeInput('register', stringifyJson(call.args))).not.toThrow()
 })
 it('reserves subtree cleanup when creating a subname without reading its old state', () => {
   const args = input('CreateSubname') as CreateSubname

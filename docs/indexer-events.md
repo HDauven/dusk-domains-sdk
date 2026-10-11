@@ -95,12 +95,12 @@ throws without changing state. Height zero is retained initially. Checkpoints at
 the same height replace each other. Roll back to the completed parent block before
 replaying a same-height fork; checkpoints taken midway through a block are unsafe.
 
-The state format is now `schemaVersion: 2`. Persist the whole snapshot, including
+The state format is now `schemaVersion: 3`. Persist the whole snapshot, including
 `indexes`, `receipts`, `retainEffects` and import `retainedRows`, using storage that
 preserves bigint and number types. These are plain serializable objects/arrays;
 there are no process-local caches to rebuild after restore. Plain JSON round trips
 need a bigint-preserving codec; the wire JSON parser alone does not preserve these
-runtime type distinctions. Old receipt-array snapshots cannot be restored; replay
+runtime type distinctions. Older projection snapshots cannot be restored; replay
 from deployment receipts to populate the new indexes. The HTTP read resource
 payloads remain unchanged; the full internal checkpoint format is not an HTTP DTO.
 

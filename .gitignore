@@ -7,3 +7,6 @@ coverage/
 !.env.example
 target/
 *.tsbuildinfo
+
+# Reproducible local fuzz campaigns and per-property counts.
+.fuzz/

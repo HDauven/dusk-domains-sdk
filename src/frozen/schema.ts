@@ -180,7 +180,7 @@ export const definitions: Record<string, unknown> = {
         "$ref": "#/$defs/ContractKind"
       },
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "move_version": {
         "$ref": "#/$defs/u16"
@@ -752,7 +752,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "directory": {
         "$ref": "#/$defs/Contract"
@@ -829,7 +829,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "request_hash": {
         "$ref": "#/$defs/Digest"
@@ -1085,7 +1085,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "new_orders_disabled": {
         "$ref": "#/$defs/bool"
@@ -2789,7 +2789,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "directory": {
         "$ref": "#/$defs/Contract"
@@ -2831,7 +2831,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "magic": {
         "$ref": "#/$defs/[u8;8]"
@@ -2900,7 +2900,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "reason": {
         "$ref": "#/$defs/FeeReason"
@@ -4734,6 +4734,22 @@ export const definitions: Record<string, unknown> = {
       }
     }
   },
+  "BeneficiaryReleased": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "beneficiary",
+      "reserved_beneficiaries"
+    ],
+    "properties": {
+      "beneficiary": {
+        "$ref": "#/$defs/TypedPrincipal"
+      },
+      "reserved_beneficiaries": {
+        "$ref": "#/$defs/u32"
+      }
+    }
+  },
   "FeeReceived": {
     "type": "object",
     "additionalProperties": false,
@@ -5528,7 +5544,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5548,7 +5564,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5568,7 +5584,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5588,7 +5604,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5608,7 +5624,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5628,7 +5644,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5648,7 +5664,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5668,7 +5684,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5688,7 +5704,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5708,7 +5724,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5728,7 +5744,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5748,7 +5764,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5768,7 +5784,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5788,7 +5804,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5808,7 +5824,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5828,7 +5844,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5848,7 +5864,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5868,7 +5884,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5888,7 +5904,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5908,7 +5924,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5928,7 +5944,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5948,7 +5964,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5968,7 +5984,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -5988,7 +6004,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6008,7 +6024,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6028,7 +6044,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6048,7 +6064,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6068,7 +6084,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6088,7 +6104,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6108,7 +6124,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6128,7 +6144,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6148,7 +6164,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6168,7 +6184,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6188,13 +6204,33 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
       },
       "body": {
         "$ref": "#/$defs/BeneficiaryReserved"
+      }
+    }
+  },
+  "Event<BeneficiaryReleased>": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "version",
+      "op_seq",
+      "body"
+    ],
+    "properties": {
+      "version": {
+        "const": 1
+      },
+      "op_seq": {
+        "$ref": "#/$defs/u64"
+      },
+      "body": {
+        "$ref": "#/$defs/BeneficiaryReleased"
       }
     }
   },
@@ -6208,7 +6244,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6228,7 +6264,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6248,7 +6284,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6268,7 +6304,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6288,7 +6324,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6308,7 +6344,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6328,7 +6364,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6348,7 +6384,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6368,7 +6404,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6388,7 +6424,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6408,7 +6444,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6428,7 +6464,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -6448,7 +6484,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -7120,7 +7156,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -7140,7 +7176,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -7160,7 +7196,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -7180,7 +7216,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -7200,7 +7236,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -7220,7 +7256,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -7240,7 +7276,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -7295,7 +7331,7 @@ export const definitions: Record<string, unknown> = {
     "properties": {
       "account": {
         "type": "string",
-        "description": "Base58 encoding of the canonical 96-byte compressed BLS public key."
+        "description": "Base58 JSON encoding of the canonical compressed BLS public key; the frozen archive contains only its 96 canonical bytes."
       }
     }
   },
@@ -7546,7 +7582,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -7566,7 +7602,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -7586,7 +7622,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"
@@ -7606,7 +7642,7 @@ export const definitions: Record<string, unknown> = {
     ],
     "properties": {
       "version": {
-        "$ref": "#/$defs/u16"
+        "const": 1
       },
       "op_seq": {
         "$ref": "#/$defs/u64"

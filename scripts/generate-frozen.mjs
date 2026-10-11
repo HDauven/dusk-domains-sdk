@@ -9,6 +9,22 @@ const catalog = JSON.parse(
   await readFile(new URL('scripts/frozen/catalog.json', root), 'utf8'),
 )
 const defs = schema.$defs
+// These fields are domain revisions only when named below. Every Event<T>
+// envelope is also frozen at wire version 1; unrelated fields named `version`
+// (governance counters and configuration revisions) remain ordinary integers.
+const wireVersionOne = new Set([
+  'QuoteRequest',
+  'PolicyQuote',
+  'CustodyNotice',
+  'CustodyAck',
+  'FeeMetadata',
+  'Interface',
+  'MarketWindDown',
+])
+for (const [name, definition] of Object.entries(defs)) {
+  if ((name.startsWith('Event<') || wireVersionOne.has(name)) && definition.properties?.version)
+    definition.properties.version = { const: 1 }
+}
 const basic = (name) =>
   ({
     '()': 'null',
@@ -54,7 +70,7 @@ await writeFile(
   new URL('src/frozen/types.ts', root),
   banner +
     '/** Frozen v1 wire types. Lux is decimal text; other u64 values are bigint. @module */\n' +
-    'export type Located<T> = "Absent" | { Local: T } | { Forwarded: Forward }\nexport type Event<T> = { version: number; op_seq: bigint; body: T }\n' +
+    'export type Located<T> = "Absent" | { Local: T } | { Forwarded: Forward }\nexport type Event<T> = { version: 1; op_seq: bigint; body: T }\n' +
     Object.entries(defs)
       .filter(([k]) => /^[A-Za-z][A-Za-z0-9_]*$/.test(k))
       .map(([k, v]) => `export type ${k} = ${basic(k) ?? ts(v)}\n`)

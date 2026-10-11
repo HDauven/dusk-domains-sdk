@@ -9,9 +9,10 @@ is supported; arbitrary additional contract-wallet nesting needs its own budget.
 `src/frozen/wallet-gas.ts` to size record payloads, target lists and pruning batches
 from the reviewed arguments, without changing those arguments or making reads.
 Budgets round upward to whole millions and cover at least twice the measured
-successful transaction maximum for the workload, plus any larger contract
-admission requirement with forwarding and wrapper headroom. These are measured
-fixture envelopes, not estimates of the gas a successful call will spend.
+successful transaction maximum or documented protocol VM ceiling for the
+workload, plus any larger contract admission requirement with forwarding and
+wrapper headroom. These are conservative envelopes, not estimates of the gas a
+successful call will spend.
 
 The VM assessment uses protocol 41f0f6f production WASM, Piecrust 0.32.0 and
 Rusk 1.7.1 Moonlight transaction accounting, with checks at each chosen budget
@@ -26,6 +27,8 @@ and 1M below. The latter is a headroom probe, not a minimum-gas search.
 | Issue reserved root, including old-tree cleanup | 80M |
 | Directory execute / accept operator / accept guardian / cancel, scanning 64 large stored proposals | 16M / 20M / 16M / 12M |
 | Prune proposals; every ID can scan all 64 stored bodies, including missing/repeated IDs | 5M + 4M per ID; ceiling 261M |
+| Prune referral rows, bounded by the protocol to 16 rows | 5M + 125k per row; ceiling 7M |
+| Claim protocol funds, including payout-key validation to a distinct recipient | 242M (twice the 121M protocol regression ceiling) |
 | Begin / finalize move, including the maximum 257-name tree | 50M / 2,000M |
 
 Input bytes cannot reveal an existing subtree, record set, primary bucket or

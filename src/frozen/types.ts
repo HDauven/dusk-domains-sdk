@@ -1,7 +1,7 @@
 // Generated from the frozen v1 protocol schemas by scripts/generate-frozen.mjs.
 /** Frozen v1 wire types. Lux is decimal text; other u64 values are bigint. @module */
 export type Located<T> = "Absent" | { Local: T } | { Forwarded: Forward }
-export type Event<T> = { version: number; op_seq: bigint; body: T }
+export type Event<T> = { version: 1; op_seq: bigint; body: T }
 export type PrincipalKind = "Moonlight" | "Phoenix" | "Contract"
 export type TypedPrincipal = { kind: PrincipalKind; bytes: (number)[] }
 export type u8 = number
@@ -15,7 +15,7 @@ export type Height = bigint
 export type Binding = { directory: Contract; vault: Contract; network: number }
 export type Contract = (number)[]
 export type ContractKind = "Directory" | "Store" | "Resolver" | "Vault" | "Policy" | "Marketplace"
-export type Interface = { kind: ContractKind; version: number; move_version: number; custody_version: number }
+export type Interface = { kind: ContractKind; version: 1; move_version: number; custody_version: number }
 export type u16 = number
 export type Page = { after: (Node | null); limit: number }
 export type ProposalId = { operator_epoch: bigint; nonce: bigint }
@@ -40,9 +40,9 @@ export type CommitmentKey = { actor: Authority; hash: Digest }
 export type Commitment = { key: CommitmentKey; created_at: bigint }
 export type Capacity = { memory_bytes: bigint; reserved_bytes: bigint; accepts_new: boolean; sealed: boolean }
 export type bool = boolean
-export type QuoteRequest = { version: number; directory: Contract; store: Contract; node: Node; label: string; actor: Authority; years: number; height: bigint; previous_generation: bigint; previous_grace_end: (bigint | null); policy_version: bigint }
+export type QuoteRequest = { version: 1; directory: Contract; store: Contract; node: Node; label: string; actor: Authority; years: number; height: bigint; previous_generation: bigint; previous_grace_end: (bigint | null); policy_version: bigint }
 export type LabelStatus = "Denied" | "Public" | "Reserved"
-export type PolicyQuote = { version: number; request_hash: Digest; config_version: bigint; registration_open: boolean; label_status: LabelStatus; base_lux: string; premium_lux: string; base_referral_bps: number; premium_referral_bps: number; referral_lux: string; valid_until: bigint }
+export type PolicyQuote = { version: 1; request_hash: Digest; config_version: bigint; registration_open: boolean; label_status: LabelStatus; base_lux: string; premium_lux: string; base_referral_bps: number; premium_referral_bps: number; referral_lux: string; valid_until: bigint }
 export type Lux = string
 export type PolicyConfig = { config_version: bigint; registration_open: boolean; minimum_root_bytes: number; annual_lux: string[]; premium_start_lux: string; base_referral_bps: number; premium_referral_bps: number; reserved: (string)[]; denied: (string)[] }
 export type InitPolicy = { binding: Binding; config: PolicyConfig }
@@ -51,7 +51,7 @@ export type MemberKind = "Store" | "Resolver"
 export type Admission = { id: Contract; interface_version: number; code_hash: Digest; init_hash: Digest; ordinal: number; admitted_at: bigint; accepts_moves: boolean; retiring: boolean; governance_version: bigint }
 export type MarketState = "Listed" | "Draining" | "Retired"
 export type Market = { id: Contract; state: MarketState; version: bigint; interface_version: number; code_hash: Digest; init_hash: Digest }
-export type MarketWindDown = { version: number; new_orders_disabled: boolean; unsettled_orders: bigint; refundable_lux: string }
+export type MarketWindDown = { version: 1; new_orders_disabled: boolean; unsettled_orders: bigint; refundable_lux: string }
 export type OperatorPair = { principal: TypedPrincipal; recipient: Endpoint }
 export type RegistrationContext = { revision: bigint; policy: Contract; policy_version: bigint; operator: TypedPrincipal; operator_paused: boolean; guardian_suspended: boolean; allocation_version: bigint; newest_store: Contract }
 export type DirectoryConfig = { binding: Binding; operator: OperatorPair; guardian: TypedPrincipal; operator_epoch: bigint; guardian_epoch: bigint; revision: bigint; proposal_delay: bigint; guardian_delay: bigint; registration: RegistrationContext; renewal: RenewalSchedule; preferred_marketplace: (Contract | null); market_version: bigint; store_count: number; resolver_count: number; source_version: bigint; recipient_version: bigint }
@@ -103,11 +103,11 @@ export type SlotRecordQuery = { slot: SlotKey; key: string }
 export type SlotLiveness = "Current" | "Staged" | "Stale"
 export type SlotLivenessQuery = { node: Node; epoch: bigint; resolver: Contract }
 export type TransferAndCall = { name: NameRef; target: Contract; callback_gas: bigint; data: (number)[] }
-export type CustodyNotice = { version: number; directory: Contract; store: Contract; name: NameRef; nonce: bigint; previous_owner: Authority; previous_manager: Authority; data: (number)[] }
-export type CustodyAck = { version: number; magic: number[]; store: Contract; node: Node; incarnation: Incarnation; nonce: bigint }
+export type CustodyNotice = { version: 1; directory: Contract; store: Contract; name: NameRef; nonce: bigint; previous_owner: Authority; previous_manager: Authority; data: (number)[] }
+export type CustodyAck = { version: 1; magic: number[]; store: Contract; node: Node; incarnation: Incarnation; nonce: bigint }
 export type ReturnCustody = { name: NameRef; nonce: bigint }
 export type FeeReason = "Registration" | "Renewal" | "Marketplace"
-export type FeeMetadata = { version: number; reason: FeeReason; name: NameRef; payer: TypedPrincipal; beneficiary: (TypedPrincipal | null); referral_lux: string }
+export type FeeMetadata = { version: 1; reason: FeeReason; name: NameRef; payer: TypedPrincipal; beneficiary: (TypedPrincipal | null); referral_lux: string }
 export type SourceKind = "Store" | "Marketplace"
 export type FeeSource = { id: Contract; kind: SourceKind; state: MarketState }
 export type SourceUpdate = { expected_version: bigint; source: FeeSource }
@@ -199,6 +199,7 @@ export type ResolverSlotPrunedReason = "OwnerClear" | "Stale"
 export type ResolverSlotPruned = { slot: SlotKey; reason: ResolverSlotPrunedReason }
 export type FeeSourceChanged = { source: FeeSource; source_version: bigint }
 export type BeneficiaryReserved = { beneficiary: TypedPrincipal; reserved_beneficiaries: number }
+export type BeneficiaryReleased = { beneficiary: TypedPrincipal; reserved_beneficiaries: number }
 export type FeeReceived = { source: Contract; metadata: FeeMetadata; received_lux: string; protocol_lux: string; liability_lux: string; beneficiary_claimable_lux: string }
 export type ReferralClaimed = { beneficiary: TypedPrincipal; recipient: Endpoint; amount_lux: string; remaining_lux: string; liability_lux: string }
 export type ProtocolClaimed = { operator: TypedPrincipal; operator_epoch: bigint; recipient: Endpoint; amount_lux: string; remaining_lux: string }
@@ -476,6 +477,7 @@ export interface WireTypes {
   "ResolverSlotPruned": ResolverSlotPruned
   "FeeSourceChanged": FeeSourceChanged
   "BeneficiaryReserved": BeneficiaryReserved
+  "BeneficiaryReleased": BeneficiaryReleased
   "FeeReceived": FeeReceived
   "ReferralClaimed": ReferralClaimed
   "ProtocolClaimed": ProtocolClaimed
@@ -543,6 +545,7 @@ export interface WireTypes {
   "Event<ResolverSlotPruned>": Event<ResolverSlotPruned>
   "Event<FeeSourceChanged>": Event<FeeSourceChanged>
   "Event<BeneficiaryReserved>": Event<BeneficiaryReserved>
+  "Event<BeneficiaryReleased>": Event<BeneficiaryReleased>
   "Event<FeeReceived>": Event<FeeReceived>
   "Event<ReferralClaimed>": Event<ReferralClaimed>
   "Event<ProtocolClaimed>": Event<ProtocolClaimed>
@@ -726,6 +729,7 @@ export interface Methods {
     set_source: { input: SourceUpdate; output: null }
     receive_fee: { input: ReceiveFromContract; output: null }
     claim_referral: { input: ClaimReferral; output: null }
+    prune_referrals: { input: ReferralPage; output: null }
     claim_protocol: { input: ClaimProtocol; output: null }
     read_state: { input: null; output: VaultState }
     read_referral: { input: VaultReadReferralArgs; output: (ReferralRow | null) }
@@ -802,6 +806,7 @@ export interface EventTypes {
   resolver_slot_pruned: Event<ResolverSlotPruned>
   fee_source_changed: Event<FeeSourceChanged>
   beneficiary_reserved: Event<BeneficiaryReserved>
+  beneficiary_released: Event<BeneficiaryReleased>
   fee_received: Event<FeeReceived>
   referral_claimed: Event<ReferralClaimed>
   protocol_claimed: Event<ProtocolClaimed>

@@ -4,8 +4,8 @@ export const MAX_AUTO_GAS_PRICE: bigint = 10n
 /**
  * Conservative no-input ceilings, gas units; buildCall refines these from the
  * reviewed arguments in wallet-gas.ts. Method: round up to the next million,
- * covering both twice the measured successful transaction maximum and the
- * admission floor including forwarding/wrapper overhead. Measurements use the
+ * covering twice the measured successful transaction maximum or documented VM
+ * ceiling and the admission floor including forwarding/wrapper overhead. Measurements use the
  * protocol 41f0f6f VM harness, Piecrust 0.32.0 and Rusk 1.7.1 Moonlight accounting.
  * Every action is exercised at its chosen limit and 1M below it in the assessment.
  * These are fixture maxima, not bounds for arbitrarily large lifetime storage.
@@ -27,6 +27,7 @@ export const MAX_AUTO_GAS_PRICE: bigint = 10n
  * proposal pruning: 5M + 4M per ID; each ID can scan 64 large stored proposals
  * (directory state.rs:267-270,968-988), even if no matching proposal exists.
  * commitment pruning: 5M + 60k per supplied key.
+ * referral pruning: 5M + 125k per row, bounded by the protocol to 16 rows.
  * custody: ceil((callback + 10M) / .93^2) + 25M.
  * buy/settle: 10M without referral, 130M with possible new payout-key admission.
  * Hidden subtree size cannot be inferred from a NameRef: renewal, begin_move,
@@ -77,7 +78,9 @@ export const GAS_LIMITS: Readonly<Record<string, bigint>> = Object.freeze({
   'store.prune_forwarded': 7_000_000n,
   'resolver.prune_stale': 5_000_000n,
   'vault.claim_referral': 130_000_000n,
-  'vault.claim_protocol': 5_000_000n,
+  'vault.prune_referrals': 7_000_000n,
+  // Twice the protocol's 121M ceiling for a distinct configured recipient.
+  'vault.claim_protocol': 242_000_000n,
   'marketplace.set_pause': 5_000_000n,
   'marketplace.set_fee': 5_000_000n,
   'marketplace.buy_fixed': 130_000_000n,
