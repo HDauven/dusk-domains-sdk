@@ -1,4 +1,4 @@
-# Public surface in 0.3.2
+# Public surface in 0.3.3
 
 The npm and JSR export maps contain the same eight entrypoints. npm resolves
 runtime imports to compiled JavaScript and types to declarations in `dist`; its
@@ -40,7 +40,8 @@ types. Unit reads take no arguments.
 `getName(spelling, homeHint?)` returns `{ store, value, forwards, height }`.
 `quoteRenewal(store, args)` retains the same routing metadata. `locate` supports
 other `Located` reads when destination metadata is needed. `verifyPrimary`
-discovers pool mappings and verifies incarnation/lifecycle/forward resolution.
+reads `resolve_primary` across the pool and verifies current owner/manager authority,
+home, incarnation, lifecycle, forward resolution and uniqueness.
 Low-level `read(role, id, method, args)` also obtains its height automatically.
 
 Every by-name lookup is root-keyed. `NameRef` includes generation and serial.

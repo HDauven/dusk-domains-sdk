@@ -78,6 +78,11 @@ const cases: [
   [
     'primary',
     { store: id(4), endpoint: bytes(8, 96), value: null },
+    (c) => c.getRawPrimary(id(4), bytes(8, 96)),
+  ],
+  [
+    'primary',
+    { store: id(4), endpoint: bytes(8, 96), value: null },
     (c) => c.getPrimary(id(4), bytes(8, 96)),
   ],
   [

@@ -9,7 +9,7 @@ import type { DataDriver } from '../src/frozen/driver.ts'
 import type { ReadTransport } from '../src/frozen/transport.ts'
 import type { LoadedRelease, ContractRole } from '../src/frozen/manifest.ts'
 import type { NameView, Admission, Forward } from '../src/frozen/types.ts'
-import { nameKey, hex } from '../src/frozen/bytes.ts'
+import { authority, nameKey, hex } from '../src/frozen/bytes.ts'
 const encode = (v: unknown) => new TextEncoder().encode(stringifyJson(v))
 const decode = (v: Uint8Array) => parseJson(new TextDecoder().decode(v))
 const jsonDriver: DataDriver = {
@@ -130,7 +130,7 @@ async function setup(
             new_grace_end: 2000n,
           },
         })
-      if (fn === 'read_primary') return encode(null)
+      if (fn === 'read_primary' || fn === 'resolve_primary') return encode(null)
       if (fn === 'pending_commitment') return encode(null)
       throw new Error(`${target}.${fn}`)
     },
@@ -285,7 +285,8 @@ it('primary verification requires matching incarnation, active lifecycle and for
       },
       spelling: 'child.example.dusk',
     }
-  t.responses.set(`${id(9)}:read_primary`, primary)
+  t.n.name.owner = authority({ kind: 'Moonlight', bytes: endpoint })
+  t.responses.set(`${id(9)}:resolve_primary`, primary)
   t.responses.set(`${id(9)}:resolve_record`, {
     Local: {
       key: 'moonlight_address',

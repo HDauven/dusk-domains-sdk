@@ -721,13 +721,14 @@ export class FrozenClient {
   ): Promise<Routed<RenewalQuote>> {
     return this.locate(store, args.name.key.root, 'quote_renewal', args)
   }
+  /** Resolve current owner/manager authority, then verify home, incarnation, lifecycle, forward record and pool uniqueness. */
   async verifyPrimary(endpoint: number[]): Promise<VerifiedPrimary | null> {
     return this.snapshot(async (height) => {
       await this.storeAdmissions()
       let found: VerifiedPrimary | null = null
       for (const a of this.stores) {
         const store = contractId(a.id),
-          primary = await this.raw('store', store, 'read_primary', { endpoint })
+          primary = await this.raw('store', store, 'resolve_primary', { endpoint })
         if (!primary) continue
         const name = await this.followRaw(
           store,

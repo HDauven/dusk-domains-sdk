@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.3 (2026-10-11)
+
+- Use the protocol's `resolve_primary` in `verifyPrimary`, preserving current-home,
+  incarnation, lifecycle, forward-record and pool-uniqueness checks.
+- Require the endpoint's current owner or manager authority in `primaryNameStatus`,
+  returning `unauthorized` when a raw mapping survives escrow or an identity-preserving transfer.
+- Expose indexer raw mappings as `getRawPrimary`; retain `getPrimary` as a deprecated
+  compatibility alias and `store(id).read_primary` for endpoint cleanup.
+
 ## 0.3.2 (2026-10-09)
 
 - Follow the frozen verification ABI and semantics: compressed payout-key bytes,

@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import { primaryNameStatus } from '../src/core/primary.ts'
 import { sample, bytes } from './helpers.ts'
-import { nameKey } from '../src/frozen/bytes.ts'
+import { authority, nameKey } from '../src/frozen/bytes.ts'
 function observation() {
   const name = sample('NameView')
   name.name.key = nameKey('example.dusk')
@@ -17,6 +17,7 @@ function observation() {
       },
       spelling: 'example.dusk',
     }
+  name.name.owner = authority({ kind: 'Moonlight', bytes: endpoint })
   return {
     name,
     primary,
@@ -39,6 +40,7 @@ it.each([
   'missing',
   'stale',
   'inactive',
+  'unauthorized',
   'forward_missing',
   'forward_mismatch',
 ] as const)('reports protocol status %s without UI copy', (status) => {
@@ -46,6 +48,10 @@ it.each([
   if (status === 'missing') o.primary = null as never
   if (status === 'stale') o.name = null as never
   if (status === 'inactive') o.height = 200n
+  if (status === 'unauthorized') {
+    o.name.name.owner = bytes(9)
+    o.name.name.manager = bytes(9)
+  }
   if (status === 'forward_missing') o.record = null as never
   if (status === 'forward_mismatch') o.record.value = bytes(6, 96)
   expect(primaryNameStatus(o)).toEqual({ status, verified: false })
