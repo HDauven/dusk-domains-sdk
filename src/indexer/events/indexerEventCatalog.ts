@@ -145,6 +145,10 @@ export const indexerEventCatalog = {
     "role": "vault",
     "type": "Event<BeneficiaryReserved>"
   },
+  "beneficiary_released": {
+    "role": "vault",
+    "type": "Event<BeneficiaryReleased>"
+  },
   "fee_received": {
     "role": "vault",
     "type": "Event<FeeReceived>"

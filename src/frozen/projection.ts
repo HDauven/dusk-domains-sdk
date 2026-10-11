@@ -1,7 +1,7 @@
 /** Transaction-atomic event projection for the frozen layer. @module */
 import type * as T from './types.ts'
 import { ProjectionJournal, copyEntity } from './projection-journal.ts'
-import { contractId, equalBytes, hex, fromHex } from './bytes.ts'
+import { authority, contractId, equalBytes, hex, fromHex } from './bytes.ts'
 import { stringifyJson, u64 } from './json.ts'
 import { assertRecordsDigest, moveManifestDigest } from './digests.ts'
 import {
@@ -52,7 +52,7 @@ export type ProjectedAdmission = Omit<T.Admission, 'governance_version'> &
 export type ProjectedDirectoryConfig = Omit<T.DirectoryConfig, 'recipient_version'> &
   Partial<Pick<T.DirectoryConfig, 'recipient_version'>>
 export interface ProjectionState {
-  schemaVersion: 2
+  schemaVersion: 3
   /** Disable effect retention when the indexer persists its own event history. */
   retainEffects: boolean
   /** Serializable incremental indexes; keep these with every checkpoint. */
@@ -63,6 +63,7 @@ export interface ProjectionState {
     openMoves: MembershipIndex
     imports: MembershipIndex
     marketTotals: Record<string, MarketTotals>
+    marketObligations: Record<string, Record<string, number>>
   }
   height: bigint
   directoryId: string
@@ -161,7 +162,7 @@ export function createProjectionState(
   )
     throw new Error('Projection needs one release-verified directory')
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     retainEffects: options.retainEffects ?? true,
     indexes: {
       children: {},
@@ -170,6 +171,7 @@ export function createProjectionState(
       openMoves: {},
       imports: {},
       marketTotals: {},
+      marketObligations: {},
     },
     height: 0n,
     directoryId,
@@ -446,6 +448,59 @@ function syncMarket(s: ProjectionState, store: string): void {
   if (totals.nextOrderId > config.next_order_id)
     config.next_order_id = totals.nextOrderId
 }
+function orderAuthorities(order: T.Order | undefined): Map<string, T.Authority> {
+  const result = new Map<string, T.Authority>()
+  if (!order) return result
+  for (const payer of [order.payer, order.highest?.payer]) {
+    if (!payer) continue
+    let account: T.Authority | undefined
+    try {
+      account = authority(payer)
+    } catch {
+      requireHistory(false, 'market payer authority')
+    }
+    result.set(hex(account), account)
+  }
+  return result
+}
+function reconcileRefundRow(
+  s: ProjectionState,
+  store: string,
+  account: T.Authority,
+): void {
+  const accountHex = hex(account),
+    key = `${store}:${accountHex}`,
+    totals = marketTotals(s, store),
+    obligated = (s.indexes.marketObligations[store]?.[accountHex] ?? 0) > 0,
+    refund = s.refunds[key]
+  if (obligated && !refund) {
+    s.refunds[key] = { authority: account, amount_lux: '0' }
+    totals.refundAccounts += 1n
+  } else if (!obligated && refund?.amount_lux === '0') {
+    delete s.refunds[key]
+    totals.refundAccounts -= 1n
+  }
+}
+function updateOrderObligations(
+  s: ProjectionState,
+  store: string,
+  previous: T.Order | undefined,
+  current: T.Order | undefined,
+): void {
+  const counts = (s.indexes.marketObligations[store] ??= {}),
+    before = orderAuthorities(previous),
+    after = orderAuthorities(current),
+    accounts = new Map([...before, ...after])
+  for (const [key, account] of accounts) {
+    const count =
+      (counts[key] ?? 0) -
+      (before.has(key) ? 1 : 0) +
+      (after.has(key) ? 1 : 0)
+    if (count > 0) counts[key] = count
+    else delete counts[key]
+    reconcileRefundRow(s, store, account)
+  }
+}
 function putOrder(
   s: ProjectionState,
   store: string,
@@ -460,6 +515,7 @@ function putOrder(
     (retain ? orderEscrow(order) : 0n) - orderEscrow(previous)
   if (order.terms.id >= totals.nextOrderId)
     totals.nextOrderId = order.terms.id + 1n
+  updateOrderObligations(s, store, previous, retain ? order : undefined)
   if (retain) s.orders[key] = order
   else delete s.orders[key]
   syncMarket(s, store)
@@ -755,6 +811,10 @@ function apply(
         beneficiary: e.body.beneficiary,
         claimable_lux: '0',
       }
+      s.vault.reservedBeneficiaries = e.body.reserved_beneficiaries
+      break
+    case 'beneficiary_released':
+      delete s.referrals[principalStateKey(e.body.beneficiary)]
       s.vault.reservedBeneficiaries = e.body.reserved_beneficiaries
       break
     case 'fee_received': {
@@ -1123,6 +1183,7 @@ function apply(
       totals.refundableLux +=
         BigInt(e.body.refund.amount_lux) - BigInt(previous?.amount_lux ?? '0')
       s.refunds[key] = e.body.refund
+      reconcileRefundRow(s, store, e.body.refund.authority)
       syncMarket(s, store)
       break
     }
@@ -1250,14 +1311,13 @@ export function snapshotProjection(state: ProjectionState): ProjectionState {
 export function restoreProjection(
   snapshot: ProjectionState,
 ): ProjectionState {
-  if (snapshot.schemaVersion !== 2)
+  if (snapshot.schemaVersion !== 3)
     throw new Error(
-      'Unsupported projection snapshot; replay receipts with schema version 2',
+      'Unsupported projection snapshot; replay receipts with schema version 3',
     )
   const restored = snapshotProjection(snapshot)
-  // Schema-2 checkpoints from the earlier predeployment ABI remain readable.
-  // Approval rows have no meaning under call consent. Never infer version guards
-  // from the old value-only state; helpers require a fresh read when absent.
+  // Consent was never durable protocol state. Discard the obsolete client-only
+  // cache if an otherwise current checkpoint was produced by an older SDK.
   Reflect.deleteProperty(restored, 'controllerApprovals')
   return restored
 }
@@ -1313,11 +1373,14 @@ export function projectedPrimary(
     const p = state.primaries[`${store}:${endpointKey}`]
     if (!p || !equalBytes(p.endpoint, endpoint)) continue
     const n = state.names[nameStateKey(store, p.name.key)]
+    const endpointAuthority = authority({ kind: 'Moonlight', bytes: endpoint })
     if (
       !n ||
       !sameRef(refOf(n), p.name) ||
       height >= n.expires_at ||
-      !n.records
+      !n.records ||
+      (!equalBytes(n.owner, endpointAuthority) &&
+        !equalBytes(n.manager, endpointAuthority))
     )
       continue
     const slot =
