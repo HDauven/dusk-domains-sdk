@@ -58,6 +58,7 @@ export interface IndexedNameResource<T> {
 export type IndexedNameState = IndexedNameResource<Located<NameView>>
 export type IndexedRecords = IndexedNameResource<Located<RecordsView>>
 export type IndexedChildren = IndexedNameResource<Located<Children>>
+/** Raw mapping, including stale or unauthorized identity; not a verified primary. */
 export interface IndexedPrimary {
   store: string
   endpoint: number[]

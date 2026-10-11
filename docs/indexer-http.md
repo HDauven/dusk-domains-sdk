@@ -54,8 +54,15 @@ strict. All routes are relative to `<baseUrl>/v1/`.
 Queries encode bytes as unprefixed hex. The name family exposes the projection's
 `projectedName`, `projectedRecords`, `projectedChildren`, `projectedHome`,
 `projectedCommitment`, `projectedMoveStatus` and `projectedCooldowns` semantics.
-It preserves source forwards instead of hiding their destination. Raw primaries
-must be verified against active name and forward endpoint before identity use.
+It preserves source forwards instead of hiding their destination.
+`getRawPrimary(store, endpoint)` reads the raw mapping for endpoint cleanup;
+`getPrimary` is a deprecated compatibility alias with the same raw semantics.
+Raw mappings are not verified identities. Use `FrozenClient.verifyPrimary` for
+canonical identity or `projectedPrimary` for complete projected state. Observations
+passed to `primaryNameStatus` must share a snapshot and include the current local
+name and forward record; it checks incarnation, active lifecycle, owner/manager
+authority and the exact endpoint. Cross-store home and uniqueness checks remain
+the caller's responsibility when using this observation helper.
 Do not fabricate lifecycle from wall time or merge legacy IDs with generations,
 serials, epochs, mapping IDs or custody nonces.
 

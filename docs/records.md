@@ -25,9 +25,13 @@ during move preparation. Selecting another name across shards is two explicit
 transactions: clear old, then set new. The second can fail after the first succeeds.
 
 Use `client.verifyPrimary(endpoint)` for display/payment identity. It discovers
-pool mappings, checks the current incarnation and lifecycle and verifies the
-forward endpoint. Resolver failure is an error. `read_primary` returns a raw
-mapping which can be stale, expired or forward-mismatched.
+admitted stores and reads `resolve_primary`, which requires the endpoint's
+authority to be the name's current owner or manager. It also checks current home,
+incarnation, lifecycle, forward endpoint and pool uniqueness. Read failures are
+errors. `client.store(id).read_primary({ endpoint })` returns the raw mapping for
+endpoint cleanup, including mappings that no longer resolve after escrow,
+identity-preserving transfer or expiry. Restored authority can resolve the same
+mapping again while its incarnation, lifecycle and forward record remain valid.
 
 A whole-tree move transports every still-live raw mapping at activation,
 including other endpoints' mappings, preserving endpoint/NameRef/timestamp but
@@ -84,8 +88,10 @@ the protocol kind and `principalShortValue` abbreviates its bytes.
 still decides effective referral eligibility.
 
 `primaryNameStatus({ endpoint, primary, name, record, height })` evaluates an
-observation with statuses `missing`, `stale`, `inactive`, `forward_missing`,
+observation with statuses `missing`, `stale`, `inactive`, `unauthorized`, `forward_missing`,
 `forward_mismatch` or `verified`. Use observations from one snapshot; never map a
-failed read to null. `client.verifyPrimary(endpoint)` performs the canonical
+failed read to null. `unauthorized` means the endpoint's Moonlight authority is
+neither the current owner nor manager, even if the raw mapping and forward record
+still match. `client.verifyPrimary(endpoint)` performs the canonical
 cross-store verification, and returns a verified result or null. UI titles,
 tones and fallback address copy belong to the app.

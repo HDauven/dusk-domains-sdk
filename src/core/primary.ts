@@ -1,11 +1,12 @@
-/** Primary names require a live incarnation and an exact forward endpoint match. @module */
-import { equalBytes, nameKey } from '../frozen/bytes.ts'
+/** Primary names require current holder authority, a live incarnation and an exact forward endpoint match. @module */
+import { authority, equalBytes, nameKey } from '../frozen/bytes.ts'
 import { u64 } from '../frozen/json.ts'
 import type { NameView, PrimaryView, RecordValue } from '../frozen/types.ts'
 export type PrimaryNameStatus =
   | 'missing'
   | 'stale'
   | 'inactive'
+  | 'unauthorized'
   | 'forward_missing'
   | 'forward_mismatch'
   | 'verified'
@@ -43,6 +44,12 @@ export function primaryNameStatus(input: {
   )
     return result('stale')
   if (!name.active || height >= n.expires_at) return result('inactive')
+  const endpointAuthority = authority({ kind: 'Moonlight', bytes: endpoint })
+  if (
+    !equalBytes(n.owner, endpointAuthority) &&
+    !equalBytes(n.manager, endpointAuthority)
+  )
+    return result('unauthorized')
   if (!record) return result('forward_missing')
   if (record.key !== 'moonlight_address' || !equalBytes(record.value, endpoint))
     return result('forward_mismatch')

@@ -2,7 +2,7 @@
 
 TypeScript SDK for the ADR 0004 frozen layer: directory, store shards,
 registry-qualified resolvers, vault, replaceable policy and marketplace v1.
-Version **0.3.2** targets a fresh frozen deployment. The 0.2 router/core/treasury
+Version **0.3.3** targets a fresh frozen deployment. The 0.2 router/core/treasury
 clients and legacy events have been removed.
 
 ## Quickstart
@@ -85,7 +85,9 @@ Read scopes use the exact snake_case ABI: `client.directory.roles()`,
 `client.resolver(id).read_record_slot({ slot })`, `client.vault.read_state()`, and
 `client.marketplace(id).read_order({ id: 1n })`. Every public canonical read takes
 its current height itself. `verifyPrimary(endpointBytes)` verifies the current
-incarnation, lifecycle and forward `moonlight_address` across admitted stores.
+owner/manager authority through `resolve_primary`, incarnation, lifecycle and
+forward `moonlight_address` across admitted stores. Raw mappings remain available
+through `client.store(id).read_primary({ endpoint })` for endpoint cleanup.
 
 Use `getName` or `quoteRenewal` when the result's destination shard is needed for
 a new write. Every `Located` read follows forwarding. Commitment reads stay on

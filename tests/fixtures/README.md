@@ -22,3 +22,15 @@ The digest tests additionally transcribe pinned results from
 Refresh fixtures from reviewed protocol output; never download deployment drivers
 inside the test suite. Production drivers always come from the release manifest
 and are hash-verified before instantiation.
+
+`primary-verification.json.gz` contains binary node replies produced by
+`primary-verification.rs` using the same pinned protocol types and `wire::encode`.
+Its authority expectations independently transcribe the pinned store's
+`src/entrypoints/records.rs::resolve_primary` predicate; these are read fixtures,
+not contract execution traces. The SDK regression tests use the real WASM drivers
+for input encoding, input decoding and output decoding, with a simulated transport.
+
+To regenerate, copy `primary-verification.rs` into
+`contracts/crates/dusk-domains-types/examples/` in an isolated checkout of the
+reference revision, run `cargo run -p dusk-domains-types --example primary-verification
+--features serde` from `contracts`, and gzip stdout with `gzip -n`.

@@ -338,7 +338,8 @@ export class DuskDomainsIndexerClient {
       params.signal,
     )
   }
-  getPrimary(
+  /** Raw mapping for endpoint cleanup; does not verify current primary identity. */
+  getRawPrimary(
     store: string,
     endpoint: number[],
     signal?: AbortSignal,
@@ -362,6 +363,14 @@ export class DuskDomainsIndexerClient {
       },
       signal,
     )
+  }
+  /** @deprecated Raw mapping only. Use getRawPrimary for cleanup or FrozenClient.verifyPrimary for identity. */
+  getPrimary(
+    store: string,
+    endpoint: number[],
+    signal?: AbortSignal,
+  ): Promise<IndexerResponse<IndexedPrimary>> {
+    return this.getRawPrimary(store, endpoint, signal)
   }
   getCommitment(
     store: string,
