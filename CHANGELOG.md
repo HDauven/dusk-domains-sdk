@@ -2,9 +2,9 @@
 
 ## 0.3.4 (2026-10-12)
 
-- Mirror the launch policy's reserved list: add team names and handles (george, gamo,
-  moana, mocello, hein, hdauven, heindauven, thomas, neotamandua, autholykos), tminus,
-  and the pieswap, sozu and nocturne-standards ecosystem projects (56 labels).
+- Mirror the launch policy's reserved list (60 labels): add george, gamo, moana,
+  mocello, hein, hdauven, heindauven, thomas, neotamandua, autholykos, tminus, pieswap,
+  sozu, nocturne-standards, rannier, tdi, mochavi and seppia, each reserved on request.
 
 ## 0.3.3 (2026-10-11)
 
