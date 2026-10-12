@@ -13,11 +13,11 @@ const reserved = [
   'docs', 'dusk', 'duskdomains', 'duskds', 'duskevm', 'duskfoundation',
   'dusknetwork', 'duskwallet', 'exchange', 'explorer', 'faucet', 'foundation',
   'gamo', 'george', 'grants', 'hdauven', 'hedger', 'hein', 'heindauven', 'help',
-  'helpdesk', 'mainnet', 'moana', 'mocello', 'moderator', 'moonlight',
+  'helpdesk', 'mainnet', 'moana', 'mocello', 'mochavi', 'moderator', 'moonlight',
   'neotamandua', 'nocturne-standards', 'npex', 'official', 'phoenix', 'piecrust',
-  'pieswap', 'provisioner', 'refund', 'rusk', 'security', 'sozu', 'staking',
-  'support', 'team', 'testnet', 'thomas', 'tminus', 'trade', 'verify', 'wallet',
-  'webwallet', 'zedger',
+  'pieswap', 'provisioner', 'rannier', 'refund', 'rusk', 'security', 'seppia',
+  'sozu', 'staking', 'support', 'tdi', 'team', 'testnet', 'thomas', 'tminus',
+  'trade', 'verify', 'wallet', 'webwallet', 'zedger',
 ]
 it('pins the exact launch reserved list', () => {
   expect(RESERVED_LABELS).toEqual(reserved)
