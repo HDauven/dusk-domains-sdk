@@ -7,6 +7,7 @@ import { u64 } from '../frozen/json.ts'
 export const RESERVED_LABELS: readonly string[] = Object.freeze([
   'admin',
   'airdrop',
+  'autholykos',
   'bridge',
   'citadel',
   'claim',
@@ -38,6 +39,7 @@ export const RESERVED_LABELS: readonly string[] = Object.freeze([
   'moderator',
   'moonlight',
   'neotamandua',
+  'nocturne-standards',
   'npex',
   'official',
   'phoenix',

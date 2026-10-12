@@ -9,14 +9,15 @@ import {
 import { namehashHex, nameKey } from '../src/frozen/bytes.ts'
 import { sample } from './helpers.ts'
 const reserved = [
-  'admin', 'airdrop', 'bridge', 'citadel', 'claim', 'connect', 'docs', 'dusk',
-  'duskdomains', 'duskds', 'duskevm', 'duskfoundation', 'dusknetwork',
-  'duskwallet', 'exchange', 'explorer', 'faucet', 'foundation', 'gamo', 'george',
-  'grants', 'hdauven', 'hedger', 'hein', 'heindauven', 'help', 'helpdesk',
-  'mainnet', 'moana', 'mocello', 'moderator', 'moonlight', 'neotamandua', 'npex',
-  'official', 'phoenix', 'piecrust', 'pieswap', 'provisioner', 'refund', 'rusk',
-  'security', 'sozu', 'staking', 'support', 'team', 'testnet', 'thomas',
-  'tminus', 'trade', 'verify', 'wallet', 'webwallet', 'zedger',
+  'admin', 'airdrop', 'autholykos', 'bridge', 'citadel', 'claim', 'connect',
+  'docs', 'dusk', 'duskdomains', 'duskds', 'duskevm', 'duskfoundation',
+  'dusknetwork', 'duskwallet', 'exchange', 'explorer', 'faucet', 'foundation',
+  'gamo', 'george', 'grants', 'hdauven', 'hedger', 'hein', 'heindauven', 'help',
+  'helpdesk', 'mainnet', 'moana', 'mocello', 'moderator', 'moonlight',
+  'neotamandua', 'nocturne-standards', 'npex', 'official', 'phoenix', 'piecrust',
+  'pieswap', 'provisioner', 'refund', 'rusk', 'security', 'sozu', 'staking',
+  'support', 'team', 'testnet', 'thomas', 'tminus', 'trade', 'verify', 'wallet',
+  'webwallet', 'zedger',
 ]
 it('pins the exact launch reserved list', () => {
   expect(RESERVED_LABELS).toEqual(reserved)
