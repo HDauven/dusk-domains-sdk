@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.4 (2026-10-12)
+
+- Mirror the launch policy's reserved list: add team names and handles (george, gamo,
+  moana, mocello, hein, hdauven, heindauven, thomas, neotamandua, tminus) and the
+  pieswap and sozu ecosystem projects (54 labels).
+
 ## 0.3.3 (2026-10-11)
 
 - Use the protocol's `resolve_primary` in `verifyPrimary`, preserving current-home,
