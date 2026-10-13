@@ -13,6 +13,7 @@ import {
   REGISTRATION_MAX_COMMITMENT_AGE_BLOCKS,
 } from '../core/commitment.ts'
 import { wireValue } from './wire.ts'
+import { isVerifiedQuote, UnverifiedQuoteError } from './trust.ts'
 import type { DataDriver } from './driver.ts'
 import type {
   Authority,
@@ -134,7 +135,13 @@ export interface RegistrationCalls {
   reveal: FrozenCall<'store', 'register'>
   commitment: Digest
 }
-/** Preserve the original commitment shard independently of the destination registration shard. */
+/**
+ * Preserve the original commitment shard independently of the destination registration shard.
+ * The quote must be the unchanged object a client's `quoteRegistration` or `prepareRegistration`
+ * returned for this store, label and years. A quote restored from storage, copied, edited or
+ * read from the store directly throws a retryable `UnverifiedQuoteError`: quote again. The
+ * Connect app signs the reveal only for terms the client behind its release quoted itself.
+ */
 export function registrationCalls(
   store: string,
   input: RegistrationInput,
@@ -146,6 +153,10 @@ export function registrationCalls(
     windowEnd = commitHeight + REGISTRATION_MAX_COMMITMENT_AGE_BLOCKS,
     lastReveal = windowEnd > U64_MAX ? U64_MAX : windowEnd,
     validUntil = u64(input.validUntil === undefined ? lastReveal : input.validUntil)
+  if (!isVerifiedQuote(input.quote, store, input.label, input.years))
+    throw new UnverifiedQuoteError(
+      `Registration quote for ${input.label} at store ${contractId(store)} is not one a client verified, or it changed since; quote again with FrozenClient.quoteRegistration or prepareRegistration`,
+    )
   if (validUntil < firstReveal || validUntil > lastReveal)
     throw new Error(
       'Registration deadline is outside the commitment reveal window',

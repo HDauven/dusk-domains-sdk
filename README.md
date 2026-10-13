@@ -2,7 +2,7 @@
 
 TypeScript SDK for the ADR 0004 frozen layer: directory, store shards,
 registry-qualified resolvers, vault, replaceable policy and marketplace v1.
-Version **0.3.4** targets a fresh frozen deployment. The 0.2 router/core/treasury
+Version **0.4.0** targets a fresh frozen deployment. The 0.2 router/core/treasury
 clients and legacy events have been removed.
 
 ## Quickstart
@@ -28,10 +28,26 @@ if (result.value !== 'Absent' && 'Local' in result.value) {
 ```
 
 No wallet or supplied block height is needed. The client fetches the current
-height, verifies deployment interfaces/bindings, discovers directory admissions,
-and follows permanent forwarding with a 63-hop default limit. Multi-read
-operations retry when the height changes. Use a consistent node endpoint;
-height bracketing is not a historical-state or same-height-reorg proof.
+height, discovers directory admissions, and follows permanent forwarding with a
+63-hop default limit. It verifies each contract before reading it: release
+artifact, the directory's admission or market record, interface, deployment binding
+and init commitment. Verification belongs to the client. Nothing becomes readable or
+signable until every check passes, a contract that fails one stays refused, and
+`client.release` is the client's own copy of the release, so a contract another
+client resolved or verified is never trusted here. Discovery does not
+verify the selected policy: after a `SetPolicy` selects a policy the manifest does not
+list yet, other reads and writes keep working. Registration verifies that policy
+against the release wherever it is quoted, built or signed. `quoteRegistration` and
+`prepareRegistration` report the missing release artifact, `registrationCalls` takes
+only the unchanged quote object they returned, and the Connect app signs a reveal only
+for terms its client quoted under the selection it read. Connect signs only for
+contracts whose release descriptor commits to their code and initialization (`codeHash`
+and `initHash`); others are readable only. Multi-read operations, including
+`prepareRegistration`, run at one height: a sequence that crosses a block is read
+again, up to three times. Use a consistent node endpoint;
+height bracketing is not a historical-state or same-height-reorg proof. The node is a
+trust root for reads; the chain still enforces what a signed call pays
+([trust model](docs/integration-trust-model.md#what-the-node-can-and-cannot-do)).
 Unavailable dependencies throw; they are never interpreted as absence.
 
 ## Manifest
@@ -55,7 +71,9 @@ interface SdkManifestFields {
       | 'policy'
       | 'marketplace'
     contractId: string // nonzero 32-byte hex, optional 0x prefix
-    codeHash?: string // BLAKE3, compared with directory admission when supplied
+    codeHash?: string // BLAKE3 of the reviewed WASM; compared with the directory's evidence
+    initHash?: string // init commitment; compared with the directory's evidence and a policy's live init
+    // Without both, a store, resolver, policy or marketplace is readable but never signed for.
     dataDriver: {
       path: string // resolved relative to manifest URL
       bytes?: number
@@ -74,8 +92,10 @@ For an in-memory manifest, provide `{ artifactBaseUrl }`. Node/indexer URLs can
 be overridden explicitly in options. New admissions are discovered from reads;
 `resolveContract(role, id, admission)` can supply reviewed release metadata for
 an implementation absent from the initial manifest. It is subjected to the same
-hash, interface and binding checks. `admitDirectoryEvent` also accepts committed,
-authenticated directory initialization/admission events.
+artifact, admission, interface, binding and init checks, and enters `client.release`
+only once all of them pass. `admitDirectoryEvent` also accepts committed,
+authenticated directory initialization/admission events; one that contradicts what
+the client reads is rejected, and the contract stays verified.
 
 ## Reads and writes
 
@@ -119,8 +139,11 @@ if (name.value !== 'Absent' && 'Local' in name.value) {
 }
 ```
 
-Calls contain immutable reviewed arguments, an exact decimal deposit and an
-explicit action gas limit. The wallet sends public transactions with transaction
+Pass `client.release` to the Connect app: it prepares and signs a call only for a
+contract that client verified against release commitments, a custody hand-off only to
+such a marketplace, and a reveal only for terms that client quoted; `submit` checks
+again right before sending. Calls contain immutable reviewed arguments, an exact
+decimal deposit and an explicit action gas limit. The wallet sends public transactions with transaction
 value zero, checks public balance for deposit plus maximum gas cost, rechecks the
 chain before submission and uses verified driver bytes.
 It never accepts a caller-substituted prepared payload. Automatic gas price is

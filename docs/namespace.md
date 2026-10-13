@@ -17,7 +17,9 @@ flag, which clears primary identity as well as records.
 ## Marketplace custody
 
 Construct `createMarketplaceCalls(marketId, directoryId, verifiedDriver)` with
-`client.release.drivers.get(marketId)`. `listFixed(intent)` and `auction(intent)`
+`client.release.drivers.get(marketId)` once `client.verifyContract('marketplace', marketId)`
+has passed; the Connect app signs only for a market that client verified against release
+`codeHash` and `initHash`. `listFixed(intent)` and `auction(intent)`
 encode a reviewed `CustodyIntent` into store `transfer_and_call`, with an explicit
 500M callback allowance. The intent binds the next custody nonce read from root
 counters and the reviewed immutable Terms, including store, incarnation,

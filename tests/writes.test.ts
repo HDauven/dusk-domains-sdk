@@ -13,7 +13,7 @@ import {
 } from '../src/writes/liveConfirmation.ts'
 import { createDuskDomainsIndexerClient } from '../src/indexer/client.ts'
 import { stringifyJson } from '../src/frozen/json.ts'
-import { bytes, id, release } from './helpers.ts'
+import { bytes, id, release, verifiedRelease } from './helpers.ts'
 it.each([
   ['119', false],
   ['120', true],
@@ -45,7 +45,7 @@ it.each(['0', 'invalid', null])(
                 : { median: '1' }
           },
         },
-        await release(),
+        await verifiedRelease(await release()),
       )
     await expect(
       app.submit(buildCall('store', id(4), 'commit', { hash: bytes(3) })),
@@ -68,7 +68,7 @@ it('checks chain again after balance and never sends across a switch', async () 
           return { hash: 'tx' }
         },
       },
-      await release(),
+      await verifiedRelease(await release()),
     )
   await expect(
     app.submit(buildCall('store', id(4), 'commit', { hash: bytes(3) })),

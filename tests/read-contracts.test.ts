@@ -4,7 +4,8 @@ import { methodCatalog } from '../src/frozen/catalog.ts'
 import { parseJson, stringifyJson } from '../src/frozen/json.ts'
 import { fromHex, hex } from '../src/frozen/bytes.ts'
 import { wireValue } from '../src/frozen/wire.ts'
-import { fixtures, release, id, bytes, sample } from './helpers.ts'
+import { fixtures, release, id, bytes, sample, evidence, policyInitHash } from './helpers.ts'
+import { launchPolicyConfig } from '../src/core/pricing.ts'
 import type { DataDriver } from '../src/frozen/driver.ts'
 const rows = [
   ...Object.values(fixtures()),
@@ -25,13 +26,30 @@ for (const [role, methods] of Object.entries(methodCatalog))
   for (const method of methods.filter((m) => m.mode === 'read'))
     it(`${role}.${method.name}: public read API, protocol input/output and fresh height`, async () => {
       const original = await release(),
-        r = { ...original, drivers: new Map(original.drivers) },
+        r = {
+          ...original,
+          // Verification reads JSON, so the policy's init commitment is over the JSON launch config.
+          contracts: new Map([...original.contracts].map(([cid, c]) =>
+            [cid, c.role === 'policy' ? { ...c, initHash: policyInitHash(jsonDriver, launchPolicyConfig()) } : c])),
+          drivers: new Map(original.drivers),
+        },
         descriptor = r.manifest.contracts.find((c) => c.role === role)!,
         target = descriptor.contractId
       let verifying = true,
         heights = 0,
         observed = false
-      r.drivers.set(target, jsonDriver)
+      // Verification reads answer in JSON; the public read under test runs the reviewed driver.
+      const real = original.drivers.get(target)!,
+        current = () => (verifying ? jsonDriver : real)
+      r.drivers.set(target, {
+        encodeInput: (fn, json) => current().encodeInput(fn, json),
+        decodeInput: (fn, b) => current().decodeInput(fn, b),
+        decodeOutput: (fn, b) => current().decodeOutput(fn, b),
+        decodeEvent: (topic, b) => current().decodeEvent(topic, b),
+        version: () => real.version(),
+        schema: () => real.schema(),
+      })
+      if (role !== 'directory') r.drivers.set(id(1), jsonDriver)
       const input = rows.find((row) => row.type === method.input)!
       const output = rows.find(
         (row) =>
@@ -52,12 +70,13 @@ for (const [role, methods] of Object.entries(methodCatalog))
           },
           read: async (contract, fn, args) => {
             if (verifying) {
+              const kind = r.contracts.get(contract)!.role
               if (fn === 'interface_version')
                 return encode({
-                  kind: role[0].toUpperCase() + role.slice(1),
+                  kind: kind[0].toUpperCase() + kind.slice(1),
                   version: 1,
-                  move_version: role === 'store' ? 1 : 0,
-                  custody_version: ['store', 'marketplace'].includes(role)
+                  move_version: kind === 'store' ? 1 : 0,
+                  custody_version: ['store', 'marketplace'].includes(kind)
                     ? 1
                     : 0,
                 })
@@ -68,6 +87,11 @@ for (const [role, methods] of Object.entries(methodCatalog))
                   network: 1,
                 })
               if (fn === 'order_api_version') return encode(1)
+              if (fn === 'config' && kind === 'policy') return encode(launchPolicyConfig())
+              // The directory's own record of the contract under verification.
+              if (fn === 'member' || fn === 'market')
+                return encode({ ...sample(fn === 'member' ? 'Admission' : 'Market'),
+                  id: (parseJson(new TextDecoder().decode(args)) as { id: number[] }).id, interface_version: 1 })
             }
             if (contract === target && fn === method.name) {
               observed = true
@@ -98,10 +122,8 @@ for (const [role, methods] of Object.entries(methodCatalog))
           },
         },
       })
-      await client.verifyContract(role as never, target)
+      await client.verifyContract(role as never, target, evidence(descriptor))
       verifying = false
-      r.drivers.set(target, original.drivers.get(target)!)
-      if (role === 'store') r.drivers.set(id(1), jsonDriver)
       const api =
         role === 'directory'
           ? client.directory

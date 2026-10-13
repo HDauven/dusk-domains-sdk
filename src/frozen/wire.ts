@@ -127,15 +127,14 @@ export function wireValue(type: string, value: unknown): unknown {
       return v
     }
     if (s.type === 'array') {
-      if (
-        !Array.isArray(v) ||
-        v.length < (s.minItems ?? 0) ||
-        v.length > (s.maxItems ?? 32768)
-      )
-        return bad()
-      return v.map((x, i) =>
-        check(s.items!, x, `${path}[${i}]`, definition, allowTransferPrincipal),
-      )
+      if (!Array.isArray(v)) return bad()
+      // An index loop, never the input's own methods: an overridden map could return the original.
+      const length = v.length
+      if (length < (s.minItems ?? 0) || length > (s.maxItems ?? 32768)) return bad()
+      const copy: unknown[] = []
+      for (let i = 0; i < length; i++)
+        copy.push(check(s.items!, v[i], `${path}[${i}]`, definition, allowTransferPrincipal))
+      return copy
     }
     if (s.type === 'object') {
       if (v === null || typeof v !== 'object' || Array.isArray(v)) return bad()

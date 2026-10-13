@@ -5,7 +5,7 @@ import { wireValue } from '../src/frozen/wire.ts'
 import { stringifyJson } from '../src/frozen/json.ts'
 import { buildCall, type FrozenCall } from '../src/frozen/calls.ts'
 import { GAS_LIMITS } from '../src/frozen/gas.ts'
-import { fixtures, release, id, bytes } from './helpers.ts'
+import { fixtures, release, id, bytes, clientQuote, jsonRelease, quotingClient, quoteArgs, verifiedRelease } from './helpers.ts'
 import {
   createMarketplaceCalls,
   registrationCalls,
@@ -19,6 +19,9 @@ import type {
   RegistrationQuote,
   NameRef,
   CreateSubname,
+  Register,
+  IssueReserved,
+  Renew,
 } from '../src/frozen/types.ts'
 const rows = { ...fixtures(), ...fixtures('market-v1') }
 function input(type: string): unknown {
@@ -117,7 +120,7 @@ it('never submits callbacks or fabricated gas/deposit', async () => {
       { id: bytes(1) } as never,
     ),
   ).toThrow()
-  const r = await release(),
+  const r = await verifiedRelease(await release()),
     app = createDuskDomainsConnectApp(
       {
         request: async (method) =>
@@ -134,7 +137,7 @@ it('never submits callbacks or fabricated gas/deposit', async () => {
   )
 })
 it('wallet submits public calls with raw verified-driver bytes, exact deposit, zero amount and capped gas price', async () => {
-  const r = await release(),
+  const r = await verifiedRelease(await release()),
     sent: unknown[] = []
   const app = createDuskDomainsConnectApp(
     {
@@ -149,8 +152,9 @@ it('wallet submits public calls with raw verified-driver bytes, exact deposit, z
     },
     r,
   )
-  const call = buildCall('store', id(4), 'register', {
-    ...(input('Register') as any),
+  // A paid store call: registration additionally needs a verified policy selection (below).
+  const call = buildCall('store', id(4), 'renew', {
+    ...(input('Renew') as Renew),
     expected_fee_lux: '123',
   })
   await app.submit(call)
@@ -164,7 +168,7 @@ it('wallet submits public calls with raw verified-driver bytes, exact deposit, z
   expect((sent[0] as any).fnArgs).toMatch(/^0x[0-9a-f]+$/u)
 })
 it('wallet chain switch between preparation and submission rejects', async () => {
-  const r = await release()
+  const r = await verifiedRelease(await release())
   let checks = 0
   const app = createDuskDomainsConnectApp(
     {
@@ -219,8 +223,17 @@ it('list, auction and accept use marketplace-encoded custody intent bound to the
   ).toEqual({ terms: order.terms, nonce: 22n, valid_until: 999n })
   order.terms.directory = bytes(2)
   expect(() => market.acceptOffer(order, 22n, 999n)).toThrow('reviewed')
+  // Connect signs the hand-off to the market its client verified, and to no other target.
+  const app = createDuskDomainsConnectApp(
+    { request: async (method) => (method === 'dusk_chainId' ? 'dusk:1' : { median: '2' }) },
+    await verifiedRelease(r),
+  )
+  expect((await app.prepare(call)).fnName).toBe('transfer_and_call')
+  const elsewhere = createMarketplaceCalls(id(0x99), id(1), r.drivers.get(id(6))!)
+  await expect(app.prepare(elsewhere.acceptOffer({ ...order, terms: { ...order.terms, directory: bytes(1) } }, 22n, 999n)))
+    .rejects.toThrow('not a marketplace verified')
 })
-it('transfer exposes clear_records and registration preserves original commitment shard/referrer', () => {
+it('transfer exposes clear_records and registration preserves original commitment shard/referrer', async () => {
   const ref = input('NameRef') as NameRef
   expect(
     transferCall(id(4), {
@@ -239,24 +252,84 @@ it('transfer exposes clear_records and registration preserves original commitmen
   quote.total_lux = '15'
   quote.quote.label_status = 'Public'
   quote.quote.registration_open = true
-  const calls = registrationCalls(id(8), {
+  quote.policy = bytes(3)
+  // The reveal goes to the store that quoted (4); the commitment stays on its original shard (8).
+  const calls = registrationCalls(id(4), {
     actor: bytes(1),
     label: 'example',
     years: 1,
     secret: bytes(3),
-    commitmentStore: id(4),
+    commitmentStore: id(8),
     commitHeight: 100n,
-    quote,
+    quote: await clientQuote(quote),
     referrer: { kind: 'Contract', bytes: bytes(9) },
   })
-  expect(calls.commit.contractId).toBe(id(4))
-  expect(calls.reveal.contractId).toBe(id(8))
+  expect(calls.commit.contractId).toBe(id(8))
+  expect(calls.reveal.contractId).toBe(id(4))
   expect(calls.reveal.deposit).toBe('15')
-  expect(calls.reveal.args.commitment_store).toEqual(bytes(4))
+  expect(calls.reveal.args.commitment_store).toEqual(bytes(8))
   expect(calls.reveal.args.referrer).toEqual({
     kind: 'Contract',
     bytes: bytes(9),
   })
+})
+
+// A registration quote priced by the release's policy (contract 3) at the given selection version.
+function policyQuote(version: bigint): RegistrationQuote {
+  const quote = input('RegistrationQuote') as RegistrationQuote
+  quote.policy = bytes(3)
+  quote.policy_version = version
+  quote.quote.base_lux = '10'
+  quote.quote.premium_lux = '5'
+  quote.total_lux = '15'
+  quote.quote.label_status = 'Public'
+  quote.quote.registration_open = true
+  return quote
+}
+it('builds a registration only from a quote whose policy a client verified against its release', async () => {
+  const reviewed = {
+    actor: bytes(1), label: 'example', years: 1, secret: bytes(3), commitmentStore: id(4), commitHeight: 100n,
+  }
+  // Fabricated, or copied from a store read no client checked: policy 3 at selection 41 is unverified.
+  expect(() => registrationCalls(id(4), { ...reviewed, quote: policyQuote(41n) })).toThrow('quote again')
+  const quote = await clientQuote(policyQuote(41n))
+  expect(registrationCalls(id(4), { ...reviewed, quote }).reveal.args).toMatchObject({
+    expected_policy_version: 41n, expected_fee_lux: '15',
+  })
+  // Verification covers that quote only: not a copy at a later selection, another store or label.
+  expect(() => registrationCalls(id(4), { ...reviewed, quote: { ...quote, policy_version: 42n } })).toThrow('quote again')
+  expect(() => registrationCalls(id(8), { ...reviewed, quote })).toThrow('quote again')
+  expect(() => registrationCalls(id(4), { ...reviewed, label: 'other', quote })).toThrow('quote again')
+})
+it('signs a registration or reserved issuance only under a policy selection a client verified on that release', async () => {
+  const client = await quotingClient(policyQuote(51n)),
+    other = await verifiedRelease(await jsonRelease()),
+    wallet = { request: async (method: string) => (method === 'dusk_chainId' ? 'dusk:1' : { median: '1' }) },
+    app = createDuskDomainsConnectApp(wallet, client.release)
+  const reviewed = {
+    actor: bytes(1), label: 'example', years: 1, secret: bytes(3), commitmentStore: id(4), commitHeight: 100n,
+  }
+  const issue = (version: bigint, config = 1n) =>
+    buildCall('store', id(4), 'issue_reserved', {
+      ...(input('IssueReserved') as IssueReserved), expected_policy_version: version, expected_policy_config_version: config,
+    })
+  await client.verifyContract('store', id(4))
+  await expect(app.prepare(issue(51n))).rejects.toThrow('is not verified against this release')
+  const { reveal } = registrationCalls(id(4), { ...reviewed, quote: await client.quoteRegistration(id(4), quoteArgs(policyQuote(51n))) })
+  for (const call of [reveal, issue(51n)]) expect((await app.prepare(call)).fnName).toBe(call.functionName)
+  // Another selection or config version, or a release the client did not verify it against, is still refused.
+  const at52 = buildCall('store', id(4), 'register', { ...reveal.args, expected_policy_version: 52n })
+  for (const call of [at52, issue(52n), issue(51n, 2n)])
+    await expect(app.prepare(call)).rejects.toThrow('is not verified against this release')
+  const unverified = createDuskDomainsConnectApp(wallet, other)
+  await expect(unverified.prepare(reveal)).rejects.toThrow('is not verified against this release')
+  // Writes that never read the policy need no verified selection.
+  for (const call of [
+    buildCall('store', id(4), 'commit', { hash: bytes(1) }),
+    buildCall('store', id(4), 'renew', input('Renew') as Renew),
+    buildCall('vault', id(2), 'claim_protocol', { amount: 'All', expected_operator_epoch: 1n }),
+  ])
+    expect((await unverified.prepare(call)).fnName).toBe(call.functionName)
 })
 
 it('preserves admission reserves and sizes bounded wallet inputs', () => {

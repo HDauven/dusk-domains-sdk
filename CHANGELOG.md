@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.4.0 (2026-10-13)
+
+Breaking: pass `client.release`, not the loaded release, to the Connect app. It signs
+only for contracts whose release descriptor carries `codeHash` and `initHash`, and a
+reveal only for terms the same client quoted. Rebuild a stored reservation from a fresh
+quote: a stored, copied or edited quote throws `UnverifiedQuoteError`.
+
+- Verify the selected policy wherever a registration is quoted, built or signed,
+  instead of in `discover()` and `createClientFromManifest`. A governance `SetPolicy`
+  can select a policy the release manifest does not list yet; client creation,
+  renewals, records and market operations no longer fail until the manifest is
+  republished. `quoteRegistration`, and so `prepareRegistration`, verifies the policy
+  that priced the quote against the release before returning it. `registrationCalls`
+  builds only from such a quote, and the Connect app prepares and submits `register`
+  and `issue_reserved` only at a policy selection a client verified against the same
+  release.
+- Verify each contract transactionally; one that fails a check stays refused.
+- Keep verification per client: `client.release` is now the client's own copy.
+- Sign in the Connect app only for contracts its client verified, not map entries.
+- Sign only for contracts whose release descriptor carries `codeHash` and `initHash`.
+- Sign custody hand-offs only to a marketplace the client verified, with its intent.
+- Sign a reveal only for terms its client quoted, under the selection it read.
+- Check verification again immediately before `dusk_sendTransaction`.
+- Quote in `quoteRegistration` under the directory's policy selection only.
+- Build `registrationCalls` only from the unchanged quote object a client returned.
+- Throw a retryable `UnverifiedQuoteError` for a stored, copied or edited quote.
+- Compare the preferred marketplace with its directory record during discovery.
+- Compare admission init hashes, and a policy's live initialization, with `initHash`.
+- Read `prepareRegistration` again at one height when a block lands meanwhile.
+- Treat a null `codeHash` or `initHash` in a release manifest as absent.
+- Add `projectedProposal` and `projectedProposals`, deriving `Expired` and `Invalidated`.
+- Export `ContractRefusedError` for a contract a client refused.
+
 ## 0.3.4 (2026-10-12)
 
 - Mirror the launch policy's reserved list (60 labels): add george, gamo, moana,
