@@ -3,12 +3,18 @@
 Discover `client.directory.registration_context()` for the selected policy,
 selection version, newest store and the two independent stop flags. Read
 `client.policy(policyId).config()` for the policy config version. Obtain the
-registration quote through the intended store's `quote_registration`; it performs
-the contract's guarded policy validation and returns base, premium, referral,
-exact total, quote height and selection/config versions. The policy quote’s
-`valid_until` equals its request height; it is not a transaction deadline.
-Direct policy `quote` is also available for inspection, but does not guarantee
-registration eligibility.
+registration quote with `client.quoteRegistration(store, args)`, through the
+intended store's `quote_registration`; it performs the contract's guarded policy
+validation and returns base, premium, referral, exact total, quote height and
+selection/config versions. The client then verifies the policy that priced the
+quote against the release (listing, interface, binding and, when the release carries
+its `initHash`, its live initialization) before returning it, so
+a policy a `SetPolicy` selected before the release lists it fails here, as
+"Missing release artifact for admitted policy". Discovery does not verify the
+selected policy, and renewals, records and market operations never need it. The
+policy quote’s `valid_until` equals its request height; it is not a transaction
+deadline. Direct policy `quote` is also available for inspection, but does not
+guarantee registration eligibility.
 
 `client.registrationPlacement(root)` checks admitted homes and selects the store
 for registration. A released root at a retiring canonical home goes to the newest
@@ -19,7 +25,11 @@ use the newest admitted store; ordinary canonical homes can re-register when sea
 `client.prepareRegistration(input)` returns placement, `releasedRoot`, `quoteRequest`,
 the authoritative store `quote`, and `calls` containing commitment and reveal.
 It checks the quote request hash against the old generation and grace end from
-`released_root`, preserving the dropped-name premium. Both calls default to the
+`released_root`, preserving the dropped-name premium. Placement, selection, policy
+config and quote are read at one height. A block that lands while it reads makes it
+read everything again at the new height, up to three times, after which it throws
+`Chain tip changed during read; retry the snapshot`. It never returns a quote priced
+at another height than its request. Both calls default to the
 selected store. Supply `commitmentStore` when resuming an existing commitment;
 its original shard is preserved. Reads never call `cede_released`; registration
 performs cession atomically on chain. As with `registrationCalls`, use the observed
@@ -28,15 +38,30 @@ performs cession atomically on chain. As with `registrationCalls`, use the obser
 `registrationCalls(store, input)` takes the actor, root label, years, secret,
 original commitment store, observed `commitHeight`, reviewed quote, optional
 `validUntil` transaction deadline, typed referrer, initial records and primary.
-It returns separate `commit` and `reveal` calls.
+It returns separate `commit` and `reveal` calls. The quote must be the unchanged
+object a client's `quoteRegistration` or `prepareRegistration` returned for that
+store, label and years. Any other quote, such as one restored from storage, a copy, an
+edited one or one read from the store directly, throws a retryable
+`UnverifiedQuoteError`: quote again and show the fresh price. The Connect app signs a
+reveal only for the exact terms the client behind its release quoted (store, name,
+years, selection and config version, and total) under the policy that client read as
+the directory's selection, so a reveal another client quoted is refused. It signs
+`issue_reserved` only at a selection and config version that client read.
+`quoteRegistration` quotes under the directory's current selection and rejects a
+quote that names another policy, selection or config version. Both calls copy their
+arguments when called, so changing the caller's object meanwhile changes nothing, and a
+quote becomes signable only once all its reads committed at one height.
+
 Persist the secret and commitment shard privately before committing. Wait for
 confirmed commitment inclusion and a reveal age of 5–8,640 blocks inclusive;
-the SDK does not send both calls automatically. A fresh quote may be needed
-before reveal; the commitment is independent of economics. Its derivation is
+the SDK does not send both calls automatically. Quote again before the reveal;
+the commitment is independent of economics. Its derivation is
 BLAKE2b-256 over the protocol domain, actor, root, label and secret.
 
 Before inclusion is known, submit `storeCommitCall` using the persisted commitment.
-After inclusion, build/rebuild `registrationCalls` with the observed `commitHeight`.
+After inclusion, rebuild the calls from a fresh quote: `prepareRegistration` with the
+persisted `commitmentStore` and the observed `commitHeight`, or `quoteRegistration` and
+then `registrationCalls`. A stored quote never builds the reveal.
 The reveal deadline defaults to `commitHeight + 8_640n` (capped at u64 maximum);
 an explicit `validUntil` must lie between `commitHeight + 5n` and that last block,
 inclusive. Review this deadline separately from the quote. Re-quoting never extends

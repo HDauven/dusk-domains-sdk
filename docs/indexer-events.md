@@ -145,9 +145,13 @@ eligibility is independent of target cleanup.
 
 `projectedHome`, `projectedName`, `projectedRecords`, `projectedChildren`,
 `projectedCommitment`, `projectedPrimary`, `projectedSlotLiveness`,
-`projectedMoveStatus`, `projectedCooldowns`, `effectiveMoveLock` and
-`moveLockEndsAt` expose derived reads. Pass the same block height to lifecycle
-queries. Runtime allocator capacity and actual unsolicited vault surplus are
+`projectedMoveStatus`, `projectedCooldowns`, `projectedProposal`,
+`projectedProposals`, `effectiveMoveLock` and `moveLockEndsAt` expose derived reads.
+Pass the same block height to lifecycle queries. `state.proposals` keeps each row as
+stored; `projectedProposal(state, id, height)` and `projectedProposals(state, height)`
+report the status the directory reads at `height`: a pending row of an earlier
+operator epoch, or a guardian replacement of an earlier guardian epoch, is
+`Invalidated`, and otherwise `Expired` from its `expires_at`, as no event marks either. Runtime allocator capacity and actual unsolicited vault surplus are
 node observations, not recoverable from domain events.
 
 The TypeScript catalog is the source for the committed standalone

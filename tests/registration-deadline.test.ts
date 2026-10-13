@@ -10,9 +10,11 @@ import {
 } from '../src/core/pricing.ts'
 import { namehash } from '../src/frozen/bytes.ts'
 import { U64_MAX } from '../src/frozen/json.ts'
-import { bytes, id, sample } from './helpers.ts'
+import { bytes, clientQuote, id, sample } from './helpers.ts'
 
-function input(commitHeight = 100n): RegistrationInput {
+// A launch-policy quote, read from store 4 by a client that verified its policy (contract 3).
+// A quote is fixed once verified: `quoteValidUntil` is the policy's, set before.
+async function input(commitHeight = 100n, quoteValidUntil?: bigint): Promise<RegistrationInput> {
   const quote = sample('RegistrationQuote')
   const { estimate, total_lux, ...policyQuote } =
     estimateRegistrationQuote(launchPolicyConfig(), {
@@ -29,8 +31,9 @@ function input(commitHeight = 100n): RegistrationInput {
       years: 1,
     })
   expect(estimate).toBe(true)
-  quote.quote = policyQuote
+  quote.quote = { ...policyQuote, valid_until: quoteValidUntil ?? policyQuote.valid_until }
   quote.total_lux = total_lux
+  quote.policy = bytes(3)
   return {
     actor: bytes(1),
     label: 'example',
@@ -38,13 +41,13 @@ function input(commitHeight = 100n): RegistrationInput {
     secret: bytes(3),
     commitmentStore: id(4),
     commitHeight,
-    quote,
+    quote: await clientQuote(quote),
   }
 }
 
-it('keeps a launch-policy quote usable throughout the inclusive commitment window', () => {
-  const reviewed = input(),
-    { reveal } = registrationCalls(id(8), reviewed)
+it('keeps a launch-policy quote usable throughout the inclusive commitment window', async () => {
+  const reviewed = await input(),
+    { reveal } = registrationCalls(id(4), reviewed)
   expect(reviewed.quote.quote.valid_until).toBe(100n)
   expect(reveal.args.valid_until).toBe(8740n)
   expect(reveal.args.expected_fee_lux).toBe(reviewed.quote.total_lux)
@@ -68,10 +71,10 @@ it('keeps a launch-policy quote usable throughout the inclusive commitment windo
 
 it.each([105n, 4000n, 8740n])(
   'accepts a separately reviewed deadline at %s',
-  (validUntil) => {
-    const reviewed = input()
+  async (validUntil) => {
+    const reviewed = await input()
     expect(
-      registrationCalls(id(8), { ...reviewed, validUntil }).reveal.args
+      registrationCalls(id(4), { ...reviewed, validUntil }).reveal.args
         .valid_until,
     ).toBe(validUntil)
   },
@@ -87,42 +90,40 @@ it.each([
   U64_MAX + 1n,
   1.5,
   Number.MAX_SAFE_INTEGER + 1,
-])('rejects an invalid transaction deadline %s', (validUntil) => {
-  const reviewed = input()
+])('rejects an invalid transaction deadline %s', async (validUntil) => {
+  const reviewed = await input()
   expect(() =>
-    registrationCalls(id(8), {
+    registrationCalls(id(4), {
       ...reviewed,
       validUntil: validUntil as bigint,
     }),
   ).toThrow()
 })
 
-it('does not extend the window when the quote height changes', () => {
-  const reviewed = input()
-  reviewed.quote.quote.valid_until = 8700n
-  expect(registrationCalls(id(8), reviewed).reveal.args.valid_until).toBe(
+it('does not extend the window when the quote height changes', async () => {
+  const reviewed = await input(100n, 8700n)
+  expect(registrationCalls(id(4), reviewed).reveal.args.valid_until).toBe(
     8740n,
   )
   expect(() =>
-    registrationCalls(id(8), { ...reviewed, validUntil: 8700n + 8640n }),
+    registrationCalls(id(4), { ...reviewed, validUntil: 8700n + 8640n }),
   ).toThrow('window')
 })
 
-it('bounds the deadline at u64 maximum without wrapping the first reveal block', () => {
+it('bounds the deadline at u64 maximum without wrapping the first reveal block', async () => {
   expect(
-    registrationCalls(id(8), input(U64_MAX - 5n)).reveal.args.valid_until,
+    registrationCalls(id(4), await input(U64_MAX - 5n)).reveal.args.valid_until,
   ).toBe(U64_MAX)
-  expect(() => registrationCalls(id(8), input(U64_MAX - 4n))).toThrow(
-    'u64',
-  )
+  const last = await input(U64_MAX - 4n)
+  expect(() => registrationCalls(id(4), last)).toThrow('u64')
 })
 
 it.each([undefined, -1n, U64_MAX + 1n, 1.5])(
   'rejects an invalid commit height %s',
-  (commitHeight) => {
-    const reviewed = input()
+  async (commitHeight) => {
+    const reviewed = await input()
     expect(() =>
-      registrationCalls(id(8), {
+      registrationCalls(id(4), {
         ...reviewed,
         commitHeight: commitHeight as bigint,
       }),

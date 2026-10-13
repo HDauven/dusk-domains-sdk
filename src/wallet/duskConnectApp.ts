@@ -3,7 +3,17 @@ import { type FrozenCall, buildCall } from '../frozen/calls.ts'
 import type { LoadedRelease } from '../frozen/manifest.ts'
 import { MAX_AUTO_GAS_PRICE, MAX_GAS_LIMIT } from '../frozen/gas.ts'
 import { stringifyJson, u64 } from '../frozen/json.ts'
-import { hex } from '../frozen/bytes.ts'
+import { contractId, equalBytes, hex } from '../frozen/bytes.ts'
+import {
+  registrationProof,
+  selectedPolicy,
+  signableContract,
+  verifiedContract,
+  verifiedSelection,
+  type VerifiedContract,
+} from '../frozen/trust.ts'
+import { wireValue } from '../frozen/wire.ts'
+import type { CustodyIntent, IssueReserved, Register, TransferAndCall } from '../frozen/types.ts'
 import {
   checkPublicBalanceForWrite,
   WriteBalanceError,
@@ -33,7 +43,12 @@ export interface ConnectApp {
   prepare(call: FrozenCall): Promise<PreparedCall>
   submit(call: FrozenCall): Promise<unknown>
 }
-/** Pass app.wallet from @dusk/connect. Encoded bytes go directly to dusk_sendTransaction. */
+/**
+ * Pass app.wallet from @dusk/connect and a client's `client.release`: calls are prepared and
+ * signed only for contracts that client verified against release commitments, and a reveal
+ * only for terms it quoted. `submit` checks again immediately before dusk_sendTransaction,
+ * which receives the encoded bytes directly.
+ */
 export function createDuskDomainsConnectApp(
   wallet: ConnectWallet,
   release: LoadedRelease,
@@ -74,7 +89,9 @@ export function createDuskDomainsConnectApp(
       clearTimeout(timeout)
     }
   }
-  async function prepare(call: FrozenCall): Promise<PreparedCall> {
+  async function prepare(
+    call: FrozenCall,
+  ): Promise<{ checked: FrozenCall; prepared: PreparedCall }> {
     // Rebuild prevents a fabricated or modified call from substituting a deposit/gas class.
     const checked = buildCall(
       call.role,
@@ -88,12 +105,9 @@ export function createDuskDomainsConnectApp(
       checked.gasLimit > MAX_GAS_LIMIT
     )
       throw new Error('Call deposit or gas policy was modified')
-    const descriptor = release.contracts.get(checked.contractId),
-      driver = release.drivers.get(checked.contractId)
-    if (!descriptor || descriptor.role !== checked.role || !driver)
-      throw new Error('Target is absent from verified release')
+    const target = authorize(checked)
     await assertChain()
-    const encoded = driver.encodeInput(
+    const encoded = target.driver.encodeInput(
         checked.functionName,
         stringifyJson(checked.args),
       ),
@@ -102,25 +116,100 @@ export function createDuskDomainsConnectApp(
     const args = checked.args as { valid_until?: bigint }
     // Chain height/deadline and current order/home should be rechecked by the UI before approval.
     if (args.valid_until !== undefined) u64(args.valid_until)
+    authorize(checked)
     return {
-      chainId: chain,
-      contractId: checked.contractId,
-      fnName: checked.functionName,
-      fnArgs: `0x${hex(encoded)}`,
-      deposit: checked.deposit,
-      gas: { limit: checked.gasLimit.toString(), price: gasPrice.toString() },
-      display: {
-        action: `${checked.role}.${checked.functionName}`,
-        arguments: stringifyJson(checked.args),
-        depositLux: checked.deposit,
-        maximumGasCostLux: (checked.gasLimit * gasPrice).toString(),
+      checked,
+      prepared: {
+        chainId: chain,
+        contractId: checked.contractId,
+        fnName: checked.functionName,
+        fnArgs: `0x${hex(encoded)}`,
+        deposit: checked.deposit,
+        gas: { limit: checked.gasLimit.toString(), price: gasPrice.toString() },
+        display: {
+          action: `${checked.role}.${checked.functionName}`,
+          arguments: stringifyJson(checked.args),
+          depositLux: checked.deposit,
+          maximumGasCostLux: (checked.gasLimit * gasPrice).toString(),
+        },
       },
     }
   }
+  /**
+   * What this client verified decides what can be signed, not the release maps. Synchronous, so
+   * a check right before sending sees the ledger as the transaction leaves.
+   */
+  function authorize(checked: FrozenCall): VerifiedContract {
+    const target = signable(checked.contractId, checked.role)
+    if (!target) throw new Error('Target is absent from verified release')
+    // A reveal runs under the policy its expected version selects, at the price its quote showed:
+    // sign only terms this client quoted itself, under the policy it read as that selection.
+    if (checked.role === 'store' && checked.functionName === 'register') {
+      const args = checked.args as Register
+      const policy = selectedPolicy(release, args.expected_policy_version)
+      if (policy) signable(policy, 'policy')
+      if (!registrationProof(release, checked.contractId, args))
+        throw new Error(
+          `Registration at policy selection ${args.expected_policy_version} is not verified against this release: sign only a reveal built from a quote this client returned (FrozenClient.quoteRegistration or prepareRegistration)`,
+        )
+    }
+    // A reserved issuance is free, under the selection and config version the client read.
+    if (checked.role === 'store' && checked.functionName === 'issue_reserved') {
+      const args = checked.args as IssueReserved,
+        policy = selectedPolicy(release, args.expected_policy_version)
+      if (policy) signable(policy, 'policy')
+      const selection = verifiedSelection(release, args.expected_policy_version)
+      if (selection?.configVersion !== u64(args.expected_policy_config_version).toString())
+        throw new Error(
+          `Registration policy selection ${args.expected_policy_version} is not verified against this release; quote it with FrozenClient.quoteRegistration first`,
+        )
+    }
+    // A custody hand-off gives the name to its target: only a marketplace the client verified,
+    // with that market's encoding of terms for this store and name.
+    if (checked.role === 'store' && checked.functionName === 'transfer_and_call') {
+      const args = checked.args as TransferAndCall
+      if (!verifiedContract(release, hex(args.target), 'marketplace'))
+        throw new Error('Custody target is not a marketplace verified for this release')
+      const market = signable(hex(args.target), 'marketplace')!
+      let intent: CustodyIntent
+      try {
+        intent = wireValue(
+          'CustodyIntent',
+          market.driver.decodeInput('custody_intent', Uint8Array.from(args.data)),
+        ) as CustodyIntent
+      } catch {
+        throw new Error(
+          'Custody intent does not decode with the verified marketplace driver',
+        )
+      }
+      const name = intent.terms.name
+      if (
+        contractId(intent.terms.store) !== checked.contractId ||
+        !equalBytes(name.key.root, args.name.key.root) ||
+        !equalBytes(name.key.node, args.name.key.node) ||
+        name.incarnation.generation !== args.name.incarnation.generation ||
+        name.incarnation.serial !== args.name.incarnation.serial
+      )
+        throw new Error('Custody intent does not match the call')
+    }
+    return target
+  }
+  /**
+   * A verified contract the release committed to, or undefined when unverified. A verified one
+   * without both commitments throws: it is readable, never signable.
+   */
+  function signable(id: string, role: FrozenCall['role']): VerifiedContract | undefined {
+    const row = signableContract(release, id, role)
+    if (!row && verifiedContract(release, id, role))
+      throw new Error(
+        `${role[0].toUpperCase()}${role.slice(1)} ${contractId(id)} has no reviewed code and init commitments in this release: it can be read, not signed for`,
+      )
+    return row
+  }
   return {
-    prepare,
+    prepare: async (call) => (await prepare(call)).prepared,
     async submit(call) {
-      const prepared = await prepare(call)
+      const { checked, prepared } = await prepare(call)
       await assertChain()
       let balance: unknown
       try {
@@ -137,7 +226,9 @@ export function createDuskDomainsConnectApp(
       if (!funds.ok) throw new WriteBalanceError(funds)
       await assertChain()
       const { chainId: _, ...payload } = prepared
-      // No prepared payload is accepted back from a caller; submission always re-encodes.
+      // Verification can change while the wallet answers: a refused target or an evicted quote
+      // stops here. No prepared payload is accepted back from a caller; submission re-encodes.
+      authorize(checked)
       return wallet.request('dusk_sendTransaction', {
         kind: 'contract_call',
         privacy: 'public',

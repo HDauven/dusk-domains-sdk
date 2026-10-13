@@ -1,4 +1,4 @@
-# Public surface in 0.3.4
+# Public surface in 0.4.0
 
 The npm and JSR export maps contain the same eight entrypoints. npm resolves
 runtime imports to compiled JavaScript and types to declarations in `dist`; its
@@ -7,7 +7,7 @@ consumers need no TypeScript loader. JSR continues to export TypeScript sources.
 
 | Import                             | Public API                                                                                                                                                                                  |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@duskdomains/sdk`                 | `createClientFromManifest`, `FrozenClient`, manifest/driver/transport helpers, exact frozen wire types, lossless JSON, name/authority/commitment derivations, write builders and gas policy |
+| `@duskdomains/sdk`                 | `createClientFromManifest`, `FrozenClient`, `ContractRefusedError`, `UnverifiedQuoteError`, manifest/driver/transport helpers, exact frozen wire types, lossless JSON, name/authority/commitment derivations, write builders and gas policy |
 | `@duskdomains/sdk/writes`          | `buildCall`, all public write builders, `registrationCalls`, `transferCall`, `reassignSubnameCall`, `createMarketplaceCalls`, `GAS_LIMITS`                                                  |
 | `@duskdomains/sdk/connect-app`     | `createDuskDomainsConnectApp`, `ConnectWallet`, `ConnectApp`, `PreparedCall`                                                                                                                |
 | `@duskdomains/sdk/marketplace`     | `createMarketplaceCalls`, order/custody/refund types and builders                                                                                                                           |

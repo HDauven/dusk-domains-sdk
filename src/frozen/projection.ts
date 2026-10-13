@@ -1612,3 +1612,44 @@ export function projectedCooldowns(
 export function projectedControllers(state: ProjectionState): T.Controllers {
   return { version: state.controllerVersion, rows: Object.values(state.controllers).map(row => structuredClone(row.controller)) }
 }
+
+/**
+ * The directory's status rule for a stored proposal (§5.1): nothing happens on chain when a
+ * proposal expires or its epoch ends, so `Expired` and `Invalidated` are derived on read. A
+ * pending row of an earlier operator epoch, or a guardian replacement of an earlier guardian
+ * epoch, is Invalidated; otherwise it is Expired from `expires_at`.
+ */
+function proposalStatus(
+  state: ProjectionState,
+  p: T.Proposal,
+  height: bigint,
+): T.ProposalStatus {
+  if (p.status !== 'Pending') return p.status
+  const d = state.directory
+  if (
+    d &&
+    (p.id.operator_epoch !== d.operator_epoch ||
+      ('ReplaceGuardian' in p.action &&
+        p.action.ReplaceGuardian.expected_epoch !== d.guardian_epoch))
+  )
+    return 'Invalidated'
+  return height >= p.expires_at ? 'Expired' : 'Pending'
+}
+/** A retained proposal with the status the directory's `proposal` read reports at `height`. */
+export function projectedProposal(
+  state: ProjectionState,
+  id: T.ProposalId,
+  height: bigint,
+): T.Proposal | null {
+  const p = state.proposals[proposalKey(id)]
+  return p ? { ...copyEntity(p), status: proposalStatus(state, p, height) } : null
+}
+/** Every retained proposal by nonce, with the status the directory reports at `height`. */
+export function projectedProposals(
+  state: ProjectionState,
+  height: bigint,
+): T.Proposal[] {
+  return Object.values(state.proposals)
+    .sort((a, b) => (a.id.nonce < b.id.nonce ? -1 : a.id.nonce > b.id.nonce ? 1 : 0))
+    .map((p) => ({ ...copyEntity(p), status: proposalStatus(state, p, height) }))
+}

@@ -4,22 +4,16 @@ import { FrozenClient } from '../src/frozen/client.ts'
 import { createHttpTransport } from '../src/frozen/transport.ts'
 import { parseJson, stringifyJson } from '../src/frozen/json.ts'
 import { wireValue } from '../src/frozen/wire.ts'
-import { bytes, id, sample, release } from './helpers.ts'
-import type { DataDriver } from '../src/frozen/driver.ts'
+import { bytes, id, sample, release, jsonDriver, jsonRelease } from './helpers.ts'
+import { registrationCalls } from '../src/frozen/actions.ts'
+import { buildCall } from '../src/frozen/calls.ts'
+import { createDuskDomainsConnectApp } from '../src/wallet/duskConnectApp.ts'
 import type { ReadTransport } from '../src/frozen/transport.ts'
 import type { LoadedRelease, ContractRole } from '../src/frozen/manifest.ts'
 import type { NameView, Admission, Forward } from '../src/frozen/types.ts'
 import { authority, nameKey, hex } from '../src/frozen/bytes.ts'
 const encode = (v: unknown) => new TextEncoder().encode(stringifyJson(v))
 const decode = (v: Uint8Array) => parseJson(new TextDecoder().decode(v))
-const jsonDriver: DataDriver = {
-  encodeInput: (_, json) => new TextEncoder().encode(json),
-  decodeInput: (_, b) => decode(b),
-  decodeOutput: (_, b) => decode(b),
-  decodeEvent: (_, b) => decode(b),
-  version: () => '1.0.0',
-  schema: () => ({}),
-}
 async function setup(
   options: {
     hopLimit?: number
@@ -28,7 +22,8 @@ async function setup(
     height?: () => Promise<bigint>
   } = {},
 ) {
-  const original = await release(),
+  // JSON drivers throughout: the policy commits to the launch config these replies carry.
+  const original = await jsonRelease(),
     r: LoadedRelease = {
       ...original,
       manifest: structuredClone(original.manifest),
@@ -111,6 +106,10 @@ async function setup(
           rows: (args as any).kind === 'Store' ? admissions : [resolver],
           next: null,
         })
+      if (fn === 'member')
+        return encode(
+          [...admissions, resolver].find((a) => hex(a.id) === hex((args as any).id)) ?? null,
+        )
       if (fn === 'home')
         return encode(
           target === id(4)
@@ -221,6 +220,26 @@ it('rejects hop exhaustion, cycles and unavailable destinations without fallback
       t.calls.filter((c) => c.fn === 'get_name' && c.id === id(4)),
     ).toHaveLength(0)
   }
+})
+it('discovers a deployment whose newly selected policy the release does not list yet, and verifies that policy where it is read', async () => {
+  // A governance SetPolicy can select a policy before the site republishes its release manifest.
+  // Renewals, records and market reads do not use the policy, so discovery must not depend on it.
+  const t = await setup()
+  t.responses.set(`${id(1)}:config`, {
+    ...sample('DirectoryConfig'),
+    binding: { directory: bytes(1), vault: bytes(2), network: 1 },
+    store_count: 3,
+    resolver_count: 1,
+    registration: { ...sample('RegistrationContext'), policy: bytes(33) },
+    preferred_marketplace: null,
+  })
+  const state = await t.client.discover()
+  expect(state.stores).toHaveLength(3)
+  expect(t.calls.some((c) => c.id === id(33))).toBe(false)
+  expect((await t.client.getName('child.example.dusk', id(4))).store).toBe(id(9))
+  await expect(t.client.policy(id(33)).config()).rejects.toThrow(
+    `Missing release artifact for admitted policy ${id(33)}`,
+  )
 })
 it('rejects wrong interface, binding and directory admission versions', async () => {
   for (const [method, value] of [
@@ -425,6 +444,54 @@ it('rejects a successor quote that omits the previous lifecycle', async () => {
   const { estimate, total_lux, ...quote } = estimateRegistrationQuote(launchPolicyConfig(), { ...t.request, previous_generation: 0n, previous_grace_end: null })
   t.responses.set(`${id(9)}:quote_registration`, { ...t.registrationQuote, quote, total_lux })
   await expect(t.client.prepareRegistration(registrationInput)).rejects.toThrow('quote')
+})
+it('quotes, builds and signs a registration only under a selected policy the release lists, and needs no policy for other writes', async () => {
+  // A governance SetPolicy selected policy 33, which this release does not list yet. Discovery
+  // succeeds, and the store prices registrations with that policy at selection version 2.
+  const t = await registrationSetup()
+  t.responses.set(`${id(1)}:config`, {
+    ...sample('DirectoryConfig'),
+    binding: { directory: bytes(1), vault: bytes(2), network: 1 },
+    store_count: 3,
+    resolver_count: 1,
+    registration: { ...sample('RegistrationContext'), policy: bytes(33), policy_version: 2n },
+    preferred_marketplace: null,
+  })
+  t.responses.set(`${id(1)}:registration_context`, { ...sample('RegistrationContext'), policy: bytes(33), policy_version: 2n })
+  const unlisted = { ...t.registrationQuote, policy: bytes(33), policy_version: 2n }
+  t.responses.set(`${id(9)}:quote_registration`, unlisted)
+  await t.client.discover()
+  await expect(
+    t.client.quoteRegistration(id(9), {
+      node: t.key.root, label: 'example', years: 1, actor: bytes(10),
+      expected_policy_version: 2n, expected_policy_config_version: 1n,
+    }),
+  ).rejects.toThrow(`Missing release artifact for admitted policy ${id(33)}`)
+  // The store's quote, however obtained, builds no registration, and Connect signs none at that selection.
+  expect(() =>
+    registrationCalls(id(9), { ...registrationInput, commitmentStore: id(9), quote: unlisted }),
+  ).toThrow('quote again')
+  const app = createDuskDomainsConnectApp(
+    { request: async (method) => (method === 'dusk_chainId' ? 'dusk:1' : { median: '1' }) },
+    t.client.release,
+  )
+  const register = buildCall('store', id(9), 'register', {
+    ...sample('Register'), expected_policy_version: 2n, expected_fee_lux: unlisted.total_lux,
+  })
+  await expect(app.prepare(register)).rejects.toThrow('is not verified against this release')
+  // Renewals, reservations and records never read the policy.
+  const renewal = await t.client.quoteRenewal(id(4), {
+    name: { key: t.n.name.key, incarnation: t.n.name.incarnation },
+    years: 1,
+  })
+  expect(renewal.value).toMatchObject({ Local: { total_lux: '123' } })
+  for (const call of [
+    buildCall('store', id(9), 'commit', { hash: bytes(1) }),
+    buildCall('store', renewal.store, 'renew', { ...sample('Renew'), expected_fee_lux: '123' }),
+    buildCall('store', id(9), 'mutate_records', sample('MutateRecords')),
+  ])
+    expect((await app.prepare(call)).fnName).toBe(call.functionName)
+  expect(t.calls.filter((c) => c.id === id(33))).toEqual([])
 })
 it('verifies SetRetiring admission events as stores', async () => {
   const t = await setup(), a = { ...t.admissions[0], retiring: true }

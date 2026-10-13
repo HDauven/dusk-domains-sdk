@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { gunzipSync } from 'node:zlib'
 import { expect, it } from 'vitest'
 import { FrozenClient } from '../src/frozen/client.ts'
-import { fromHex } from '../src/frozen/bytes.ts'
+import { fromHex, hex } from '../src/frozen/bytes.ts'
 import { parseJson, stringifyJson, u64 } from '../src/frozen/json.ts'
 import { wireValue } from '../src/frozen/wire.ts'
 import { primaryNameStatus } from '../src/core/primary.ts'
@@ -14,7 +14,8 @@ import {
   projectedPrimary,
   slotStateKey,
 } from '../src/frozen/projection.ts'
-import { bytes, id, release } from './helpers.ts'
+import { bytes, directoryRecord, id, release } from './helpers.ts'
+import type { Members } from '../src/frozen/types.ts'
 
 interface Reply {
   json: unknown
@@ -37,9 +38,12 @@ const endpoint = bytes(12, 96)
 
 async function setup(initial = 'holder', twoStores = false) {
   const original = await release()
+  // This fixture's admissions commit to zero code and init hashes: so does its release.
+  const zero = hex(bytes(0))
   const r = {
     ...original,
-    contracts: new Map(original.contracts),
+    contracts: new Map([...original.contracts].map(([cid, c]) =>
+      [cid, c.role === 'store' ? { ...c, codeHash: zero, initHash: zero } : c])),
     drivers: new Map(original.drivers),
   }
   if (twoStores) {
@@ -63,6 +67,12 @@ async function setup(initial = 'holder', twoStores = false) {
           expect(args).toEqual({ endpoint })
         const override = overrides.get(`${target}:${method}`)
         if (override instanceof Error) throw override
+        // The fixture's interface reply is the store's; the directory reports its own kind.
+        if (method === 'interface_version' && target === id(1))
+          return Uint8Array.from([0, 0, 1, 0, 0, 0, 0, 0])
+        // The fixture's admissions carry zero code and init hashes.
+        if (method === 'member')
+          return directoryRecord('member', (args as { id: number[] }).id, { codeHash: bytes(0), initHash: bytes(0) })
         let reply = override
         if (!reply) {
           if (method === 'members')
@@ -76,6 +86,10 @@ async function setup(initial = 'holder', twoStores = false) {
       },
     },
   })
+  // Discovery verifies each admitted store with its directory admission.
+  const members = wireValue('Members', fixtures[twoStores ? 'members_two' : 'members'].json) as Members
+  for (const row of members.rows) await client.verifyContract('store', hex(row.id), row)
+  calls.length = 0
   return {
     client, calls, overrides,
     select: (name: string) => {

@@ -26,6 +26,19 @@ import { stringifyJson, u64 } from './json.ts'
 import { wireValue } from './wire.ts'
 import { primaryNameStatus } from '../core/primary.ts'
 import { createHttpTransport, type ReadTransport } from './transport.ts'
+import {
+  ContractRefusedError,
+  createLedger,
+  heightIndependent,
+  initCommitment,
+  isHeightIndependent,
+  noteSelection,
+  noteVerifiedQuote,
+  type Ledger,
+  type Stage,
+  type VerifiedContract,
+} from './trust.ts'
+import type { DataDriver } from './driver.ts'
 import type { ReadMethods } from './read-types.ts'
 import type {
   Admission,
@@ -50,12 +63,42 @@ import type {
   Interface,
   Binding,
   EventTypes,
+  Market,
 } from './types.ts'
+
+export { ContractRefusedError, UnverifiedQuoteError } from './trust.ts'
+/** An operation saw a block land; its snapshot runs it again. */
+class TipMoved extends Error {}
+const policyAdmissionMismatch = () =>
+  new Error("Policy initialization does not match its admission's init commitment")
+/**
+ * A deep copy of plain data as it reads now: arrays, byte arrays, objects and primitives, Proxies
+ * included. It never calls the input's own methods, which could hand back the original.
+ */
+function copyNow<T>(value: T): T {
+  if (value instanceof Uint8Array) return new Uint8Array(value) as T
+  if (Array.isArray(value)) {
+    const length = value.length,
+      copy: unknown[] = []
+    for (let i = 0; i < length; i++) copy.push(copyNow(value[i]))
+    return copy as T
+  }
+  if (value && typeof value === 'object') {
+    const copy: Record<string, unknown> = {}
+    for (const key of Object.keys(value)) copy[key] = copyNow((value as Record<string, unknown>)[key])
+    return copy as T
+  }
+  return value
+}
 
 export interface ClientOptions extends ManifestOptions {
   transport?: ReadTransport
   hopLimit?: number
-  /** Supply release-reviewed metadata for a newly admitted implementation, never an unverified driver. */
+  /**
+   * Supply release-reviewed metadata for a newly admitted implementation, never an unverified
+   * driver. The client admits it only once every check passes, into its own copy of the release.
+   * It must not read, through this client, the contract it resolves.
+   */
   resolveContract?: (
     role: ContractRole,
     id: string,
@@ -107,11 +150,22 @@ export class FrozenClient {
   readonly vault: ReadApi<'vault'>
   readonly hopLimit: number
   private readonly options: ClientOptions
+  private readonly ledger: Ledger
+  private readonly verifying = new Map<string, Promise<void>>()
   private stores: Admission[] = []
   private resolvers: Admission[] = []
-  private verified = new Set<string>()
+  /**
+   * The client trusts only what it verified itself. `client.release` is its own copy of
+   * `release`: contracts it resolves are added there, not to `release` or another client's.
+   * Pass `client.release` to the Connect app, which signs only for contracts this client verified.
+   */
   constructor(release: LoadedRelease, options: ClientOptions = {}) {
-    this.release = release
+    this.release = {
+      ...release,
+      contracts: new Map(release.contracts),
+      drivers: new Map(release.drivers),
+    }
+    this.ledger = createLedger(this.release)
     this.options = options
     this.transport =
       options.transport ??
@@ -132,38 +186,97 @@ export class FrozenClient {
     this.directory = this.api('directory', this.directoryId)
     this.vault = this.api('vault', this.vaultId)
   }
-  /** Fetch the block height on every public read; retry a sequence if the tip advances. */
-  async snapshot<T>(operation: (height: bigint) => Promise<T>): Promise<T> {
+  /**
+   * Run `operation` at one chain height. Nodes answer reads at their tip only, so a sequence
+   * is consistent only when no block lands during it: the height is read before and after,
+   * and a sequence that crossed a block is taken again, whether it returned or threw, since
+   * reads across heights prove nothing. A failure at an unchanged height is final, as is a
+   * verification failure. After three crossed attempts it throws a retryable error.
+   */
+  async snapshot<T>(operation: (height: bigint, stage: Stage) => Promise<T>): Promise<T> {
+    let crossed: unknown
+    // Messages of attempts that failed across a block; the same one every time is not chance.
+    const failures: string[] = []
     for (let attempt = 0; attempt < 3; attempt++) {
-      const before = u64(await this.transport.currentBlockHeight()),
-        result = await operation(before)
-      if (before === u64(await this.transport.currentBlockHeight()))
+      const before = u64(await this.transport.currentBlockHeight())
+      // What this attempt verifies becomes signable only if the attempt commits.
+      const stage: Stage = { touched: new Set() }
+      let result: T
+      try {
+        result = await operation(before, stage)
+      } catch (error) {
+        this.abandon(stage)
+        if (isHeightIndependent(error)) throw error
+        if (!(error instanceof TipMoved)) {
+          let after: bigint
+          try {
+            after = u64(await this.transport.currentBlockHeight())
+          } catch {
+            throw error
+          }
+          if (after === before) throw error
+          failures.push(error instanceof Error ? error.message : String(error))
+        }
+        crossed = error
+        continue
+      }
+      if (before === u64(await this.transport.currentBlockHeight())) {
+        this.commit(stage)
         return result
+      }
+      this.abandon(stage)
+      crossed = undefined
     }
-    throw new Error('Chain tip changed during read; retry the snapshot')
+    if (failures.length === 3 && failures.every((m) => m === failures[0]))
+      throw crossed
+    throw new Error('Chain tip changed during read; retry the snapshot', {
+      cause: crossed,
+    })
   }
+  /** Make what a committed attempt verified signable. */
+  private commit(stage: Stage): void {
+    for (const id of stage.touched) {
+      const row = this.ledger.verified.get(id)
+      if (row?.pending) row.pending = undefined
+    }
+  }
+  /** Drop what only abandoned attempts verified, from the ledger and the client's release. */
+  private abandon(stage: Stage): void {
+    for (const id of stage.touched) {
+      const row = this.ledger.verified.get(id)
+      if (!row?.pending) continue
+      row.pending.delete(stage)
+      if (row.pending.size) continue
+      this.ledger.verified.delete(id)
+      if (row.addedToRelease) {
+        this.release.contracts.delete(id)
+        this.release.drivers.delete(id)
+      }
+    }
+  }
+  /** Read a verified contract, or the candidate under verification. */
   private async raw<R extends ContractRole, M extends Method<R>>(
     role: R,
     id: string,
     method: M,
     args: Input<R, M>,
+    candidate?: { role: ContractRole; driver: DataDriver },
   ): Promise<Output<R, M>> {
     id = contractId(id)
-    const descriptor = this.release.contracts.get(id),
-      driver = this.release.drivers.get(id)
-    if (!descriptor || descriptor.role !== role || !driver)
+    const contract = candidate ?? this.ledger.verified.get(id)
+    if (!contract || contract.role !== role || this.ledger.refused.has(id))
       throw new Error(`No verified ${role} driver for ${id}`)
     const spec = methodDefinition(role, method)
     if (spec.mode !== 'read') throw new Error('Write method used as a read')
-    const input = driver.encodeInput(
+    const input = contract.driver.encodeInput(
       method,
       stringifyJson(wireValue(spec.input, args)),
     )
     const bytes = await this.transport.read(id, method, input)
-    return wireValue(spec.output, driver.decodeOutput(method, bytes)) as Output<
-      R,
-      M
-    >
+    return wireValue(
+      spec.output,
+      contract.driver.decodeOutput(method, bytes),
+    ) as Output<R, M>
   }
   /** The exact ABI read surface, with lossless typed output and automatic height acquisition. */
   async read<R extends ContractRole, M extends ReadMethods[R] & Method<R>>(
@@ -172,8 +285,8 @@ export class FrozenClient {
     method: M,
     args: Input<R, M>,
   ): Promise<Output<R, M>> {
-    if (!this.verified.has(contractId(id))) await this.verifyContract(role, id)
-    return this.snapshot(async () => {
+    await this.verifyContract(role, id)
+    return this.snapshot(async (_height, stage) => {
       if (
         role === 'store' &&
         methodDefinition(role, method).output.startsWith('Located<')
@@ -185,11 +298,12 @@ export class FrozenClient {
             root,
             method as Method<'store'>,
             args as never,
+            stage,
           )
         ).value as Output<R, M>
       }
       if (role === 'store' && method === 'home') {
-        await this.storeAdmissions()
+        await this.storeAdmissions(stage)
         return (await this.followHomeRaw(id, (args as { root: Contract }).root))
           .value as Output<R, M>
       }
@@ -224,68 +338,255 @@ export class FrozenClient {
   marketplace(id: string): ReadApi<'marketplace'> {
     return this.api('marketplace', id)
   }
+  /**
+   * Verify `id` as `role` once for this client: its release artifact, the directory's record of
+   * it, its interface and deployment binding, and its init commitment. Nothing it resolves
+   * becomes readable or signable until every check passes, and a contract that fails a check
+   * stays refused for this client. The Connect app signs only for a contract whose release
+   * descriptor carries both `codeHash` and `initHash`, compared here; without them it is
+   * readable only. The client reads the directory's record of a store, resolver or
+   * marketplace itself. `evidence` is admission evidence the caller holds, such as an event's
+   * admission or market record: it must match what the client reads, and a mismatch rejects it
+   * without refusing the contract. The directory has no record readable for a policy or the
+   * vault: a policy's live initialization is compared with the release's `initHash` and the
+   * evidence's, and the vault is the one every admitted contract's binding names.
+   */
   async verifyContract(
     role: ContractRole,
     id: string,
-    admission?: Admission,
+    evidence?: Admission | Market,
+  ): Promise<void> {
+    return this.verify(role, id, evidence, false)
+  }
+  /**
+   * `fromDirectory`: the client read `evidence` from the directory itself. Only that, or the
+   * contract's own reads, can refuse a contract: evidence a caller supplies, such as an event,
+   * that contradicts them is rejected, and the contract stays as verified. `stage`: the snapshot
+   * attempt verifying it, which commits the result only if the attempt commits.
+   */
+  private async verify(
+    role: ContractRole,
+    id: string,
+    evidence: Admission | Market | undefined,
+    fromDirectory: boolean,
+    stage?: Stage,
   ): Promise<void> {
     id = contractId(id)
-    let c = this.release.contracts.get(id)
-    if (!c) {
-      if (!this.options.resolveContract)
-        throw new Error(`Missing release artifact for admitted ${role} ${id}`)
-      c = validateReleaseContract(
-        await this.options.resolveContract(role, id, admission),
-      )
-      if (c.contractId !== id || c.role !== role)
-        throw new Error('Resolved artifact does not match admission')
-      const driver = await fetchDriver(
-        c,
-        this.release.artifactBaseUrl,
-        this.options.fetch,
-      )
-      this.release.contracts.set(id, c)
-      this.release.drivers.set(id, driver)
+    const key = id
+    // Let a verification of the same contract, in any role, finish; then answer from its outcome.
+    for (let pending = this.verifying.get(key); pending; pending = this.verifying.get(key))
+      await pending.catch(() => {})
+    const refusal = this.ledger.refused.get(id)
+    if (refusal) throw heightIndependent(refusal)
+    const known = this.ledger.verified.get(id)
+    // A verification only other attempts staged is no evidence outside them: verify it again,
+    // unless this call belongs to an attempt too, which then commits it with its own evidence.
+    if (known && (!known.pending || stage)) {
+      if (known.role !== role)
+        throw heightIndependent(new Error('Contract role mismatch'))
+      if (known.pending && stage) {
+        known.pending.add(stage)
+        stage.touched.add(id)
+      }
+      if (evidence) {
+        this.compareEvidence(id, known.descriptor, evidence, known, fromDirectory)
+        // A policy verified before any init commitment was known meets its admission's now.
+        if (role === 'policy' && known.initHash === undefined) {
+          const live = await this.policyInit(id, known)
+          if (live !== hex(evidence.init_hash)) throw heightIndependent(policyAdmissionMismatch())
+          known.initHash = live
+        }
+      }
+      return
     }
-    if (c.role !== role) throw new Error('Contract role mismatch')
-    if (
-      admission &&
-      (admission.interface_version !== 1 ||
-        (c.codeHash !== undefined && c.codeHash !== hex(admission.code_hash)))
+    const run = this.verifyNew(role, id, evidence, fromDirectory, stage)
+    this.verifying.set(key, run)
+    try {
+      await run
+    } finally {
+      this.verifying.delete(key)
+    }
+  }
+  private async verifyNew(
+    role: ContractRole,
+    id: string,
+    evidence: Admission | Market | undefined,
+    fromDirectory: boolean,
+    stage?: Stage,
+  ): Promise<void> {
+    try {
+      if (role !== 'directory')
+        await this.verify('directory', this.directoryId, undefined, false, stage)
+      const candidate = await this.candidate(role, id, evidence),
+        c = candidate.descriptor
+      if (c.role !== role) throw new Error('Contract role mismatch')
+      // The directory's record, read by the client, can refuse the contract; a caller's evidence
+      // is checked against that record and the release, and only rejected.
+      const record = fromDirectory ? evidence : await this.evidence(role, id)
+      if (record) this.compareEvidence(id, c, record, undefined, true)
+      if (evidence && !fromDirectory) {
+        const read = record && {
+          codeHash: hex(record.code_hash),
+          initHash: hex(record.init_hash),
+        }
+        this.compareEvidence(id, c, evidence, read, false)
+      }
+      const iface = (await this.raw(
+        role,
+        id,
+        'interface_version' as Method<typeof role>,
+        null as never,
+        candidate,
+      )) as Interface
+      if (
+        iface.kind.toLowerCase() !== role ||
+        iface.version !== 1 ||
+        iface.move_version !== (role === 'store' ? 1 : 0) ||
+        iface.custody_version !==
+          (role === 'store' || role === 'marketplace' ? 1 : 0)
+      )
+        this.refuse(id, 'Unsupported frozen contract interface')
+      const binding = (await this.raw(
+        role,
+        id,
+        'binding' as Method<typeof role>,
+        null as never,
+        candidate,
+      )) as Binding
+      if (
+        contractId(binding.directory) !== this.directoryId ||
+        contractId(binding.vault) !== this.vaultId ||
+        binding.network !== this.release.manifest.network
+      )
+        this.refuse(id, 'Contract deployment binding mismatch')
+      if (
+        role === 'marketplace' &&
+        (await this.raw('marketplace', id, 'order_api_version', null, candidate)) !== 1
+      )
+        this.refuse(id, 'Unsupported marketplace order API')
+      let initHash = record ? hex(record.init_hash) : c.initHash
+      if (role === 'policy' && (c.initHash !== undefined || evidence)) {
+        initHash = await this.policyInit(id, candidate, binding)
+        if (evidence && hex(evidence.init_hash) !== initHash) throw policyAdmissionMismatch()
+      }
+      // Every check passed: only now does the contract become readable, and signable once the
+      // snapshot attempt that verified it, if any, commits.
+      const addedToRelease = !this.release.contracts.has(id)
+      if (addedToRelease) {
+        this.release.contracts.set(id, c)
+        this.release.drivers.set(id, candidate.driver)
+      }
+      this.ledger.verified.set(id, {
+        ...candidate,
+        codeHash: record ? hex(record.code_hash) : c.codeHash,
+        initHash,
+        // The directory and vault are the release's trust roots: nothing on chain records them.
+        // Every other contract is signable only with both commitments, compared above.
+        signable:
+          role === 'directory' ||
+          role === 'vault' ||
+          (c.codeHash !== undefined && c.initHash !== undefined),
+        ...(stage ? { pending: new Set([stage]), addedToRelease } : {}),
+      })
+      stage?.touched.add(id)
+    } catch (error) {
+      // Artifacts, evidence and contract checks do not depend on the height a snapshot reads at.
+      throw heightIndependent(error)
+    }
+  }
+  /**
+   * A policy's initialization is its immutable binding and config, so its live state reproduces
+   * its init archive. Refuse it unless that matches the release's `initHash`, when it has one.
+   */
+  private async policyInit(
+    id: string,
+    contract: VerifiedContract,
+    binding?: Binding,
+  ): Promise<string> {
+    binding ??= await this.raw('policy', id, 'binding', null, contract)
+    const config = await this.raw('policy', id, 'config', null, contract),
+      live = initCommitment(contract.driver, wireValue('InitPolicy', { binding, config }))
+    if (contract.descriptor.initHash !== undefined && contract.descriptor.initHash !== live)
+      this.refuse(id, 'Policy initialization does not match its init commitment')
+    return live
+  }
+  /** The release's artifact for `id`, or the resolver's reviewed one; never added to the release here. */
+  private async candidate(
+    role: ContractRole,
+    id: string,
+    evidence?: Admission | Market,
+  ): Promise<VerifiedContract> {
+    const listed = this.release.contracts.get(id),
+      driver = this.release.drivers.get(id)
+    if (listed && driver) return { role, descriptor: listed, driver }
+    if (!this.options.resolveContract)
+      throw new Error(`Missing release artifact for admitted ${role} ${id}`)
+    const c = validateReleaseContract(
+      await this.options.resolveContract(
+        role,
+        id,
+        evidence && 'ordinal' in evidence ? evidence : undefined,
+      ),
     )
-      throw new Error('Admission artifact/version mismatch')
-    const iface = (await this.raw(
+    if (c.contractId !== id || c.role !== role)
+      throw new Error('Resolved artifact does not match admission')
+    return {
       role,
-      id,
-      'interface_version' as Method<typeof role>,
-      null as never,
-    )) as Interface
+      descriptor: c,
+      driver: await fetchDriver(c, this.release.artifactBaseUrl, this.options.fetch),
+    }
+  }
+  /** The directory's record of an admitted store, resolver or marketplace. */
+  private async evidence(
+    role: ContractRole,
+    id: string,
+  ): Promise<Admission | Market | undefined> {
+    if (role !== 'store' && role !== 'resolver' && role !== 'marketplace')
+      return undefined
+    const record =
+      role === 'marketplace'
+        ? await this.raw('directory', this.directoryId, 'market', {
+            id: fromHex(id, 32),
+          })
+        : await this.raw('directory', this.directoryId, 'member', {
+            kind: role === 'store' ? 'Store' : 'Resolver',
+            id: fromHex(id, 32),
+          })
+    if (!record)
+      throw new Error(`${role[0].toUpperCase()}${role.slice(1)} ${id} is not admitted`)
+    return record
+  }
+  /**
+   * Admission evidence must match the reviewed release artifact and what the contract was
+   * verified with. A mismatch in the directory's own record refuses the contract; in evidence a
+   * caller supplied, it rejects that evidence only.
+   */
+  private compareEvidence(
+    id: string,
+    c: ReleaseContract,
+    evidence: Admission | Market,
+    known: { codeHash?: string; initHash?: string } | undefined,
+    refuses: boolean,
+  ): void {
+    if (contractId(evidence.id) !== id)
+      throw new Error('Admission does not match its contract')
+    const code = hex(evidence.code_hash),
+      init = hex(evidence.init_hash)
     if (
-      iface.kind.toLowerCase() !== role ||
-      iface.version !== 1 ||
-      iface.move_version !== (role === 'store' ? 1 : 0) ||
-      iface.custody_version !==
-        (role === 'store' || role === 'marketplace' ? 1 : 0)
-    )
-      throw new Error('Unsupported frozen contract interface')
-    const binding = (await this.raw(
-      role,
-      id,
-      'binding' as Method<typeof role>,
-      null as never,
-    )) as Binding
-    if (
-      contractId(binding.directory) !== this.directoryId ||
-      contractId(binding.vault) !== this.vaultId ||
-      binding.network !== this.release.manifest.network
-    )
-      throw new Error('Contract deployment binding mismatch')
-    if (
-      role === 'marketplace' &&
-      (await this.raw('marketplace', id, 'order_api_version', null)) !== 1
-    )
-      throw new Error('Unsupported marketplace order API')
-    this.verified.add(id)
+      evidence.interface_version !== 1 ||
+      (c.codeHash !== undefined && c.codeHash !== code) ||
+      (c.initHash !== undefined && c.initHash !== init) ||
+      (known?.codeHash !== undefined && known.codeHash !== code) ||
+      (known?.initHash !== undefined && known.initHash !== init)
+    ) {
+      if (refuses) this.refuse(id, 'Admission artifact/version mismatch')
+      throw heightIndependent(new Error('Admission artifact/version mismatch'))
+    }
+  }
+  private refuse(id: string, message: string): never {
+    const refusal = new ContractRefusedError(id, message)
+    this.ledger.refused.set(id, refusal)
+    throw heightIndependent(refusal)
   }
   private async members(kind: MemberKind): Promise<Admission[]> {
     const rows: Admission[] = []
@@ -313,7 +614,7 @@ export class FrozenClient {
   }
   async discover(): Promise<DirectoryState> {
     await this.verifyContract('directory', this.directoryId)
-    return this.snapshot(async (height) => {
+    return this.snapshot(async (height, stage) => {
       const config = await this.raw(
         'directory',
         this.directoryId,
@@ -327,26 +628,37 @@ export class FrozenClient {
         resolvers.length !== config.resolver_count
       )
         throw new Error('Directory member count mismatch')
-      for (const a of stores)
-        await this.verifyContract('store', contractId(a.id), a)
+      for (const a of stores) await this.verify('store', contractId(a.id), a, true, stage)
       for (const a of resolvers)
-        await this.verifyContract('resolver', contractId(a.id), a)
-      await this.verifyContract('vault', this.vaultId)
-      await this.verifyContract(
-        'policy',
-        contractId(config.registration.policy),
-      )
-      if (config.preferred_marketplace)
-        await this.verifyContract(
+        await this.verify('resolver', contractId(a.id), a, true, stage)
+      await this.verify('vault', this.vaultId, undefined, false, stage)
+      // A SetPolicy can select a policy this release does not list yet. Only registration uses
+      // it, and quoteRegistration verifies it there; other operations never need it.
+      if (config.preferred_marketplace) {
+        const market = await this.raw('directory', this.directoryId, 'market', {
+          id: config.preferred_marketplace,
+        })
+        if (!market)
+          throw new Error(
+            `Marketplace ${contractId(config.preferred_marketplace)} is not admitted`,
+          )
+        await this.verify(
           'marketplace',
           contractId(config.preferred_marketplace),
+          market,
+          true,
+          stage,
         )
+      }
       this.stores = stores
       this.resolvers = resolvers
       return { height, config, stores, resolvers }
     })
   }
-  /** Accept only already authenticated, committed directory effects from the projection. */
+  /**
+   * Accept only already authenticated, committed directory effects from the projection. An
+   * admission that contradicts what the client reads is rejected; the contract stays verified.
+   */
   async admitDirectoryEvent(
     topic: 'directory_initialized' | 'action_applied',
     event: EventTypes['directory_initialized'] | EventTypes['action_applied'],
@@ -399,11 +711,11 @@ export class FrozenClient {
     if (!root) throw new Error('Located read has no root key')
     return root
   }
-  private async storeAdmissions(): Promise<void> {
+  private async storeAdmissions(stage?: Stage): Promise<void> {
+    await this.verify('directory', this.directoryId, undefined, false, stage)
     this.stores = await this.members('Store')
     for (const row of this.stores)
-      if (!this.verified.has(contractId(row.id)))
-        await this.verifyContract('store', contractId(row.id), row)
+      await this.verify('store', contractId(row.id), row, true, stage)
   }
   private ordinal(id: string): number {
     const row = this.stores.find((a) => contractId(a.id) === contractId(id))
@@ -456,9 +768,10 @@ export class FrozenClient {
     root: Contract,
     method: Method<'store'>,
     args: never,
+    stage?: Stage,
   ): Promise<{ store: string; value: Located<unknown>; forwards: Forward[] }> {
     // A cached home is a hint. Every read revalidates it, including unknown descendants.
-    await this.storeAdmissions()
+    await this.storeAdmissions(stage)
     const home = await this.followHomeRaw(start, root)
     let store = home.store
     const forwards = [...home.forwards],
@@ -493,9 +806,9 @@ export class FrozenClient {
     if (!methodDefinition('store', method).output.startsWith('Located<'))
       throw new Error('Expected a Located read')
     return this.snapshot(
-      async (height) =>
+      async (height, stage) =>
         ({
-          ...(await this.followRaw(start, root, method, args as never)),
+          ...(await this.followRaw(start, root, method, args as never, stage)),
           height,
         }) as Routed<T>,
     )
@@ -505,8 +818,8 @@ export class FrozenClient {
     homeHint?: string,
   ): Promise<Routed<NameView>> {
     const key = nameKey(spelling)
-    return this.snapshot(async (height) => {
-      await this.storeAdmissions()
+    return this.snapshot(async (height, stage) => {
+      await this.storeAdmissions(stage)
       if (homeHint) {
         const hinted = await this.followHomeRaw(homeHint, key.root)
         if (hinted.value === 'Local')
@@ -516,6 +829,7 @@ export class FrozenClient {
               key.root,
               'get_name',
               key as never,
+              stage,
             )),
             forwards: hinted.forwards,
             height,
@@ -538,6 +852,7 @@ export class FrozenClient {
               key.root,
               'get_name',
               key as never,
+              stage,
             )),
             forwards: home.forwards,
             height,
@@ -563,98 +878,116 @@ export class FrozenClient {
   /** Check every home before choosing a released root's cession destination. */
   async registrationPlacement(root: Contract): Promise<RegistrationPlacement> {
     await this.verifyContract('directory', this.directoryId)
-    return this.snapshot(async (height) => {
-      await this.storeAdmissions()
-      const homes = new Map<string, Home>()
-      for (const a of this.stores) {
-        const id = contractId(a.id),
-          home = await this.raw('store', id, 'home', { root })
-        if (typeof home === 'object' && 'Staged' in home)
-          throw new Error('Registration root has a staged import')
-        homes.set(id, home)
-      }
-      const locals = [...homes].filter(([, home]) => home === 'Local')
-      if (locals.length > 1) throw new Error('Multiple canonical registration homes')
-      const canonicalStore = locals[0]?.[0] ?? null
-      for (const [start, home] of homes) {
-        if (typeof home !== 'object' || !('Forwarded' in home)) continue
-        let at = start,
-          current: Home = home,
-          hops = 0
-        const seen = new Set([start])
-        while (typeof current === 'object' && 'Forwarded' in current) {
-          if (hops++ === this.hopLimit)
-            throw new Error('Forwarding hop limit exceeded')
-          at = this.checkForward(at, root, current.Forwarded, seen)
-          seen.add(at)
-          current = homes.get(at)!
-        }
-        if (at !== canonicalStore || current !== 'Local')
-          throw new Error('Forward does not terminate at the canonical home')
-      }
-      let releasedRoot: ReleasedRoot | null = null
-      let store: string | null = canonicalStore
-      if (canonicalStore) {
-        const source = this.stores.find(
-          (a) => contractId(a.id) === canonicalStore,
-        )!
-        const view = await this.raw('store', canonicalStore, 'get_name', {
-          root,
-          node: root,
-        })
-        if (
-          typeof view !== 'object' ||
-          !('Local' in view) ||
-          height < view.Local.name.grace_end
-        )
-          throw new Error('Registration root is not released')
-        if (source.retiring) {
-          store = null
-          for (const a of [...this.stores].reverse()) {
-            if (a.retiring) continue
-            const capacity = await this.raw(
-              'store', contractId(a.id), 'capacity', null,
-            )
-            if (!capacity.sealed) {
-              if (a.ordinal > source.ordinal) store = contractId(a.id)
-              break
-            }
-          }
-          if (!store) throw new Error('No eligible retirement successor')
-          releasedRoot = await this.raw(
-            'store', canonicalStore, 'released_root', { root },
-          )
-          if (
-            releasedRoot.grace_end !== view.Local.name.grace_end ||
-            releasedRoot.counters.generation !== view.Local.name.incarnation.generation
-          )
-            throw new Error('Released root lineage changed')
-        }
-      } else {
-        const newest = this.stores.at(-1)
-        if (!newest || newest.retiring)
-          throw new Error('Newest registration store is unavailable')
-        store = contractId(newest.id)
-        if ((await this.raw('store', store, 'capacity', null)).sealed)
-          throw new Error('Newest registration store is sealed')
-      }
-      return { store: store!, canonicalStore, releasedRoot, height }
-    })
+    return this.snapshot((height, stage) => this.placementAt(root, height, stage))
   }
-  /** Quote at the selected store and bind its request to the previous lifecycle. */
+  /** Placement read inside the caller's snapshot, at its `height`. */
+  private async placementAt(
+    root: Contract,
+    height: bigint,
+    stage?: Stage,
+  ): Promise<RegistrationPlacement> {
+    await this.storeAdmissions(stage)
+    const homes = new Map<string, Home>()
+    for (const a of this.stores) {
+      const id = contractId(a.id),
+        home = await this.raw('store', id, 'home', { root })
+      if (typeof home === 'object' && 'Staged' in home)
+        throw new Error('Registration root has a staged import')
+      homes.set(id, home)
+    }
+    const locals = [...homes].filter(([, home]) => home === 'Local')
+    if (locals.length > 1) throw new Error('Multiple canonical registration homes')
+    const canonicalStore = locals[0]?.[0] ?? null
+    for (const [start, home] of homes) {
+      if (typeof home !== 'object' || !('Forwarded' in home)) continue
+      let at = start,
+        current: Home = home,
+        hops = 0
+      const seen = new Set([start])
+      while (typeof current === 'object' && 'Forwarded' in current) {
+        if (hops++ === this.hopLimit)
+          throw new Error('Forwarding hop limit exceeded')
+        at = this.checkForward(at, root, current.Forwarded, seen)
+        seen.add(at)
+        current = homes.get(at)!
+      }
+      if (at !== canonicalStore || current !== 'Local')
+        throw new Error('Forward does not terminate at the canonical home')
+    }
+    let releasedRoot: ReleasedRoot | null = null
+    let store: string | null = canonicalStore
+    if (canonicalStore) {
+      const source = this.stores.find(
+        (a) => contractId(a.id) === canonicalStore,
+      )!
+      const view = await this.raw('store', canonicalStore, 'get_name', {
+        root,
+        node: root,
+      })
+      if (
+        typeof view !== 'object' ||
+        !('Local' in view) ||
+        height < view.Local.name.grace_end
+      )
+        throw new Error('Registration root is not released')
+      if (source.retiring) {
+        store = null
+        for (const a of [...this.stores].reverse()) {
+          if (a.retiring) continue
+          const capacity = await this.raw(
+            'store', contractId(a.id), 'capacity', null,
+          )
+          if (!capacity.sealed) {
+            if (a.ordinal > source.ordinal) store = contractId(a.id)
+            break
+          }
+        }
+        if (!store) throw new Error('No eligible retirement successor')
+        releasedRoot = await this.raw(
+          'store', canonicalStore, 'released_root', { root },
+        )
+        if (
+          releasedRoot.grace_end !== view.Local.name.grace_end ||
+          releasedRoot.counters.generation !== view.Local.name.incarnation.generation
+        )
+          throw new Error('Released root lineage changed')
+      }
+    } else {
+      const newest = this.stores.at(-1)
+      if (!newest || newest.retiring)
+        throw new Error('Newest registration store is unavailable')
+      store = contractId(newest.id)
+      if ((await this.raw('store', store, 'capacity', null)).sealed)
+        throw new Error('Newest registration store is sealed')
+    }
+    return { store: store!, canonicalStore, releasedRoot, height }
+  }
+  /**
+   * Quote at the selected store and bind its request to the previous lifecycle. Placement,
+   * selection, policy and quote are read at one height: a block that lands meanwhile makes the
+   * whole preparation run again at the new height (see `snapshot`), never a mixed request. The
+   * quote and calls are for `input` as it was passed; they become signable only once that
+   * snapshot committed.
+   */
   async prepareRegistration(
-    input: Omit<RegistrationInput, 'quote' | 'commitmentStore'> & {
+    registrationInput: Omit<RegistrationInput, 'quote' | 'commitmentStore'> & {
       commitmentStore?: string
     },
   ): Promise<PreparedRegistration> {
+    // Fixed before any await: a caller changing its object meanwhile changes nothing here.
+    const input = Object.freeze(copyNow(registrationInput))
     const key = nameKey(`${input.label}.dusk`)
     if (!equalBytes(key.root, key.node))
       throw new Error('Registration requires a root label')
-    return this.snapshot(async (height) => {
-      const placement = await this.registrationPlacement(key.root)
-      const context = await this.directory.registration_context()
+    await this.verifyContract('directory', this.directoryId)
+    const read = await this.snapshot(async (height, stage) => {
+      const placement = await this.placementAt(key.root, height, stage)
+      const context = await this.raw(
+        'directory', this.directoryId, 'registration_context', null,
+      )
       const policy = contractId(context.policy)
-      const config = await this.policy(policy).config()
+      await this.verify('policy', policy, undefined, false, stage)
+      const config = await this.raw('policy', policy, 'config', null)
       let previousGeneration = placement.releasedRoot?.counters.generation ?? 0n
       let previousGraceEnd = placement.releasedRoot?.grace_end ?? null
       if (placement.canonicalStore && !placement.releasedRoot) {
@@ -679,7 +1012,7 @@ export class FrozenClient {
         previous_grace_end: previousGraceEnd,
         policy_version: context.policy_version,
       }
-      const quote = await this.quoteRegistration(placement.store, {
+      const quote = await this.raw('store', placement.store, 'quote_registration', {
         node: key.node,
         label: input.label,
         actor: input.actor,
@@ -687,33 +1020,81 @@ export class FrozenClient {
         expected_policy_version: context.policy_version,
         expected_policy_config_version: config.config_version,
       })
+      // The store prices at the tip it reads: another height means a block landed meanwhile.
+      if (quote.height !== height) throw new TipMoved()
       if (
         !equalBytes(quote.quote.request_hash,
           hash('duskds:quote:v1', canonicalBytes('QuoteRequest', quoteRequest))) ||
-        quote.height !== height ||
         quote.policy_version !== context.policy_version ||
         quote.quote.config_version !== config.config_version ||
         contractId(quote.policy) !== policy
       )
         throw new Error('Registration quote does not match placement and previous lifecycle')
-      return {
-        ...placement,
-        height,
-        quoteRequest,
-        quote,
-        calls: registrationCalls(placement.store, {
-          ...input,
-          commitmentStore: input.commitmentStore ?? placement.store,
-          quote,
-        }),
-      }
+      return { placement, height, quoteRequest, quote, configVersion: config.config_version }
     })
+    // Evidence only from a snapshot that committed: an abandoned attempt leaves nothing signable.
+    const { placement, height, quoteRequest, quote } = read
+    this.noteQuote(
+      quote,
+      { store: placement.store, node: key.node, label: input.label, years: input.years },
+      read.configVersion,
+    )
+    return {
+      ...placement,
+      height,
+      quoteRequest,
+      quote,
+      calls: registrationCalls(placement.store, {
+        ...input,
+        commitmentStore: input.commitmentStore ?? placement.store,
+        quote,
+      }),
+    }
   }
+  /**
+   * Quote at the store under the policy the directory selects, verified against the release,
+   * at one height. The quote must name that policy, selection and config version. It is for
+   * `args` as they were passed, and becomes evidence only once its snapshot committed. Only a
+   * quote returned here or by `prepareRegistration` builds a registration (`registrationCalls`),
+   * and the Connect app signs a reveal only for the terms this client quoted.
+   */
   async quoteRegistration(
     store: string,
-    args: QuoteRegistration,
+    quoteArgs: QuoteRegistration,
   ): Promise<RegistrationQuote> {
-    return this.store(store).quote_registration(args)
+    // Fixed before any await: the request the store prices is the one the proof names.
+    const args = Object.freeze(wireValue('QuoteRegistration', quoteArgs))
+    store = contractId(store)
+    await this.verifyContract('directory', this.directoryId)
+    await this.verifyContract('store', store)
+    const { quote, configVersion } = await this.snapshot(async (height, stage) => {
+      const context = await this.raw(
+        'directory', this.directoryId, 'registration_context', null,
+      )
+      const policy = contractId(context.policy)
+      await this.verify('policy', policy, undefined, false, stage)
+      const config = await this.raw('policy', policy, 'config', null)
+      const quote = await this.raw('store', store, 'quote_registration', args)
+      if (quote.height !== height) throw new TipMoved()
+      if (
+        contractId(quote.policy) !== policy ||
+        quote.policy_version !== context.policy_version ||
+        quote.quote.config_version !== config.config_version
+      )
+        throw new Error("Registration quote does not match the directory's policy selection")
+      return { quote, configVersion: config.config_version }
+    })
+    // Evidence only from a snapshot that committed: an abandoned attempt leaves nothing signable.
+    this.noteQuote(quote, { store, node: args.node, label: args.label, years: args.years }, configVersion)
+    return quote
+  }
+  private noteQuote(
+    quote: RegistrationQuote,
+    request: { store: string; node: Contract; label: string; years: number },
+    configVersion: bigint,
+  ): void {
+    noteSelection(this.ledger, quote.policy_version, contractId(quote.policy), configVersion)
+    noteVerifiedQuote(this.ledger, quote, request)
   }
   async quoteRenewal(
     store: string,
@@ -723,8 +1104,8 @@ export class FrozenClient {
   }
   /** Resolve current owner/manager authority, then verify home, incarnation, lifecycle, forward record and pool uniqueness. */
   async verifyPrimary(endpoint: number[]): Promise<VerifiedPrimary | null> {
-    return this.snapshot(async (height) => {
-      await this.storeAdmissions()
+    return this.snapshot(async (height, stage) => {
+      await this.storeAdmissions(stage)
       let found: VerifiedPrimary | null = null
       for (const a of this.stores) {
         const store = contractId(a.id),
@@ -735,6 +1116,7 @@ export class FrozenClient {
           primary.primary.name.key.root,
           'get_name',
           primary.primary.name.key as never,
+          stage,
         )
         if (
           name.store !== store ||

@@ -25,7 +25,10 @@ export interface ReleaseContract {
   role: ContractRole
   contractId: string
   dataDriver: Artifact
+  /** BLAKE3 of the reviewed WASM, compared with the directory's admission evidence. */
   codeHash?: string
+  /** H("duskds:init:v1" || init archive), compared with admission evidence and a policy's live init. */
+  initHash?: string
   ordinal?: number
   [key: string]: unknown
 }
@@ -99,21 +102,31 @@ export function validateReleaseContract(
     (!Number.isSafeInteger(a.bytes) || Number(a.bytes) <= 0)
   )
     throw new Error('Invalid driver byte count')
+  // Absent and null hashes are the same: no commitment to compare.
   const code =
     c.codeHash ??
     c.code_hash ??
-    (c.contractWasm ? object(c.contractWasm).blake3 : undefined)
+    (c.contractWasm ? object(c.contractWasm).blake3 : undefined) ??
+    undefined
   if (
     code !== undefined &&
     (typeof code !== 'string' || !/^[\da-f]{64}$/u.test(code))
   )
     throw new Error('Invalid contract code hash')
+  const init = c.initHash ?? c.init_hash ?? undefined
+  if (
+    init !== undefined &&
+    (typeof init !== 'string' || !/^[\da-f]{64}$/u.test(init))
+  )
+    throw new Error('Invalid contract init hash')
+  const { codeHash: _code, initHash: _init, ...metadata } = c
   return {
-    ...c,
+    ...metadata,
     role,
     contractId: id,
     dataDriver: { ...a } as Artifact,
     ...(code ? { codeHash: code as string } : {}),
+    ...(init ? { initHash: init as string } : {}),
   }
 }
 /** Unknown manifest metadata is preserved. Wire JSON remains strict. */
