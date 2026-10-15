@@ -32,6 +32,7 @@ quote: a stored, copied or edited quote throws `UnverifiedQuoteError`.
 - Treat a null `codeHash` or `initHash` in a release manifest as absent.
 - Add `projectedProposal` and `projectedProposals`, deriving `Expired` and `Invalidated`.
 - Export `ContractRefusedError` for a contract a client refused.
+- Mirror the launch policy's reserved list (61 labels): add human, reserved on request.
 
 ## 0.3.4 (2026-10-12)
 
