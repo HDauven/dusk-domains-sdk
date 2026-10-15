@@ -13,7 +13,7 @@ const reserved = [
   'docs', 'dusk', 'duskdomains', 'duskds', 'duskevm', 'duskfoundation',
   'dusknetwork', 'duskwallet', 'exchange', 'explorer', 'faucet', 'foundation',
   'gamo', 'george', 'grants', 'hdauven', 'hedger', 'hein', 'heindauven', 'help',
-  'helpdesk', 'mainnet', 'moana', 'mocello', 'mochavi', 'moderator', 'moonlight',
+  'helpdesk', 'human', 'mainnet', 'moana', 'mocello', 'mochavi', 'moderator', 'moonlight',
   'neotamandua', 'nocturne-standards', 'npex', 'official', 'phoenix', 'piecrust',
   'pieswap', 'provisioner', 'rannier', 'refund', 'rusk', 'security', 'seppia',
   'sozu', 'staking', 'support', 'tdi', 'team', 'testnet', 'thomas', 'tminus',

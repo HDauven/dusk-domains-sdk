@@ -33,6 +33,7 @@ export const RESERVED_LABELS: readonly string[] = Object.freeze([
   'heindauven',
   'help',
   'helpdesk',
+  'human',
   'mainnet',
   'moana',
   'mocello',
