@@ -95,7 +95,9 @@ be overridden explicitly in options. New admissions are discovered from reads;
 `resolveContract(role, id, admission)` can supply reviewed release metadata for
 an implementation absent from the initial manifest. It is subjected to the same
 artifact, admission, interface, binding and init checks, and enters `client.release`
-only once all of them pass. `admitDirectoryEvent` also accepts committed,
+only once all of them pass. `verificationCache` (for example `sessionStorage`) keeps
+what verification read about each contract, which a deployed contract cannot change,
+for clients created later; every check runs again on it, and state is never kept. `admitDirectoryEvent` also accepts committed,
 authenticated directory initialization/admission events; one that contradicts what
 the client reads is rejected, and the contract stays verified.
 

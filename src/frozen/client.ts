@@ -16,13 +16,14 @@ import {
 import {
   loadReleaseManifest,
   fetchDriver,
+  object,
   validateReleaseContract,
   type LoadedRelease,
   type ManifestOptions,
   type ContractRole,
   type ReleaseContract,
 } from './manifest.ts'
-import { stringifyJson } from './json.ts'
+import { parseJson, stringifyJson } from './json.ts'
 import { wireValue } from './wire.ts'
 import { primaryNameStatus } from '../core/primary.ts'
 import { createHttpTransport, type ReadTransport } from './transport.ts'
@@ -92,6 +93,11 @@ function copyNow<T>(value: T): T {
   return value
 }
 
+/** Key-value storage for `ClientOptions.verificationCache`; `sessionStorage` is one. */
+export interface VerificationCache {
+  getItem(key: string): string | null | undefined | Promise<string | null | undefined>
+  setItem(key: string, value: string): unknown
+}
 export interface ClientOptions extends ManifestOptions {
   transport?: ReadTransport
   hopLimit?: number
@@ -105,6 +111,17 @@ export interface ClientOptions extends ManifestOptions {
     id: string,
     admission?: Admission,
   ) => Promise<ReleaseContract>
+  /**
+   * Keep what verification reads about each contract for clients created later, such as after a
+   * page load: its interface and deployment binding, a marketplace's order API version and a
+   * policy's init commitment, none of which a deployed contract can change. An entry is bound to
+   * the manifest's chain, network and node URL, the directory and vault, and the contract's ID,
+   * role and release descriptor. Every check runs again on what an entry holds, and an entry that
+   * fails one is ignored and verified from the chain. Admissions, membership, configuration and
+   * other state are never kept, nor anything for a contract the client refused or verified only
+   * in a snapshot it abandoned. Storage failures only mean verifying from the chain.
+   */
+  verificationCache?: VerificationCache
 }
 export type ReadApi<R extends ContractRole> = {
   [M in ReadMethods[R] & Method<R>]: (
@@ -163,8 +180,10 @@ export class FrozenClient {
   private readonly ledger: Ledger
   private readonly verifying = new Map<string, Promise<void>>()
   private readonly sharing: ReadSharing
-  /** Facts this client read, by `factsKey`. */
-  private readonly facts = new Map<string, Facts>()
+  /** Facts this client holds, by `factsKey`; `kept` once the verification cache has them. */
+  private readonly facts = new Map<string, { facts: Facts; kept: boolean }>()
+  /** Contracts an attempt verified, whose facts the cache gets once the attempt commits. */
+  private readonly unkept = new WeakMap<VerifiedContract, string>()
   /**
    * The client trusts only what it verified itself. `client.release` is its own copy of
    * `release`: contracts it resolves are added there, not to `release` or another client's.
@@ -264,11 +283,14 @@ export class FrozenClient {
       cause: crossed,
     })
   }
-  /** Make what a committed attempt verified signable. */
+  /** Make what a committed attempt verified signable, and keep its facts. */
   private commit(stage: Stage): void {
     for (const id of stage.touched) {
       const row = this.ledger.verified.get(id)
-      if (row?.pending) row.pending = undefined
+      if (row?.pending) {
+        row.pending = undefined
+        this.keepFacts(row)
+      }
     }
   }
   /** Drop what only abandoned attempts verified, from the ledger and the client's release. */
@@ -473,11 +495,11 @@ export class FrozenClient {
       // Facts an earlier verification read are checked like fresh ones; facts that fail a check are
       // only ignored, and the contract is checked from the chain, which alone can refuse it.
       const key = this.factsKey(role, id, c),
-        held = this.facts.get(key)
+        held = this.facts.get(key) ?? (await this.cachedFacts(key))
       const checked =
-        (held && (await this.checkContract(role, id, candidate, evidence, record, at, held))) ||
+        (held && (await this.checkContract(role, id, candidate, evidence, record, at, held.facts))) ||
         (await this.checkContract(role, id, candidate, evidence, record, at))!
-      this.facts.set(key, checked.facts)
+      this.facts.set(key, checked.facts === held?.facts ? held : { facts: checked.facts, kept: false })
       // Every check passed: only now does the contract become readable, and signable once the
       // snapshot attempt that verified it, if any, commits.
       const addedToRelease = !this.release.contracts.has(id)
@@ -485,7 +507,7 @@ export class FrozenClient {
         this.release.contracts.set(id, c)
         this.release.drivers.set(id, candidate.driver)
       }
-      this.ledger.verified.set(id, {
+      const row: VerifiedContract = {
         ...candidate,
         codeHash: record ? hex(record.code_hash) : c.codeHash,
         initHash: checked.initHash,
@@ -496,8 +518,11 @@ export class FrozenClient {
           role === 'vault' ||
           (c.codeHash !== undefined && c.initHash !== undefined),
         ...(stage ? { pending: new Set([stage]), addedToRelease } : {}),
-      })
-      stage?.touched.add(id)
+      }
+      this.ledger.verified.set(id, row)
+      this.unkept.set(row, key)
+      if (stage) stage.touched.add(id)
+      else this.keepFacts(row)
     } catch (error) {
       // Artifacts, evidence and contract checks do not depend on the height a snapshot reads at.
       throw heightIndependent(error)
@@ -608,6 +633,61 @@ export class FrozenClient {
       role, id, c.codeHash ?? null, c.initHash ?? null,
       a.sha256 ?? null, a.blake2b256 ?? null, a.blake3 ?? null, a.bytes ?? null,
     ])
+  }
+  /** The verification cache's key for facts: also bound to this deployment and its node. */
+  private cacheKey(key: string): string {
+    const m = this.release.manifest
+    const digest = hash(
+      'duskds:sdk:verification-cache:v1',
+      stringifyJson([m.chainId, m.network, m.nodeUrl, this.directoryId, this.vaultId, key]),
+    )
+    return `duskdomains:verified:v1:${hex(digest)}`
+  }
+  /** Facts the verification cache holds for `key`; a malformed or unreadable entry is none. */
+  private async cachedFacts(key: string): Promise<{ facts: Facts; kept: boolean } | undefined> {
+    const cache = this.options.verificationCache
+    if (!cache) return undefined
+    try {
+      const text = await cache.getItem(this.cacheKey(key))
+      if (typeof text !== 'string') return undefined
+      const entry = object(parseJson(text))
+      if (entry.version !== 1) return undefined
+      const facts: Facts = {
+        interface: wireValue('Interface', entry.interface),
+        binding: wireValue('Binding', entry.binding),
+      }
+      if (entry.orderApi !== undefined) facts.orderApi = wireValue('u16', entry.orderApi)
+      if (entry.init !== undefined) {
+        if (typeof entry.init !== 'string' || !/^[\da-f]{64}$/u.test(entry.init)) return undefined
+        facts.init = entry.init
+      }
+      return { facts, kept: true }
+    } catch {
+      return undefined
+    }
+  }
+  /** Give the verification cache the facts a committed verification checked, if it lacks them. */
+  private keepFacts(row: VerifiedContract): void {
+    const key = this.unkept.get(row)
+    this.unkept.delete(row)
+    const held = key === undefined ? undefined : this.facts.get(key)
+    const cache = this.options.verificationCache
+    if (!cache || !held || held.kept) return
+    held.kept = true
+    const { facts } = held
+    const value = stringifyJson({
+      version: 1,
+      interface: facts.interface,
+      binding: facts.binding,
+      ...(facts.orderApi === undefined ? {} : { orderApi: facts.orderApi }),
+      ...(facts.init === undefined ? {} : { init: facts.init }),
+    })
+    try {
+      const done = cache.setItem(this.cacheKey(key!), value) as PromiseLike<unknown> | undefined
+      if (typeof done?.then === 'function') done.then(undefined, () => {})
+    } catch {
+      // Storage is full or unavailable: the next client verifies from the chain.
+    }
   }
   /** The release's artifact for `id`, or the resolver's reviewed one; never added to the release here. */
   private async candidate(

@@ -34,6 +34,7 @@ quote: a stored, copied or edited quote throws `UnverifiedQuoteError`.
 - Export `ContractRefusedError` for a contract a client refused.
 - Mirror the launch policy's reserved list (61 labels): add human, reserved on request.
 - Share identical reads at one height between a client's operations, and read membership and each home once per snapshot.
+- Add `verificationCache` to keep verification reads across clients, for example in `sessionStorage`.
 
 ## 0.3.4 (2026-10-12)
 

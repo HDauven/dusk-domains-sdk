@@ -48,8 +48,13 @@ client's decisions.
 
 A contract's interface, binding, order API version and, for a policy, init commitment
 never change once it is deployed. A client reads them once: an attempt it abandoned
-checks them again from what it read, without new reads. The directory's admission and
-market records, and all other state, are read from the chain every time.
+checks them again from what it read, without new reads. With `verificationCache`, such
+as `sessionStorage`, a later client does the same with what an earlier one read. An
+entry is bound to the manifest's chain, network and node URL, the directory and vault,
+and the contract's ID, role and release descriptor, and is written only for a contract
+whose verification committed. An entry that fails a check is ignored, never a refusal:
+the contract is checked from the chain instead. The directory's admission and market
+records, and all other state, are always read from the chain.
 
 ## What the node can and cannot do
 
