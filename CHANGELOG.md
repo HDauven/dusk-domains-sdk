@@ -33,6 +33,7 @@ quote: a stored, copied or edited quote throws `UnverifiedQuoteError`.
 - Add `projectedProposal` and `projectedProposals`, deriving `Expired` and `Invalidated`.
 - Export `ContractRefusedError` for a contract a client refused.
 - Mirror the launch policy's reserved list (61 labels): add human, reserved on request.
+- Share identical reads at one height between a client's operations, and read membership and each home once per snapshot.
 
 ## 0.3.4 (2026-10-12)
 

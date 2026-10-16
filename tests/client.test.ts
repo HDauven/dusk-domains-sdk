@@ -59,7 +59,8 @@ async function setup(
   n.name.expires_at = 1000n
   n.name.incarnation = { generation: 7n, serial: 2n }
   const calls: { id: string; fn: string; args: unknown }[] = []
-  let heights = 0
+  let heights = 0,
+    tip = 100n
   const responses = new Map<string, unknown>()
   const forward = (to: number, ordinal: number): Forward => ({
     root: key.root,
@@ -72,7 +73,7 @@ async function setup(
   const transport: ReadTransport = {
     currentBlockHeight: async () => {
       heights++
-      return options.height ? options.height() : 100n
+      return options.height ? options.height() : tip
     },
     read: async (target, fn, data) => {
       const args = decode(data)
@@ -145,6 +146,10 @@ async function setup(
     transport,
     heights: () => heights,
     admissions,
+    /** Land a block: state the test changes next is read at a new height, as on chain. */
+    block: () => {
+      tip++
+    },
   }
 }
 it('canonical reads acquire block heights and follow monotone forwarding across shards', async () => {
@@ -316,12 +321,15 @@ it('primary verification requires matching incarnation, active lifecycle and for
   })
   expect((await t.client.verifyPrimary(endpoint))?.store).toBe(id(9))
   t.responses.set(`${id(9)}:resolve_record`, { Local: null })
+  t.block()
   expect(await t.client.verifyPrimary(endpoint)).toBeNull()
   t.responses.delete(`${id(9)}:resolve_record`)
+  t.block()
   await expect(t.client.verifyPrimary(endpoint)).rejects.toThrow(
     'resolve_record',
   )
   t.n.name.expires_at = 100n
+  t.block()
   expect(await t.client.verifyPrimary(endpoint)).toBeNull()
 })
 
@@ -432,11 +440,14 @@ it('keeps a non-retiring canonical home even when sealed and refuses unseen-root
   t.responses.set(`${id(4)}:capacity`, { ...sample('Capacity'), sealed: true })
   expect((await t.client.registrationPlacement(t.key.root)).store).toBe(id(4))
   t.responses.set(`${id(4)}:home`, 'Absent')
+  t.block()
   expect((await t.client.registrationPlacement(t.key.root)).store).toBe(id(9))
   t.admissions[2].retiring = true
+  t.block()
   await expect(t.client.registrationPlacement(t.key.root)).rejects.toThrow()
   t.admissions[2].retiring = false
   t.responses.set(`${id(9)}:capacity`, { ...sample('Capacity'), sealed: true })
+  t.block()
   await expect(t.client.registrationPlacement(t.key.root)).rejects.toThrow()
 })
 it('rejects a successor quote that omits the previous lifecycle', async () => {

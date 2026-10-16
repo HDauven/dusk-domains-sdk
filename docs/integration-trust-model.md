@@ -46,6 +46,11 @@ directory has not admitted yet is not a refusal and is checked again on the next
 read. Another client, even one built on the same release object, never changes this
 client's decisions.
 
+A contract's interface, binding, order API version and, for a policy, init commitment
+never change once it is deployed. A client reads them once: an attempt it abandoned
+checks them again from what it read, without new reads. The directory's admission and
+market records, and all other state, are read from the chain every time.
+
 ## What the node can and cannot do
 
 Dusk nodes return no state proofs, so the node a client reads from (the manifest's
@@ -87,8 +92,17 @@ Canonical reads go to the manifest's node. They obtain the current height
 without a caller-provided callback. Nodes answer reads at their tip only, so a
 multi-read operation is bracketed by height reads, and a sequence that crossed a
 block is read again, whether it returned or failed, up to three times. A failure at
-an unchanged height is final. A consistent node endpoint is required; same-height
-reorgs are not detected by height alone. The indexer HTTP client uses the versioned [frozen projection API](indexer-http.md),
+an unchanged height is final. A client shares reads between its operations: a read
+(contract, function and input bytes) made at the height it last saw is made once,
+whether in flight or answered, and a failed read is not kept. An operation opens with
+a height read that arrived before its first read was sent, possibly one in flight for
+another operation, and closes with a height read sent after it began and after every
+reply it used arrived, possibly the one it opened with. Each reply was then answered at
+a height between the two, so equal heights mean one height. `snapshot` closes with a
+height read sent after its operation settles, since that operation may read through
+the transport itself. A consistent node endpoint is required; same-height reorgs are
+not detected by height alone, and a shared reply is reused while the client sees the
+same height. The indexer HTTP client uses the versioned [frozen projection API](indexer-http.md),
 with explicit deployment and snapshot binding. Indexed search
 results must be revalidated on chain before payments or a newly signed action.
 

@@ -615,6 +615,7 @@ it('never sends a call whose target its client refused while the wallet checked 
       if (method === 'dusk_getPublicBalance') {
         // Meanwhile the directory's record of the store stops matching the release: discovery refuses it.
         w.chain.stores = [{ ...admission(4), code_hash: bytes(66) }]
+        w.chain.height++
         await client.discover().catch(() => {})
         return { value: '1000000000000' }
       }
@@ -829,9 +830,10 @@ it('commits no contract discovery verified only in snapshots it abandoned', asyn
     c.tick = (fn) => {
       last = fn
     }
-    // Every discovery attempt verifies the preferred market, then sees the tip move.
+    // Every discovery attempt verifies the preferred market, then sees the tip move. A retry checks
+    // what the first attempt read of the market, so it ends with the directory's market record.
     c.onHeight = () => {
-      if (last === 'order_api_version') {
+      if (last === 'order_api_version' || last === 'market') {
         c.height++
         last = undefined
       }
