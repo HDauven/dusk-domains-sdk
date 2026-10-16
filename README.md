@@ -45,7 +45,8 @@ contracts whose release descriptor commits to their code and initialization (`co
 and `initHash`); others are readable only. Multi-read operations, including
 `prepareRegistration`, run at one height: a sequence that crosses a block is read
 again, up to three times. Operations share identical reads made at one height, in flight
-or answered, and close with a height read sent after every reply they used, so a page
+or answered, open at a height read that arrived in the last `heightReuseMs` (1 s by
+default), and close with a height read sent after every reply they used, so a page
 reads each fact about once per block. Use a consistent node endpoint;
 height bracketing is not a historical-state or same-height-reorg proof. The node is a
 trust root for reads; the chain still enforces what a signed call pays

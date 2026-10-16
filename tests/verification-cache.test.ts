@@ -111,8 +111,11 @@ it('verifies a contract a client verified before from what it read then, and onl
   w.log.length = 0
   const prepared = await second.prepareRegistration(registration)
   expect(w.log.filter((call) => verification.test(call))).toEqual([])
-  // The policy's config is still read as the directory's selection; only its verification was kept.
-  expect(w.log.filter((call) => call === '03.config')).toHaveLength(1)
+  // The policy's config is still read as the directory's selection, once per attempt (the first may
+  // open at the height discovery closed with, which the block left); only its verification was kept.
+  expect(w.log.filter((call) => call === '03.config')).toHaveLength(
+    w.log.filter((call) => call === '04.quote_registration').length,
+  )
   // What it verified is signable as if it had read everything again.
   const app = createDuskDomainsConnectApp(wallet, second.release)
   expect((await app.prepare(prepared.calls.reveal)).fnName).toBe('register')

@@ -37,6 +37,8 @@ interface Shared {
 }
 /** Replies kept for the height last seen, at most. The oldest is dropped first. */
 const LIMIT = 256
+/** Milliseconds, on a clock that never runs back where the platform has one. */
+const elapsed = (): number => (typeof performance === 'object' && performance ? performance.now() : Date.now())
 
 export class ReadSharing {
   private clock = 0
@@ -44,6 +46,8 @@ export class ReadSharing {
   private latest?: Sighting
   /** The height the last height read to arrive reported: the height `shared` holds replies for. */
   private seen?: bigint
+  /** When that height read arrived, in milliseconds (`elapsed`). */
+  private seenAt = -Infinity
   private readonly shared = new Map<string, Shared>()
   constructor(private readonly transport: ReadTransport) {}
   /** Advance the client's clock, which orders sends and replies. */
@@ -63,6 +67,7 @@ export class ReadSharing {
           this.shared.clear()
           this.seen = height
         }
+        this.seenAt = elapsed()
         return height
       },
       (error: unknown) => {
@@ -72,6 +77,13 @@ export class ReadSharing {
     )
     this.latest = sighting
     return sighting
+  }
+  /**
+   * The height the last height read to arrive reported, if it arrived less than `windowMs` ago.
+   * It arrived before the caller sends any read, so it bounds the height of every reply from below.
+   */
+  recent(windowMs: number): bigint | undefined {
+    return this.seen !== undefined && windowMs > 0 && elapsed() - this.seenAt < windowMs ? this.seen : undefined
   }
   /**
    * The height an attempt reads at: the latest height read if it was sent after `since`, or, for a

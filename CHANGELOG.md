@@ -35,6 +35,7 @@ quote: a stored, copied or edited quote throws `UnverifiedQuoteError`.
 - Mirror the launch policy's reserved list (61 labels): add human, reserved on request.
 - Share identical reads at one height between a client's operations, and read membership and each home once per snapshot.
 - Add `verificationCache` to keep verification reads across clients, for example in `sessionStorage`.
+- Open a snapshot at a height read that arrived within `heightReuseMs` (1000 by default; 0 reads it every time).
 
 ## 0.3.4 (2026-10-12)
 

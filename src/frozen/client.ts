@@ -122,7 +122,20 @@ export interface ClientOptions extends ManifestOptions {
    * in a snapshot it abandoned. Storage failures only mean verifying from the chain.
    */
   verificationCache?: VerificationCache
+  /**
+   * Open a snapshot at the height the latest height read reported, when it arrived less than this
+   * many milliseconds ago, instead of reading the height again: 1000 by default, 0 to read it every
+   * time. The snapshot still closes with a height read sent after it began, so either way its result
+   * is the state at a height that was the tip during the call. When a block landed in between, it
+   * reads again at the new height, and that first attempt is not one of its three.
+   */
+  heightReuseMs?: number
 }
+/**
+ * A tenth of Dusk's block time of about 10 s: a height read this recent has gone stale about one time
+ * in ten at most, and then costs one attempt that does not count, whose closing read opens the next.
+ */
+const HEIGHT_REUSE_MS = 1000
 export type ReadApi<R extends ContractRole> = {
   [M in ReadMethods[R] & Method<R>]: (
     ...args: Input<R, M> extends null ? [] : [args: Input<R, M>]
@@ -176,6 +189,8 @@ export class FrozenClient {
   readonly directory: ReadApi<'directory'>
   readonly vault: ReadApi<'vault'>
   readonly hopLimit: number
+  /** See `ClientOptions.heightReuseMs`. */
+  readonly heightReuseMs: number
   private readonly options: ClientOptions
   private readonly ledger: Ledger
   private readonly verifying = new Map<string, Promise<void>>()
@@ -214,6 +229,9 @@ export class FrozenClient {
       this.hopLimit > 63
     )
       throw new Error('hopLimit must be 1..63')
+    this.heightReuseMs = options.heightReuseMs ?? HEIGHT_REUSE_MS
+    if (typeof this.heightReuseMs !== 'number' || !(this.heightReuseMs >= 0))
+      throw new Error('heightReuseMs must be zero or more')
     this.directory = this.api('directory', this.directoryId)
     this.vault = this.api('vault', this.vaultId)
   }
@@ -222,9 +240,9 @@ export class FrozenClient {
    * is consistent only when no block lands during it: the height is read before and after,
    * and a sequence that crossed a block is taken again, whether it returned or threw, since
    * reads across heights prove nothing. A failure at an unchanged height is final, as is a
-   * verification failure. After three crossed attempts it throws a retryable error. Snapshots
-   * that begin while a height read is in flight share it; the height read that closes one is
-   * always sent after `operation` settles.
+   * verification failure. After three crossed attempts it throws a retryable error. A snapshot
+   * opens at a height read that arrived less than `heightReuseMs` ago, or shares one in flight;
+   * the height read that closes it is always sent after `operation` settles.
    */
   async snapshot<T>(operation: (height: bigint, stage: Stage) => Promise<T>): Promise<T> {
     return this.attempts((at) => operation(at.height, at.stage), false)
@@ -236,15 +254,27 @@ export class FrozenClient {
    * answered at a height no lower than the opening read's and no higher than the closing one's, so
    * equal heights are one height. Otherwise it closes with a height read sent after `operation`
    * settles. A retry opens with the height read that closed the attempt before it.
+   *
+   * The first attempt opens at the height of a height read that arrived within `heightReuseMs`, if
+   * any. That read arrived before the attempt sent anything, so it bounds its replies from below as
+   * a new one would; how old it is decides only how likely the attempt is to cross a block. If such
+   * an attempt crosses one, it is not one of the three, and a failure it met is not one of three that
+   * must repeat; it commits, or fails for good, like any other. Only the first attempt can open this
+   * way, so a snapshot makes four attempts at most.
    */
   private async attempts<T>(operation: (at: Attempt) => Promise<T>, tracked: boolean): Promise<T> {
     let crossed: unknown
     // Messages of attempts that failed across a block; the same one every time is not chance.
     const failures: string[] = []
     const began = this.sharing.now()
-    let since = began
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const before = await this.sharing.open(since, attempt === 0)
+    let since = began,
+      reused = this.sharing.recent(this.heightReuseMs),
+      first = true
+    for (let counted = 0; counted < 3; ) {
+      const free = reused !== undefined,
+        before = reused ?? (await this.sharing.open(since, first))
+      reused = undefined
+      first = false
       // What this attempt verifies becomes signable only if the attempt commits.
       const at: Attempt = { height: before, stage: { touched: new Set() }, began, replied: 0 }
       const close = () => {
@@ -265,9 +295,10 @@ export class FrozenClient {
             throw error
           }
           if (after === before) throw error
-          failures.push(error instanceof Error ? error.message : String(error))
+          if (!free) failures.push(error instanceof Error ? error.message : String(error))
         } else since = this.sharing.now()
         crossed = error
+        if (!free) counted++
         continue
       }
       if (before === (await close())) {
@@ -276,6 +307,7 @@ export class FrozenClient {
       }
       this.abandon(at.stage)
       crossed = undefined
+      if (!free) counted++
     }
     if (failures.length === 3 && failures.every((m) => m === failures[0]))
       throw crossed

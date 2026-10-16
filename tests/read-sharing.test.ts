@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest'
+import { it, expect, vi } from 'vitest'
 import { FrozenClient, type ClientOptions } from '../src/frozen/client.ts'
 import { parseJson, stringifyJson } from '../src/frozen/json.ts'
 import { authority, fromHex, hex, nameKey } from '../src/frozen/bytes.ts'
@@ -165,7 +165,10 @@ async function world() {
       return encode(reply)
     },
   }
-  const client = (options: ClientOptions = {}) => new FrozenClient(release, { transport, ...options })
+  // Each snapshot opens with a height read of its own, as with `heightReuseMs: 0`, unless a test
+  // passes another window.
+  const client = (options: ClientOptions = {}) =>
+    new FrozenClient(release, { transport, heightReuseMs: 0, ...options })
   /** A client that discovered the deployment, at a height after discovery's. */
   const bootstrapped = async (options: ClientOptions = {}) => {
     const fresh = client(options)
@@ -616,7 +619,7 @@ it('reads a contract\'s interface and binding once, even when the attempt that v
   expect(w.log.filter((call) => call === c(1, 'market'))).toHaveLength(2)
 })
 
-it('returns only state read at one height, the tip during the call, under random delays and blocks', async () => {
+it.each([0, Infinity])('returns only state read at one height, the tip during the call, under random delays and blocks (heightReuseMs %s)', async (heightReuseMs) => {
   // Seeded: every read and height reply arrives after a random number of turns, in any order;
   // blocks land on their own schedule; the name's expiry and renewal quote are functions of the
   // height they are read at. Every result must be the state at the height it reports, and that
@@ -627,7 +630,7 @@ it('returns only state read at one height, the tip during the call, under random
     for (let turns = Math.floor(random() * 8); turns > 0; turns--) await null
   }
   const w = await world()
-  const client = await w.bootstrapped()
+  const client = await w.bootstrapped({ heightReuseMs })
   const state = () => {
     w.chain.names.set(`${id(9)}:${hex(child.node)}`, view(child, { expires_at: 1000n + w.chain.height }))
     w.chain.replies.set(c(9, 'quote_renewal'), {
@@ -674,3 +677,238 @@ it('returns only state read at one height, the tip during the call, under random
   expect(committed).toBeGreaterThan(0)
   expect(w.chain.height).toBeGreaterThan(110n)
 }, 60_000)
+
+// Opening a snapshot at the height a height read that already arrived reported.
+const reuse: ClientOptions = { heightReuseMs: Infinity }
+/** A client that discovered the deployment at the height the chain is still at. */
+async function discovered(w: World, options: ClientOptions = reuse) {
+  const client = w.client(options)
+  await client.discover()
+  w.log.length = 0
+  return client
+}
+/** A name page's reads, one after another, as an integration makes them. */
+const namePage = (client: FrozenClient) => async () => {
+  const name = await client.getName('child.example.dusk')
+  await client.locate(name.store, child.root, 'read_records', child)
+  await client.locate(name.store, child.root, 'resolve_record', { key: child, record_key: 'moonlight_address' })
+  await client.verifyPrimary(endpoint)
+  await client.quoteRenewal(name.store, { name: nameRef, years: 1 })
+  await client.directory.config()
+}
+
+it('opens each snapshot of a name page at the height the one before it closed with', async () => {
+  const w = await world()
+  const client = await discovered(w)
+  expect(await w.calls(namePage(client))).toEqual([
+    c(4, 'home'), c(8, 'home'), c(9, 'home'), c(9, 'get_name'), H,
+    c(9, 'read_records'), H,
+    c(9, 'resolve_record'), H,
+    c(4, 'resolve_primary'), c(8, 'resolve_primary'), c(9, 'resolve_primary'), H,
+    c(9, 'quote_renewal'), H,
+    // Everything is known at this height, yet a snapshot still closes with a height read sent after it began.
+    H,
+  ])
+  // heightReuseMs 0: as before, a snapshot that reads anything new also opens with a height read.
+  const old = await world()
+  const fresh = await discovered(old, { heightReuseMs: 0 })
+  expect(await old.calls(namePage(fresh))).toEqual([
+    H, c(4, 'home'), c(8, 'home'), c(9, 'home'), c(9, 'get_name'), H,
+    H, c(9, 'read_records'), H,
+    H, c(9, 'resolve_record'), H,
+    H, c(4, 'resolve_primary'), c(8, 'resolve_primary'), c(9, 'resolve_primary'), H,
+    H, c(9, 'quote_renewal'), H,
+    H,
+  ])
+})
+
+it('opens concurrent snapshots at the height already read, and closes them with one height read', async () => {
+  const w = await world()
+  const client = await discovered(w)
+  const results = await Promise.all(Array.from({ length: 5 }, () => client.getName('child.example.dusk', id(4))))
+  expect(w.log).toEqual([c(4, 'home'), c(8, 'home'), c(9, 'home'), c(9, 'get_name'), H])
+  for (const r of results) expect(r).toEqual(results[0])
+  // Three pages at once read each fact once, with no more height reads than one page alone.
+  w.log.length = 0
+  await Promise.all([namePage(client)(), namePage(client)(), namePage(client)()])
+  const concurrent = [...w.log]
+  w.log.length = 0
+  await namePage(client)()
+  expect(concurrent.filter((call) => call !== H).sort()).toEqual([
+    c(4, 'resolve_primary'), c(8, 'resolve_primary'), c(9, 'quote_renewal'), c(9, 'read_records'),
+    c(9, 'resolve_primary'), c(9, 'resolve_record'),
+  ].sort())
+  expect(concurrent.filter((call) => call === H).length).toBeLessThanOrEqual(6)
+  expect(w.log).toEqual([H, H, H, H, H, H])
+})
+
+it('opens at a height read that arrived less than heightReuseMs ago, 1000 by default, and reads a new one after', async () => {
+  vi.useFakeTimers({ toFake: ['performance'] })
+  try {
+    const w = await world()
+    // Discovery's closing height read arrives now.
+    const client = await discovered(w, { heightReuseMs: 250 })
+    vi.advanceTimersByTime(249)
+    expect(await w.calls(() => client.directory.renewal_schedule())).toEqual([c(1, 'renewal_schedule'), H])
+    // That snapshot's closing read arrived 250 ms ago: too long.
+    vi.advanceTimersByTime(250)
+    expect(await w.calls(() => client.directory.allocation())).toEqual([H, c(1, 'allocation'), H])
+    vi.advanceTimersByTime(249)
+    expect(await w.calls(() => client.directory.registration_context())).toEqual([c(1, 'registration_context'), H])
+    const byDefault = await discovered(w, { heightReuseMs: undefined })
+    expect(byDefault.heightReuseMs).toBe(1000)
+    vi.advanceTimersByTime(999)
+    expect(await w.calls(() => byDefault.directory.renewal_schedule())).toEqual([c(1, 'renewal_schedule'), H])
+    vi.advanceTimersByTime(1000)
+    expect(await w.calls(() => byDefault.directory.allocation())).toEqual([H, c(1, 'allocation'), H])
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+it('never returns the state at a reused height the chain has left: the closing height read catches it', async () => {
+  const w = await world()
+  const client = await discovered(w)
+  await client.getName('child.example.dusk')
+  // A block renews the name before the client reads the height again.
+  w.chain.height++
+  w.chain.names.set(`${id(9)}:${hex(child.node)}`, view(child, { expires_at: 5000n }))
+  w.log.length = 0
+  expect(await client.getName('child.example.dusk')).toMatchObject({
+    height: 101n, value: { Local: { name: { expires_at: 5000n } } },
+  })
+  // The first attempt read nothing new at 100, and its closing read opened the second at 101: what
+  // reading a new height to open would have cost.
+  expect(w.log).toEqual([H, c(1, 'members'), c(4, 'home'), c(8, 'home'), c(9, 'home'), c(9, 'get_name'), H])
+})
+
+it('costs at most one attempt when the height it reused is stale: the reads it had not made yet', async () => {
+  const w = await world()
+  const client = await w.bootstrapped(reuse)
+  expect(await client.getName('child.example.dusk')).toMatchObject({ height: 101n, store: id(9) })
+  expect(w.log).toEqual([
+    c(4, 'home'), c(8, 'home'), c(9, 'home'), c(9, 'get_name'), H,
+    c(1, 'members'), c(4, 'home'), c(8, 'home'), c(9, 'home'), c(9, 'get_name'), H,
+  ])
+})
+
+it('allows one attempt at a reused height besides the three: four in all, three without reuse', async () => {
+  for (const [options, attempts] of [[reuse, 4], [{ heightReuseMs: 0 }, 3]] as const) {
+    const w = await world()
+    const client = await discovered(w, options)
+    w.chain.onRead = (call) => {
+      if (call === c(9, 'get_name')) w.chain.height++
+    }
+    await expect(client.getName('child.example.dusk')).rejects.toThrow('Chain tip changed during read; retry the snapshot')
+    expect(w.log.filter((call) => call === c(9, 'get_name'))).toHaveLength(attempts)
+  }
+})
+
+it('never counts the failure of an attempt at a reused height among three that must repeat', async () => {
+  const w = await world()
+  const client = await discovered(w)
+  let first = true
+  w.chain.onRead = (call) => {
+    if (call !== c(9, 'get_name')) return
+    w.chain.height++
+    w.chain.replies.set(call, new Error(`Contract read failed (get_name): ${first ? 'busy' : 'trapped'}`))
+    first = false
+  }
+  // Busy once at the reused height, then trapped at each of three more: the repeated failure is thrown.
+  await expect(client.getName('child.example.dusk')).rejects.toThrow('Contract read failed (get_name): trapped')
+  expect(w.log.filter((call) => call === c(9, 'get_name'))).toHaveLength(4)
+})
+
+it('reads again when a block lands during a read at a reused height', async () => {
+  const w = await world()
+  const client = await discovered(w)
+  let landed = false
+  w.chain.onRead = (call) => {
+    if (call === c(9, 'get_name') && !landed) {
+      landed = true
+      w.chain.height++
+      w.chain.names.set(`${id(9)}:${hex(child.node)}`, view(child, { expires_at: 7000n }))
+    }
+  }
+  expect(await client.getName('child.example.dusk')).toMatchObject({
+    height: 101n, value: { Local: { name: { expires_at: 7000n } } },
+  })
+  expect(w.log).toEqual([
+    c(4, 'home'), c(8, 'home'), c(9, 'home'), c(9, 'get_name'), H,
+    c(1, 'members'), c(4, 'home'), c(8, 'home'), c(9, 'home'), c(9, 'get_name'), H,
+  ])
+})
+
+it('checks a later height before a failure at a reused height is final, and reads again when the chain moved', async () => {
+  const w = await world()
+  const client = await discovered(w)
+  w.chain.replies.set(c(9, 'get_name'), new Error('Contract read failed (get_name): trapped'))
+  await expect(client.getName('child.example.dusk')).rejects.toThrow('trapped')
+  // One attempt: the height read after the failure saw the tip where the attempt read.
+  expect(w.log).toEqual([c(4, 'home'), c(8, 'home'), c(9, 'home'), c(9, 'get_name'), H])
+  // A block lands, and the name read fails once more at the height the client last read.
+  w.chain.height++
+  let reads = 0
+  w.chain.onRead = (call) => {
+    if (call === c(9, 'get_name') && reads++ === 1) w.chain.replies.delete(call)
+  }
+  w.log.length = 0
+  expect(await client.getName('child.example.dusk')).toMatchObject({ height: 101n, store: id(9) })
+  expect(w.log).toEqual([
+    c(9, 'get_name'), H,
+    c(1, 'members'), c(4, 'home'), c(8, 'home'), c(9, 'home'), c(9, 'get_name'), H,
+  ])
+})
+
+it('throws a refusal at a reused height at once', async () => {
+  const w = await world()
+  const client = w.client(reuse)
+  await client.directory.config()
+  w.chain.replies.set(c(8, 'binding'), { directory: bytes(11), vault: bytes(2), network: 1 })
+  w.log.length = 0
+  await expect(client.discover()).rejects.toThrow('Contract deployment binding mismatch')
+  // No height read: the refusal does not depend on one.
+  expect(w.log).toEqual([
+    c(1, 'members'), c(1, 'members'), c(4, 'interface_version'), c(4, 'binding'),
+    c(8, 'interface_version'), c(8, 'binding'),
+  ])
+})
+
+it('prices a registration again at the new height when a quote at a reused height is priced later', async () => {
+  const w = await world()
+  const client = await discovered(w)
+  await client.prepareRegistration(registration('fresh'))
+  // A block lands; the client has not read the height since. The store prices at the new tip.
+  w.chain.height++
+  w.log.length = 0
+  const prepared = await client.prepareRegistration(registration('other'))
+  expect(prepared).toMatchObject({ height: 101n, quote: { height: 101n }, quoteRequest: { height: 101n } })
+  expect(w.log).toEqual([
+    c(4, 'home'), c(8, 'home'), c(9, 'home'), c(9, 'quote_registration'),
+    H, c(1, 'members'), c(4, 'home'), c(8, 'home'), c(9, 'home'), c(9, 'capacity'),
+    c(1, 'registration_context'), c(3, 'config'), c(9, 'quote_registration'), H,
+  ])
+})
+
+it('opens a snapshot whose operation reads through the transport at a reused height, and closes it with a new one', async () => {
+  const w = await world()
+  const client = await discovered(w)
+  w.chain.height++
+  const heights: bigint[] = []
+  const result = await client.snapshot(async (height) => {
+    heights.push(height)
+    await w.transport.read(id(1), 'config', encode(null))
+    return height
+  })
+  expect(heights).toEqual([100n, 101n])
+  expect(result).toBe(101n)
+  expect(w.log).toEqual([c(1, 'config'), H, c(1, 'config'), H])
+})
+
+it('takes a reuse window of zero or more milliseconds, 1000 by default', async () => {
+  const r = await jsonRelease()
+  expect(new FrozenClient(r).heightReuseMs).toBe(1000)
+  for (const ms of [0, 1, 1000, Infinity]) expect(new FrozenClient(r, { heightReuseMs: ms }).heightReuseMs).toBe(ms)
+  for (const ms of [-1, NaN, '5' as unknown as number])
+    expect(() => new FrozenClient(r, { heightReuseMs: ms })).toThrow('heightReuseMs must be zero or more')
+})

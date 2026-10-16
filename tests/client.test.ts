@@ -171,7 +171,9 @@ it('canonical reads acquire block heights and follow monotone forwarding across 
   expect(renewal.value).toMatchObject({
     Local: { schedule_version: 9007199254740993n, total_lux: '123' },
   })
-  expect(t.heights()).toBeGreaterThanOrEqual(6)
+  // Each read takes its height itself: discovery reads it to open and close, and each read after
+  // it at least to close, opening at the height the read before it closed with.
+  expect(t.heights()).toBeGreaterThanOrEqual(4)
 })
 it('every Located ABI read follows, including absent and unknown descendants', async () => {
   const t = await setup()

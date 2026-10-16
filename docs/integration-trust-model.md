@@ -100,12 +100,16 @@ block is read again, whether it returned or failed, up to three times. A failure
 an unchanged height is final. A client shares reads between its operations: a read
 (contract, function and input bytes) made at the height it last saw is made once,
 whether in flight or answered, and a failed read is not kept. An operation opens with
-a height read that arrived before its first read was sent, possibly one in flight for
-another operation, and closes with a height read sent after it began and after every
-reply it used arrived, possibly the one it opened with. Each reply was then answered at
-a height between the two, so equal heights mean one height. `snapshot` closes with a
-height read sent after its operation settles, since that operation may read through
-the transport itself. A consistent node endpoint is required; same-height reorgs are
+a height read that arrived before its first read was sent: one that arrived less than
+`heightReuseMs` ago (1000 by default; 0 reads a new one every time), or one in flight
+for another operation, or a new one. It closes with a height read sent after it began
+and after every reply it used arrived, possibly the one it opened with. Each reply was
+then answered at a height between the two, so equal heights mean one height, and that
+height was the tip while the operation ran however old its opening read was: the window
+only decides how often a first attempt opens at a height the chain has already left.
+Such an attempt is read again at the new height and is not one of the three. `snapshot`
+closes with a height read sent after its operation settles, since that operation may
+read through the transport itself. A consistent node endpoint is required; same-height reorgs are
 not detected by height alone, and a shared reply is reused while the client sees the
 same height. The indexer HTTP client uses the versioned [frozen projection API](indexer-http.md),
 with explicit deployment and snapshot binding. Indexed search
