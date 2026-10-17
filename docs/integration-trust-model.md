@@ -61,10 +61,12 @@ never change once it is deployed. A client reads those the directory has not pro
 once: an attempt it abandoned checks them again from what it read, without new reads.
 With `verificationCache`, such as `sessionStorage`, a later client does the same with
 what an earlier one read. An entry is bound to the release's chain, network and
-directory with its commitments, the vault, the chain state the transport reads (its
-`namespace`: the node URL of the default transport, else `transportNamespace`; a custom
-transport with neither keeps and reads no entries), and the contract's ID, role and
-release descriptor. It is written only for a contract whose verification committed. An
+directory with its commitments, the vault, the chain state the client's reads reach
+(`transportNamespace` when given, else the transport's `namespace`: the node URL for the
+default transport and `fetch`; a custom transport without a `namespace`, or a custom
+`fetch`, which may send a node URL's requests anywhere, keeps and reads no entries), and
+the contract's ID, role and release descriptor. A custom `fetch` must otherwise send each
+request to its URL. It is written only for a contract whose verification committed. An
 entry that fails a check is ignored, never a refusal: the contract is checked from the
 chain instead. The directory's admission and market records, and all other state, are
 always read from the chain.
@@ -77,6 +79,13 @@ marketplace a custody hand-off goes to), and before `quoteRegistration` or
 the directory first, once per client. The chain's answer replaces the entry's: a
 contract the chain contradicts is refused by that client, for reads too, and a quote is
 never made under it.
+
+The directory's records and binding vouch for every other contract, a probed one's
+interface and binding included. So Connect signs for a contract only while the
+directory, too, is verified from the chain and not refused by its client, and nothing is
+read through a refused directory. A refusal is final for signing: every later or
+concurrent preparation or submission stops at it with an `UnverifiedContractError`
+whose `cause` is the refusal, the directory's for a contract it vouched for.
 
 ### The directory's admission as proof
 

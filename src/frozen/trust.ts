@@ -59,6 +59,8 @@ export interface QuoteProof {
   height: string
 }
 export interface Ledger {
+  /** The release's directory: every other contract's verification rests on it. */
+  directory: string
   verified: Map<string, VerifiedContract>
   refused: Map<string, ContractRefusedError>
   /** Selection version to the policy the directory selected there, as this client read it. */
@@ -112,6 +114,7 @@ const QUOTE_LIMIT = 1024
 
 export function createLedger(release: LoadedRelease): Ledger {
   const ledger: Ledger = {
+    directory: contractId(release.manifest.contracts.find((c) => c.role === 'directory')!.contractId),
     verified: new Map(),
     refused: new Map(),
     selections: new Map(),
@@ -131,34 +134,56 @@ export function verifiedContract(
   const row = ledger?.verified.get(id)
   return row && !row.pending && !ledger!.refused.has(id) && (!role || row.role === role) ? row : undefined
 }
-/** Like `verifiedContract`, but only a contract the Connect app may sign for. */
+/**
+ * Like `verifiedContract`, but only a contract the Connect app may sign for: one the release
+ * commits to, verified from the chain rather than the verification cache, through a directory the
+ * client also verified from the chain and has not refused. The directory's records and binding
+ * vouch for every other contract, so nothing is signable through a directory that is not.
+ */
 export function signableContract(
   release: LoadedRelease,
   id: string,
   role?: ContractRole,
 ): VerifiedContract | undefined {
   const row = verifiedContract(release, id, role)
-  return row?.signable && !row.cached ? row : undefined
+  if (!row?.signable || row.cached) return undefined
+  const ledger = ledgers.get(release)!
+  if (contractId(id) === ledger.directory) return row
+  const directory = verifiedContract(release, ledger.directory, 'directory')
+  return directory && !directory.cached ? row : undefined
 }
+
 /** The refusal of `id` by the client owning `release`, if it refused it. */
 export function refusedContract(release: LoadedRelease, id: string): ContractRefusedError | undefined {
   return ledgers.get(release)?.refused.get(contractId(id))
 }
 /**
- * Before signing for a contract the client owning `release` verified from its verification cache
- * only, verify it from the chain, once: its result replaces the cached one, and a contract that
- * fails is refused, by that client, for reads too.
+ * Before signing for a contract, stop at a refusal and verify from the chain, once, one the client
+ * owning `release` verified from its verification cache only: its result replaces the cached one,
+ * and one that fails is refused, by that client, for reads too. A refusal of the contract, or of
+ * the directory that vouches for it, throws an `UnverifiedContractError` with `message` and that
+ * `ContractRefusedError` as its cause, every time. Anything else unverified is left to the
+ * signature's own checks, which never pass it.
  */
 export async function confirmContract(
   release: LoadedRelease,
   id: string,
   role: ContractRole,
+  message: string,
 ): Promise<void> {
   const ledger = ledgers.get(release)
+  if (!ledger) return
   id = contractId(id)
-  const row = ledger?.verified.get(id)
-  if (row?.cached && !row.pending && row.role === role && !ledger!.refused.has(id))
-    await ledger!.confirm?.(role, id)
+  // A refusal is never done with: it stops every signature, before anything else is looked at.
+  const refusal = ledger.refused.get(id) ?? (id === ledger.directory ? undefined : ledger.refused.get(ledger.directory))
+  if (refusal) throw new UnverifiedContractError(id, role, message, refusal)
+  const row = ledger.verified.get(id)
+  if (!row?.cached || row.pending || row.role !== role || !ledger.confirm) return
+  try {
+    await ledger.confirm(role, id)
+  } catch (error) {
+    throw error instanceof ContractRefusedError ? new UnverifiedContractError(id, role, message, error) : error
+  }
 }
 /** The selection at `version` the client owning `release` read, under a signable policy. */
 export function verifiedSelection(

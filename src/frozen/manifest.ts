@@ -41,6 +41,11 @@ export interface ReleaseManifest {
   [key: string]: unknown
 }
 export interface ManifestOptions {
+  /**
+   * Fetches the manifest and artifacts and, with the default transport, sends node reads. It must
+   * send each request to its URL: a custom one keeps no verification cache entries unless
+   * `ClientOptions.transportNamespace` names where its requests go.
+   */
   fetch?: typeof fetch
   artifactBaseUrl?: string
   nodeUrl?: string

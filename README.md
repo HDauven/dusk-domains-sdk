@@ -113,9 +113,12 @@ only once all of them pass. `verificationCache` (for example `sessionStorage`) k
 what verification read about each contract, which a deployed contract cannot change,
 for clients created later; every check runs again on it, and state is never kept. A
 contract verified from it serves reads only: before Connect signs for it, or a
-registration is quoted under it, the client verifies it from the chain, once. Entries are
-keyed by the chain state the transport reads: the default transport's node URL, or
-`transportNamespace` for a custom transport, without which a custom transport keeps none. `admitDirectoryEvent` also accepts committed,
+registration is quoted under it, the client verifies it from the chain, once, and the
+directory with it. Entries are keyed by the chain state the client's reads reach:
+`transportNamespace` when given, else the default transport's node URL. A custom
+`transport` without a `namespace`, or a custom `fetch`, keeps no entries unless
+`transportNamespace` names where its reads go, and a custom `fetch` must otherwise send
+each request to its URL. `admitDirectoryEvent` also accepts committed,
 authenticated directory initialization/admission events; one that contradicts what
 the client reads is rejected, and the contract stays verified.
 

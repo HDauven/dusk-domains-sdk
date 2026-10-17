@@ -116,20 +116,21 @@ export interface ClientOptions extends ManifestOptions {
    * Keep what verification reads about each contract for clients created later, such as after a
    * page load: its interface and deployment binding, a marketplace's order API version and a
    * policy's init commitment, none of which a deployed contract can change. An entry is bound to
-   * the chain, network and directory of the release, the vault, the transport's namespace (the
-   * node URL of the default transport; see `transportNamespace`), and the contract's ID, role and
-   * release descriptor. Every check runs again on what an entry holds, and an entry that fails one
+   * the chain, network and directory of the release, the vault, the chain state the client's reads
+   * reach (see `transportNamespace`), and the contract's ID, role and release descriptor. Every check runs again on what an entry holds, and an entry that fails one
    * is ignored and verified from the chain. A contract verified from an entry is readable, never
    * signable: before the Connect app signs for it, or a registration is quoted under it, the
-   * client verifies it from the chain, once. Admissions, membership, configuration and other state
+   * client verifies it, and the directory, from the chain, once. Admissions, membership, configuration and other state
    * are never kept, nor anything for a contract the client refused or verified only in a snapshot
    * it abandoned. Storage failures only mean verifying from the chain.
    */
   verificationCache?: VerificationCache
   /**
-   * Names the chain state a custom `transport` reads, such as its node URL, so verification cache
-   * entries are keyed by it. With a custom transport that has no `namespace` of its own and no
-   * `transportNamespace`, the client keeps and reads no verification cache entries.
+   * Names the chain state the client's reads reach, such as a node URL, for verification cache
+   * keys; it takes precedence over the transport's own `namespace`. Without it, a custom `transport`
+   * keys entries by its `namespace` and keeps none without one, and a custom `fetch`, which may send
+   * the node URL's requests elsewhere, keeps none; the default transport and fetch key them by the
+   * node URL.
    */
   transportNamespace?: string
   /**
@@ -256,10 +257,12 @@ export class FrozenClient {
     this.transport =
       options.transport ??
       createHttpTransport(release.manifest.nodeUrl, options.fetch)
-    // A transport the caller supplies keys the cache only by a namespace the caller gives it.
-    this.cacheNamespace = options.transport
-      ? (options.transportNamespace ?? options.transport.namespace)
-      : this.transport.namespace
+    // The cache keys facts by the chain state they were read from: the namespace the caller gives,
+    // else the transport's own. A custom `fetch` may send a node URL's requests anywhere, so it
+    // keys nothing by that URL.
+    this.cacheNamespace =
+      options.transportNamespace ??
+      (options.transport ? options.transport.namespace : options.fetch ? undefined : this.transport.namespace)
     this.ledger.confirm = (role, id) => this.verify(role, id, undefined, false, undefined, false, true)
     this.directoryId = release.manifest.contracts.find(
       (c) => c.role === 'directory',
@@ -409,6 +412,9 @@ export class FrozenClient {
     const contract = candidate ?? this.ledger.verified.get(id)
     if (!contract || contract.role !== role || this.ledger.refused.has(id))
       throw new Error(`No verified ${role} driver for ${id}`)
+    // Every other contract was verified through the directory: none is read through a refused one.
+    const root = id === this.directoryId ? undefined : this.ledger.refused.get(this.directoryId)
+    if (root) throw heightIndependent(root)
     const spec = methodDefinition(role, method)
     if (spec.mode !== 'read') throw new Error('Write method used as a read')
     const input = contract.driver.encodeInput(
@@ -526,7 +532,8 @@ export class FrozenClient {
     // Let a verification of the same contract, in any role, finish; then answer from its outcome.
     for (let pending = this.verifying.get(key); pending; pending = this.verifying.get(key))
       await pending.catch(() => {})
-    const refusal = this.ledger.refused.get(id)
+    const refusal =
+      this.ledger.refused.get(id) ?? (role === 'directory' ? undefined : this.ledger.refused.get(this.directoryId))
     if (refusal) throw heightIndependent(refusal)
     const known = this.ledger.verified.get(id)
     // A verification only other attempts staged is no evidence outside them: verify it again,
@@ -1205,13 +1212,14 @@ export class FrozenClient {
    * the chain leads from it to a Local home over forwards that pass every check. Anything else (an
    * Absent or staged home, a forward or store the client rejects, an unadmitted or malformed hint, a
    * failed read) sends the search to every admitted store in admission order, as without a hint.
-   * A hint so costs reads, never the answer. Undefined when no store holds the root.
+   * A hint so costs reads, never the answer. When no store holds the root, the end of the hint's
+   * route if it was followed whole (`local` false), else undefined.
    */
   private async homeOf(
     at: Attempt,
     root: Contract,
     hint?: string,
-  ): Promise<{ start: string; store: string; forwards: Forward[] } | undefined> {
+  ): Promise<{ start: string; store: string; forwards: Forward[]; local: boolean } | undefined> {
     // Stores on a route that ended elsewhere than a Local home: a route from one of them is the
     // rest of that route and ends there too, so the search does not follow it again.
     const ended = new Set<string>()
@@ -1219,12 +1227,14 @@ export class FrozenClient {
       ended.add(start)
       for (const f of forwards) ended.add(contractId(f.destination))
     }
+    let hinted: { start: string; store: string; forwards: Forward[]; local: boolean } | undefined
     if (hint !== undefined)
       try {
         const start = contractId(hint),
           home = await this.followHomeRaw(at, start, root)
-        if (home.value === 'Local') return { start, ...home }
+        if (home.value === 'Local') return { start, store: home.store, forwards: home.forwards, local: true }
         passed(start, home.forwards)
+        hinted = { start, store: home.store, forwards: home.forwards, local: false }
       } catch {
         // Only reads were spent: the search below decides.
       }
@@ -1232,10 +1242,10 @@ export class FrozenClient {
       const start = contractId(a.id)
       if (ended.has(start)) continue
       const home = await this.followHomeRaw(at, start, root)
-      if (home.value === 'Local') return { start, ...home }
+      if (home.value === 'Local') return { start, store: home.store, forwards: home.forwards, local: true }
       passed(start, home.forwards)
     }
-    return undefined
+    return hinted
   }
   /**
    * Read a Located `method` for `root` at its home, looking from `start` first (see `homeOf`).
@@ -1248,6 +1258,7 @@ export class FrozenClient {
     method: Method<'store'>,
     args: never,
   ): Promise<{ store: string; value: Located<unknown>; forwards: Forward[] }> {
+    // No home Local anywhere: read where the start's own route ends, as from that store alone.
     const home = await this.homeOf(at, root, start)
     return home
       ? this.followFrom(at, home.start, home, root, method, args)
@@ -1290,7 +1301,7 @@ export class FrozenClient {
         home = await this.homeOf(at, key.root, homeHint)
       // Read where the home was found Local, as `followRaw` from that store would, without reading
       // its admission and home again.
-      if (home)
+      if (home?.local)
         return {
           ...(await this.followFrom(
             at,

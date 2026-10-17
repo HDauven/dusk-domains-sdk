@@ -1,5 +1,5 @@
-import { it, expect } from 'vitest'
-import { ContractRefusedError, FrozenClient, type ClientOptions } from '../src/frozen/client.ts'
+import { it, expect, vi } from 'vitest'
+import { ContractRefusedError, FrozenClient, UnverifiedContractError, type ClientOptions } from '../src/frozen/client.ts'
 import { registrationCalls } from '../src/frozen/actions.ts'
 import { parseJson, stringifyJson } from '../src/frozen/json.ts'
 import { fromHex } from '../src/frozen/bytes.ts'
@@ -39,13 +39,22 @@ function storage() {
  * Directory 1, vault 2, policy 3, store 4, resolver 5 and the preferred marketplace 6, answering
  * like the frozen contracts. All are the directory's init's, which probes none of them, so the
  * client reads each one's interface and binding. `binding` overrides a contract's binding, by its byte.
+ * With `probed`, store 7 is admitted too, at ordinal 1: an AddStore's, which the directory probed.
  */
-async function world() {
-  const release = await jsonRelease()
+async function world({ probed = false } = {}) {
+  const base = await jsonRelease()
+  // Descriptors are shared with the cached test release; replace, never mutate.
+  const release: LoadedRelease = probed
+    ? { ...base, contracts: new Map([...base.contracts, [id(7), { ...base.contracts.get(id(4))!, contractId: id(7) }]]), drivers: new Map([...base.drivers, [id(7), base.drivers.get(id(4))!]]) }
+    : base
+  const stores = [{ ...samples.Admission, id: bytes(4), ordinal: 0, interface_version: 1, retiring: false }]
+  if (probed) stores.push({ ...samples.Admission, id: bytes(7), ordinal: 1, interface_version: 1, retiring: false })
   const chain = {
     height: 100n,
     binding: new Map<number, unknown>(),
     onHeight: undefined as undefined | (() => void),
+    /** Runs as a read arrives, before it is answered. */
+    onRead: undefined as undefined | ((call: string) => void | Promise<void>),
     /** The policy's live config, when it differs from the one the release committed to. */
     policyConfig: undefined as undefined | ReturnType<typeof launchPolicyConfig>,
   }
@@ -59,26 +68,30 @@ async function world() {
     read: async (target, fn, data) => {
       const n = Number.parseInt(target.slice(0, 2), 16)
       log.push(`${target.slice(0, 2)}.${fn}`)
+      await chain.onRead?.(`${target.slice(0, 2)}.${fn}`)
       const args = decode(data)
       const registration = { ...samples.RegistrationContext, policy: bytes(3), policy_version: 1n, newest_store: bytes(4) }
       const reply = (() => {
         if (fn === 'interface_version')
-          return { kind: kinds[n], version: 1, move_version: n === 4 ? 1 : 0, custody_version: n === 4 || n === 6 ? 1 : 0 }
+          return { kind: kinds[n], version: 1, move_version: n === 4 || n === 7 ? 1 : 0, custody_version: n === 4 || n === 6 || n === 7 ? 1 : 0 }
         if (fn === 'binding') return chain.binding.get(n) ?? { directory: bytes(1), vault: bytes(2), network: 1 }
         if (fn === 'order_api_version') return 1
         if (n === 1 && fn === 'config')
           return {
             ...samples.DirectoryConfig, binding: { directory: bytes(1), vault: bytes(2), network: 1 },
-            store_count: 1, resolver_count: 1, registration, preferred_marketplace: bytes(6), market_version: 1n,
+            store_count: stores.length, resolver_count: 1, registration, preferred_marketplace: bytes(6), market_version: 1n,
           }
         if (n === 1 && fn === 'members')
-          return { rows: [{ ...samples.Admission, id: bytes(args.kind === 'Store' ? 4 : 5), ordinal: 0, interface_version: 1, retiring: false }], next: null }
-        if (n === 1 && fn === 'member') return { ...samples.Admission, id: args.id, ordinal: 0, interface_version: 1, retiring: false }
+          return args.kind === 'Store'
+            ? { rows: stores, next: null }
+            : { rows: [{ ...samples.Admission, id: bytes(5), ordinal: 0, interface_version: 1, retiring: false }], next: null }
+        if (n === 1 && fn === 'member')
+          return stores.find((a) => a.id[0] === args.id[0]) ?? { ...samples.Admission, id: args.id, ordinal: 0, interface_version: 1, retiring: false }
         if (n === 1 && fn === 'market') return { ...samples.Market, id: args.id, interface_version: 1, state: 'Listed', version: 1n }
         if (n === 1 && fn === 'registration_context') return registration
         if (n === 3 && fn === 'config') return chain.policyConfig ?? launchPolicyConfig()
         if (n === 4 && fn === 'home') return 'Absent'
-        if (n === 4 && fn === 'capacity') return { ...samples.Capacity, sealed: false }
+        if ((n === 4 || n === 7) && fn === 'capacity') return { ...samples.Capacity, sealed: false }
         if (n === 4 && fn === 'quote_registration') {
           const { estimate, total_lux, ...quote } = estimateRegistrationQuote(launchPolicyConfig(), {
             version: 1, directory: bytes(1), store: fromHex(target, 32), node: args.node, label: args.label,
@@ -96,7 +109,18 @@ async function world() {
   // The test transport stands for the manifest's node, and says so for the cache's keys.
   const client = (options: ClientOptions = {}, r: LoadedRelease = release) =>
     new FrozenClient(r, { transport, transportNamespace: r.manifest.nodeUrl, ...options })
-  return { chain, release, log, client }
+  return { chain, release, log, transport, client }
+}
+const commitAt = (n: number) => buildCall('store', id(n), 'commit', { hash: bytes(1) })
+/** A fetch that serves the node's HTTP API from `transport`, as a proxy in front of it would. */
+function serving(transport: ReadTransport): typeof fetch {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    if (url.endsWith('/on/graphql/query'))
+      return new Response(`{"block":{"header":{"height":${await transport.currentBlockHeight()},"hash":"${'ab'.repeat(32)}"}}}`)
+    const [, target, fn] = /\/on\/contracts:([\da-f]{64})\/(\w+)$/u.exec(url)!
+    return new Response(await transport.read(target, fn, new Uint8Array(await new Response(init!.body).arrayBuffer())))
+  }) as typeof fetch
 }
 const registration = { actor: bytes(10), label: 'fresh', years: 1, secret: bytes(33), commitHeight: 100n }
 const withDescriptor = (r: LoadedRelease, n: number, change: Partial<ReleaseContract>): LoadedRelease => {
@@ -151,14 +175,19 @@ it('never signs for a contract only the cache vouched for: the chain refuses it 
   const app = createDuskDomainsConnectApp(wallet, client.release)
   const commit = buildCall('store', id(4), 'commit', { hash: bytes(1) })
   // Verified from the chain before signing, it is refused: then and for good.
-  await expect(app.prepare(commit)).rejects.toThrow(ContractRefusedError)
-  const again = await app.prepare(commit).catch((error: unknown) => error)
-  expect((again as Error).cause).toMatchObject({ message: 'Contract deployment binding mismatch' })
+  for (let i = 0; i < 2; i++) {
+    const error = await app.prepare(commit).catch((e: unknown) => e)
+    expect(error).toBeInstanceOf(UnverifiedContractError)
+    expect((error as Error).cause).toBeInstanceOf(ContractRefusedError)
+    expect((error as Error).cause).toMatchObject({ contractId: id(4), message: 'Contract deployment binding mismatch' })
+  }
   await expect(client.store(id(4)).capacity()).rejects.toThrow('Contract deployment binding mismatch')
   // The live result replaced nothing in the cache: a new client reads from it, and signs nothing.
   const next = w.client({ verificationCache: cache })
   await next.discover()
-  await expect(createDuskDomainsConnectApp(wallet, next.release).prepare(commit)).rejects.toThrow('Contract deployment binding mismatch')
+  const error = await createDuskDomainsConnectApp(wallet, next.release).prepare(commit).catch((e: unknown) => e)
+  expect(error).toBeInstanceOf(UnverifiedContractError)
+  expect((error as Error).cause).toMatchObject({ contractId: id(4), message: 'Contract deployment binding mismatch' })
 })
 
 it('quotes a registration only under a policy the chain shows, never under the cache\'s word', async () => {
@@ -339,4 +368,89 @@ it('keeps a refusal to its client and never shares one through the cache', async
     '02.interface_version', '02.binding', '06.interface_version', '06.binding', '06.order_api_version',
   ])
   await expect(refused.discover()).rejects.toThrow('Contract deployment binding mismatch')
+})
+
+it('never signs through a directory the chain refused, however prepares and submits follow or overlap', async () => {
+  const w = await world({ probed: true })
+  const cache = storage()
+  await w.client({ verificationCache: cache }).discover()
+  // The node's directory now names another vault; the cache holds the directory's facts as read
+  // before. Store 7, an AddStore's, needs nothing from the cache: its admission is its proof.
+  w.chain.binding.set(1, { directory: bytes(1), vault: bytes(9), network: 1 })
+  const fresh = async () => {
+    const client = w.client({ verificationCache: cache })
+    await client.discover()
+    expect(await client.store(id(7)).capacity()).toMatchObject({ sealed: false })
+    return { client, app: createDuskDomainsConnectApp(wallet, client.release) }
+  }
+  const refusedDirectory = (error: unknown) => {
+    expect(error).toBeInstanceOf(UnverifiedContractError)
+    expect((error as Error).cause).toBeInstanceOf(ContractRefusedError)
+    expect((error as Error).cause).toMatchObject({ contractId: id(1), message: 'Contract deployment binding mismatch' })
+  }
+  // One after another: the first verifies the directory from the chain and refuses it; every later
+  // one stops at that refusal.
+  const { client, app } = await fresh()
+  for (let i = 0; i < 3; i++) {
+    refusedDirectory(await app.prepare(commitAt(7)).catch((e: unknown) => e))
+    refusedDirectory(await app.submit(commitAt(7)).catch((e: unknown) => e))
+  }
+  // Nothing the directory vouched for is read through it any more.
+  await expect(client.store(id(7)).capacity()).rejects.toThrow('Contract deployment binding mismatch')
+  // Overlapping: both start before the directory's verification from the chain answers.
+  const racing = await fresh()
+  let release!: () => void
+  const held = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  let bindings = 0
+  w.chain.onRead = async (call) => {
+    if (call !== '01.binding') return
+    bindings++
+    await held
+  }
+  const settled = Promise.allSettled([
+    racing.app.prepare(commitAt(7)),
+    racing.app.submit(commitAt(7)),
+    racing.app.prepare(commitAt(4)),
+  ])
+  await vi.waitFor(() => expect(bindings).toBe(1))
+  release()
+  const results = await settled
+  expect(results.map((r) => r.status)).toEqual(['rejected', 'rejected', 'rejected'])
+  for (const r of results) refusedDirectory((r as PromiseRejectedResult).reason)
+  expect(bindings).toBe(1)
+})
+
+it('keeps no entries for a custom fetch without a transport namespace, which may send a node URL anywhere', async () => {
+  const w = await world()
+  const cache = storage()
+  const viaFetch = (options: ClientOptions = {}) =>
+    new FrozenClient(w.release, { fetch: serving(w.transport), verificationCache: cache, ...options })
+  // The same node URL behind two fetchers: neither keeps nor reads an entry.
+  await viaFetch().discover()
+  expect(cache.items.size).toBe(0)
+  w.log.length = 0
+  await viaFetch().discover()
+  expect(w.log.filter((call) => verification.test(call))).toHaveLength(11)
+  expect(cache.items.size).toBe(0)
+  // Named, each keeps its own, and the name wins over the transport's.
+  await viaFetch({ transportNamespace: 'backend-a' }).discover()
+  expect(cache.items.size).toBe(5)
+  w.log.length = 0
+  await viaFetch({ transportNamespace: 'backend-b' }).discover()
+  expect(w.log.filter((call) => verification.test(call))).toHaveLength(11)
+  expect(cache.items.size).toBe(10)
+  w.log.length = 0
+  await viaFetch({ transportNamespace: 'backend-a' }).discover()
+  expect(w.log.filter((call) => verification.test(call))).toEqual([])
+  // The default fetch sends a node URL's requests to it: entries are keyed by that URL.
+  const defaults = storage()
+  vi.stubGlobal('fetch', serving(w.transport))
+  try {
+    await new FrozenClient(w.release, { verificationCache: defaults }).discover()
+    expect(defaults.items.size).toBe(5)
+  } finally {
+    vi.unstubAllGlobals()
+  }
 })
