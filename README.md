@@ -30,8 +30,10 @@ if (result.value !== 'Absent' && 'Local' in result.value) {
 No wallet or supplied block height is needed. The client fetches the current
 height and follows permanent forwarding with a 63-hop default limit.
 `createClientFromManifest` verifies the directory; every other contract is verified the
-first time an operation reads through it, and `discover()` verifies every admitted one up
-front. Verification checks the release artifact, the directory's admission or market
+first time an operation reads through it, so a contract that fails a check throws its
+`ContractRefusedError` there. `discover()` verifies every admitted one up front, as a
+health check, and `{ eager: true }` makes the factory run it before returning.
+Verification checks the release artifact, the directory's admission or market
 record, interface, deployment binding and init commitment. The directory reads a
 contract's interface and binding when it admits it, so the client reads neither for a
 contract the directory probed, only for those its init admitted unprobed
@@ -47,13 +49,19 @@ against the release wherever it is quoted, built or signed. `quoteRegistration` 
 only the unchanged quote object they returned, and the Connect app signs a reveal only
 for terms its client quoted under the selection it read. Connect signs only for
 contracts whose release descriptor commits to their code and initialization (`codeHash`
-and `initHash`); others are readable only. Multi-read operations, including
+and `initHash`); others are readable only. For a target its client has not verified, it
+throws an `UnverifiedContractError`, whose `cause` is the client's refusal when it
+refused the contract. Multi-read operations, including
 `prepareRegistration`, run at one height: a sequence that crosses a block is read
-again, up to three times. Operations share identical reads made at one height, in flight
-or answered, open at a height read that arrived in the last `heightReuseMs` (1 s by
-default), and close with a height read sent after every reply they used, so a page
-reads each fact about once per block. Use a consistent node endpoint;
-height bracketing is not a historical-state or same-height-reorg proof. The node is a
+again, up to three times. The default transport reads the tip's height and block hash in
+one request, so a block that replaces the tip at the same height counts as a new tip.
+Operations share identical reads made at one tip, in flight or answered, open at a
+height read that arrived in the last `heightReuseMs` (1 s by default), and close with a
+height read sent after every reply they used, so a page reads each fact about once per
+block. A custom transport without `currentBlock` gives heights only: operations then
+share an answered read only within `heightReuseMs`, as such a transport cannot show a
+same-height replacement. Use a consistent node endpoint; height bracketing is not a
+historical-state proof. The node is a
 trust root for reads; the chain still enforces what a signed call pays
 ([trust model](docs/integration-trust-model.md#what-the-node-can-and-cannot-do)).
 Unavailable dependencies throw; they are never interpreted as absence.
@@ -103,7 +111,11 @@ an implementation absent from the initial manifest. It is subjected to the same
 artifact, admission, interface, binding and init checks, and enters `client.release`
 only once all of them pass. `verificationCache` (for example `sessionStorage`) keeps
 what verification read about each contract, which a deployed contract cannot change,
-for clients created later; every check runs again on it, and state is never kept. `admitDirectoryEvent` also accepts committed,
+for clients created later; every check runs again on it, and state is never kept. A
+contract verified from it serves reads only: before Connect signs for it, or a
+registration is quoted under it, the client verifies it from the chain, once. Entries are
+keyed by the chain state the transport reads: the default transport's node URL, or
+`transportNamespace` for a custom transport, without which a custom transport keeps none. `admitDirectoryEvent` also accepts committed,
 authenticated directory initialization/admission events; one that contradicts what
 the client reads is rejected, and the contract stays verified.
 

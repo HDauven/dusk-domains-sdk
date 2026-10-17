@@ -1,5 +1,11 @@
 import { it, expect } from 'vitest'
-import { FrozenClient, createClientFromManifest, type ClientOptions } from '../src/frozen/client.ts'
+import {
+  ContractRefusedError,
+  FrozenClient,
+  UnverifiedContractError,
+  createClientFromManifest,
+  type ClientOptions,
+} from '../src/frozen/client.ts'
 import { parseJson, stringifyJson } from '../src/frozen/json.ts'
 import { authority, fromHex, hex, nameKey } from '../src/frozen/bytes.ts'
 import { estimateRegistrationQuote, launchPolicyConfig } from '../src/core/pricing.ts'
@@ -189,11 +195,17 @@ async function scaled(n: number, r = 3) {
     }
     throw new Error(`Unexpected read ${target}.${fn}`)
   }
+  // As the default HTTP transport reads it: the tip's height and block hash in one request.
   const transport: ReadTransport = {
+    currentBlock: async () => {
+      log.push(H)
+      return { height: chain.height, hash: `${chain.height}` }
+    },
     currentBlockHeight: async () => {
       log.push(H)
       return chain.height
     },
+    namespace: 'scaled',
     read: async (target, fn, data) => {
       const call = `${target.slice(0, 2)}.${fn}`
       log.push(call)
@@ -385,6 +397,28 @@ it.each([1, 4, 64])('gives every hint the result no hint gives: a wrong or lying
   }
 })
 
+it('follows each route once when looking for a root no store holds', async () => {
+  const w = await scaled(4)
+  // A root that moved from store to store and is held by none now: every store forwards it on.
+  const gone = nameKey('gone.dusk')
+  for (let i = 0; i < 3; i++)
+    w.chain.homes.set(`${store(i)}:${hex(gone.root)}`, { Forwarded: forward(gone.root, store(i + 1), i + 1) })
+  // By height alone, with heightReuseMs 0, no answered read is shared: each home read is a request.
+  const { currentBlock: _, ...heightOnly } = w.transport
+  const c = new FrozenClient(w.release, { transport: heightOnly, heightReuseMs: 0 })
+  await c.verifyContract('directory', id(1))
+  const homes = async (hint?: string) => {
+    w.log.length = 0
+    expect(await c.getName('gone.dusk', hint)).toMatchObject({ store: w.newest, value: 'Absent' })
+    return w.log.filter((call) => call.endsWith('.home'))
+  }
+  // Store 0's route passes every other store, which then starts no route of its own: a route from
+  // one is the rest of that route, and ends where it did.
+  expect(await homes()).toEqual(['40.home', '41.home', '42.home', '43.home'])
+  // A route is still followed whole: one cut short where another passed could miss its hop limit.
+  expect(await homes(store(1))).toEqual(['41.home', '42.home', '43.home', '40.home', '41.home', '42.home', '43.home'])
+})
+
 it('answers from the scan when the hinted admission cannot be read', async () => {
   const w = await scaled(4)
   const c = await w.client()
@@ -435,6 +469,26 @@ it('signs only for stores a read verified, and prepareRegistration verifies ever
   const prepared = await c.prepareRegistration(registration('fresh'))
   for (let i = 0; i < 4; i++) expect((await app.prepare(commit(store(i)))).contractId).toBe(store(i))
   expect((await app.prepare(prepared.calls.reveal)).fnName).toBe('register')
+})
+
+it('tells a target this client has not verified from one it refused', async () => {
+  const w = await scaled(4)
+  const c = await w.client()
+  const wallet = { request: async (method: string) => (method === 'dusk_chainId' ? 'dusk:1' : { median: '1' }) }
+  const app = createDuskDomainsConnectApp(wallet, c.release)
+  const commit = (s: string) => buildCall('store', s, 'commit', { hash: bytes(1) })
+  const unread = await app.prepare(commit(w.newest)).catch((error: unknown) => error)
+  expect(unread).toBeInstanceOf(UnverifiedContractError)
+  expect(unread).toMatchObject({ contractId: w.newest, role: 'store', message: 'Target is absent from verified release' })
+  expect((unread as Error).cause).toBeUndefined()
+  // Refused by this client: its refusal, which the factory threw before lazy verification, is the cause.
+  w.chain.replies.set('40.binding', { directory: bytes(11), vault: bytes(2), network: 1 })
+  await expect(c.verifyContract('store', store(0))).rejects.toThrow(ContractRefusedError)
+  const refused = await app.prepare(commit(store(0))).catch((error: unknown) => error)
+  expect(refused).toBeInstanceOf(UnverifiedContractError)
+  expect(refused).toMatchObject({ contractId: store(0), message: 'Target is absent from verified release' })
+  expect((refused as Error).cause).toBeInstanceOf(ContractRefusedError)
+  expect((refused as Error).cause).toMatchObject({ contractId: store(0), message: 'Contract deployment binding mismatch' })
 })
 
 it('makes nothing signable that only an abandoned attempt verified', async () => {
@@ -640,4 +694,11 @@ it('creates a client from a manifest with only the directory verified', async ()
   expect(log).toEqual(['01.interface_version', '01.binding'])
   // discover() still verifies every admitted contract up front.
   expect(client.directoryId).toBe(id(1))
+  // `eager` runs it before the factory returns, so its failure is the factory's.
+  log.length = 0
+  await expect(
+    createClientFromManifest(r.manifest, { artifactBaseUrl: r.artifactBaseUrl, fetch: serve as typeof fetch, transport: counted, eager: true }),
+  ).rejects.toThrow(`Unexpected test read ${id(1)}.config`)
+  // A failure at an unchanged height is final: one height read closes the attempt.
+  expect(log).toEqual(['01.interface_version', '01.binding', H, '01.config', H])
 })

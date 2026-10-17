@@ -1,5 +1,6 @@
 import { it, expect } from 'vitest'
-import { FrozenClient, type ClientOptions } from '../src/frozen/client.ts'
+import { ContractRefusedError, FrozenClient, type ClientOptions } from '../src/frozen/client.ts'
+import { registrationCalls } from '../src/frozen/actions.ts'
 import { parseJson, stringifyJson } from '../src/frozen/json.ts'
 import { fromHex } from '../src/frozen/bytes.ts'
 import { estimateRegistrationQuote, launchPolicyConfig } from '../src/core/pricing.ts'
@@ -41,7 +42,13 @@ function storage() {
  */
 async function world() {
   const release = await jsonRelease()
-  const chain = { height: 100n, binding: new Map<number, unknown>(), onHeight: undefined as undefined | (() => void) }
+  const chain = {
+    height: 100n,
+    binding: new Map<number, unknown>(),
+    onHeight: undefined as undefined | (() => void),
+    /** The policy's live config, when it differs from the one the release committed to. */
+    policyConfig: undefined as undefined | ReturnType<typeof launchPolicyConfig>,
+  }
   const log: string[] = []
   const transport: ReadTransport = {
     currentBlockHeight: async () => {
@@ -69,7 +76,7 @@ async function world() {
         if (n === 1 && fn === 'member') return { ...samples.Admission, id: args.id, ordinal: 0, interface_version: 1, retiring: false }
         if (n === 1 && fn === 'market') return { ...samples.Market, id: args.id, interface_version: 1, state: 'Listed', version: 1n }
         if (n === 1 && fn === 'registration_context') return registration
-        if (n === 3 && fn === 'config') return launchPolicyConfig()
+        if (n === 3 && fn === 'config') return chain.policyConfig ?? launchPolicyConfig()
         if (n === 4 && fn === 'home') return 'Absent'
         if (n === 4 && fn === 'capacity') return { ...samples.Capacity, sealed: false }
         if (n === 4 && fn === 'quote_registration') {
@@ -86,7 +93,9 @@ async function world() {
       return encode(reply)
     },
   }
-  const client = (options: ClientOptions = {}, r: LoadedRelease = release) => new FrozenClient(r, { transport, ...options })
+  // The test transport stands for the manifest's node, and says so for the cache's keys.
+  const client = (options: ClientOptions = {}, r: LoadedRelease = release) =>
+    new FrozenClient(r, { transport, transportNamespace: r.manifest.nodeUrl, ...options })
   return { chain, release, log, client }
 }
 const registration = { actor: bytes(10), label: 'fresh', years: 1, secret: bytes(33), commitHeight: 100n }
@@ -96,7 +105,7 @@ const withDescriptor = (r: LoadedRelease, n: number, change: Partial<ReleaseCont
   return { ...r, contracts, manifest: { ...r.manifest, contracts: [...contracts.values()] } }
 }
 
-it('verifies a contract a client verified before from what it read then, and only its own state', async () => {
+it('reads through what an earlier client verified, and verifies from the chain what it quotes under or signs for', async () => {
   const w = await world()
   const cache = storage()
   const first = w.client({ verificationCache: cache })
@@ -111,16 +120,87 @@ it('verifies a contract a client verified before from what it read then, and onl
   w.chain.height++
   w.log.length = 0
   const prepared = await second.prepareRegistration(registration)
-  expect(w.log.filter((call) => verification.test(call))).toEqual([])
-  // The policy's config is still read as the directory's selection, once per attempt (the first may
-  // open at the height discovery closed with, which the block left); only its verification was kept.
+  // A quote that can be signed: its policy, and the directory vouching for it, are read again.
+  expect(w.log.filter((call) => verification.test(call))).toEqual([
+    '01.interface_version', '01.binding', '03.interface_version', '03.binding',
+  ])
+  // The policy's config is read as the directory's selection once per attempt (the first may open at
+  // the height discovery closed with, which the block left), and once for its init commitment.
   expect(w.log.filter((call) => call === '03.config')).toHaveLength(
-    w.log.filter((call) => call === '04.quote_registration').length,
+    w.log.filter((call) => call === '04.quote_registration').length + 1,
   )
-  // What it verified is signable as if it had read everything again.
+  // Signing for a contract only the cache vouched for verifies it from the chain first, once.
   const app = createDuskDomainsConnectApp(wallet, second.release)
+  w.log.length = 0
   expect((await app.prepare(prepared.calls.reveal)).fnName).toBe('register')
+  expect(w.log.filter((call) => verification.test(call))).toEqual(['04.interface_version', '04.binding'])
+  w.log.length = 0
   expect((await app.prepare(buildCall('store', id(4), 'commit', { hash: bytes(1) }))).contractId).toBe(id(4))
+  expect(w.log).toEqual([])
+})
+
+it('never signs for a contract only the cache vouched for: the chain refuses it then, for reads too', async () => {
+  const w = await world()
+  const cache = storage()
+  await w.client({ verificationCache: cache }).discover()
+  // The node now binds store 4 to another directory; the cache holds what it read before.
+  w.chain.binding.set(4, { directory: bytes(9), vault: bytes(2), network: 1 })
+  const client = w.client({ verificationCache: cache })
+  await client.discover()
+  expect(await client.store(id(4)).capacity()).toMatchObject({ sealed: false })
+  const app = createDuskDomainsConnectApp(wallet, client.release)
+  const commit = buildCall('store', id(4), 'commit', { hash: bytes(1) })
+  // Verified from the chain before signing, it is refused: then and for good.
+  await expect(app.prepare(commit)).rejects.toThrow(ContractRefusedError)
+  const again = await app.prepare(commit).catch((error: unknown) => error)
+  expect((again as Error).cause).toMatchObject({ message: 'Contract deployment binding mismatch' })
+  await expect(client.store(id(4)).capacity()).rejects.toThrow('Contract deployment binding mismatch')
+  // The live result replaced nothing in the cache: a new client reads from it, and signs nothing.
+  const next = w.client({ verificationCache: cache })
+  await next.discover()
+  await expect(createDuskDomainsConnectApp(wallet, next.release).prepare(commit)).rejects.toThrow('Contract deployment binding mismatch')
+})
+
+it('quotes a registration only under a policy the chain shows, never under the cache\'s word', async () => {
+  const w = await world()
+  const cache = storage()
+  const first = w.client({ verificationCache: cache })
+  await first.discover()
+  const prepared = await first.prepareRegistration(registration)
+  // The node's policy now has a configuration the release did not commit to; the cache holds the
+  // init commitment it read before.
+  w.chain.policyConfig = { ...launchPolicyConfig(), minimum_root_bytes: 4 }
+  const client = w.client({ verificationCache: cache })
+  await client.discover()
+  // A preview is for display, and may rest on the cache; it never builds a call.
+  const preview = await client.previewRegistration({ label: 'fresh', years: 1, actor: bytes(10) })
+  expect(() => registrationCalls(preview.store, { ...registration, commitmentStore: preview.store, quote: preview.quote })).toThrow('quote again')
+  // A quote that can be signed reads the policy from the chain, which refuses it, for good.
+  await expect(client.prepareRegistration(registration)).rejects.toThrow(ContractRefusedError)
+  await expect(client.prepareRegistration(registration)).rejects.toThrow('Policy initialization does not match its init commitment')
+  await expect(client.policy(id(3)).config()).rejects.toThrow('Policy initialization does not match its init commitment')
+  // Nothing this client quoted can be signed, nor another client's reveal.
+  await expect(createDuskDomainsConnectApp(wallet, client.release).prepare(prepared.calls.reveal)).rejects.toThrow('is not verified against this release')
+})
+
+it('keys entries by the chain state the transport reads, and keeps none for a custom transport that names none', async () => {
+  const w = await world()
+  const cache = storage()
+  await w.client({ verificationCache: cache }).discover()
+  expect(cache.items.size).toBe(5)
+  // A custom transport that names no chain state reads and writes no entry.
+  w.log.length = 0
+  await w.client({ verificationCache: cache, transportNamespace: undefined }).discover()
+  expect(w.log.filter((call) => verification.test(call))).toHaveLength(11)
+  expect(cache.items.size).toBe(5)
+  // Another node behind the same manifest has entries of its own.
+  w.log.length = 0
+  await w.client({ verificationCache: cache, transportNamespace: 'https://other-node.invalid' }).discover()
+  expect(w.log.filter((call) => verification.test(call))).toHaveLength(11)
+  expect(cache.items.size).toBe(10)
+  w.log.length = 0
+  await w.client({ verificationCache: cache }).discover()
+  expect(w.log.filter((call) => verification.test(call))).toEqual([])
 })
 
 it('keeps only what a deployed contract cannot change', async () => {

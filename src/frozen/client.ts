@@ -26,8 +26,8 @@ import {
 import { parseJson, stringifyJson } from './json.ts'
 import { wireValue } from './wire.ts'
 import { primaryNameStatus } from '../core/primary.ts'
-import { createHttpTransport, type ReadTransport } from './transport.ts'
-import { ReadSharing, type Attempt } from './sharing.ts'
+import { createHttpTransport, type ChainTip, type ReadTransport } from './transport.ts'
+import { ReadSharing, sameTip, type Attempt } from './sharing.ts'
 import {
   ContractRefusedError,
   createLedger,
@@ -69,7 +69,7 @@ import type {
   Market,
 } from './types.ts'
 
-export { ContractRefusedError, UnverifiedQuoteError } from './trust.ts'
+export { ContractRefusedError, UnverifiedContractError, UnverifiedQuoteError } from './trust.ts'
 /** An operation saw a block land; its snapshot runs it again. */
 class TipMoved extends Error {}
 const policyAdmissionMismatch = () =>
@@ -116,19 +116,37 @@ export interface ClientOptions extends ManifestOptions {
    * Keep what verification reads about each contract for clients created later, such as after a
    * page load: its interface and deployment binding, a marketplace's order API version and a
    * policy's init commitment, none of which a deployed contract can change. An entry is bound to
-   * the manifest's chain, network and node URL, the directory and vault, and the contract's ID,
-   * role and release descriptor. Every check runs again on what an entry holds, and an entry that
-   * fails one is ignored and verified from the chain. Admissions, membership, configuration and
-   * other state are never kept, nor anything for a contract the client refused or verified only
-   * in a snapshot it abandoned. Storage failures only mean verifying from the chain.
+   * the chain, network and directory of the release, the vault, the transport's namespace (the
+   * node URL of the default transport; see `transportNamespace`), and the contract's ID, role and
+   * release descriptor. Every check runs again on what an entry holds, and an entry that fails one
+   * is ignored and verified from the chain. A contract verified from an entry is readable, never
+   * signable: before the Connect app signs for it, or a registration is quoted under it, the
+   * client verifies it from the chain, once. Admissions, membership, configuration and other state
+   * are never kept, nor anything for a contract the client refused or verified only in a snapshot
+   * it abandoned. Storage failures only mean verifying from the chain.
    */
   verificationCache?: VerificationCache
+  /**
+   * Names the chain state a custom `transport` reads, such as its node URL, so verification cache
+   * entries are keyed by it. With a custom transport that has no `namespace` of its own and no
+   * `transportNamespace`, the client keeps and reads no verification cache entries.
+   */
+  transportNamespace?: string
+  /**
+   * `createClientFromManifest` only: discover and verify every admitted store and resolver, the
+   * vault and the preferred marketplace before returning the client, as the factory did before
+   * 0.4.0, so a contract that fails a check throws its `ContractRefusedError` there.
+   */
+  eager?: boolean
   /**
    * Open a snapshot at the height the latest height read reported, when it arrived less than this
    * many milliseconds ago, instead of reading the height again: 1000 by default, 0 to read it every
    * time. The snapshot still closes with a height read sent after it began, so either way its result
    * is the state at a height that was the tip during the call. When a block landed in between, it
-   * reads again at the new height, and that first attempt is not one of its three.
+   * reads again at the new height, and that first attempt is not one of its three. A transport
+   * without `currentBlock` gives heights only, which cannot show a block replaced at the same
+   * height: with one, an operation then shares another's answered read only within this window,
+   * and with 0 only one still in flight.
    */
   heightReuseMs?: number
 }
@@ -213,8 +231,13 @@ export class FrozenClient {
   private readonly ledger: Ledger
   private readonly verifying = new Map<string, Promise<void>>()
   private readonly sharing: ReadSharing
-  /** Facts this client holds, by `factsKey`; `kept` once the verification cache has them. */
-  private readonly facts = new Map<string, { facts: Facts; kept: boolean }>()
+  /**
+   * Facts this client holds, by `factsKey`: `kept` once the verification cache has them, `live` when
+   * this client read them from the chain rather than from the verification cache.
+   */
+  private readonly facts = new Map<string, { facts: Facts; kept: boolean; live: boolean }>()
+  /** The verification cache's namespace for the transport's chain state; none means no cache. */
+  private readonly cacheNamespace: string | undefined
   /** Contracts an attempt verified, whose facts the cache gets once the attempt commits. */
   private readonly unkept = new WeakMap<VerifiedContract, string>()
   /**
@@ -233,7 +256,11 @@ export class FrozenClient {
     this.transport =
       options.transport ??
       createHttpTransport(release.manifest.nodeUrl, options.fetch)
-    this.sharing = new ReadSharing(this.transport)
+    // A transport the caller supplies keys the cache only by a namespace the caller gives it.
+    this.cacheNamespace = options.transport
+      ? (options.transportNamespace ?? options.transport.namespace)
+      : this.transport.namespace
+    this.ledger.confirm = (role, id) => this.verify(role, id, undefined, false, undefined, false, true)
     this.directoryId = release.manifest.contracts.find(
       (c) => c.role === 'directory',
     )!.contractId
@@ -250,6 +277,7 @@ export class FrozenClient {
     this.heightReuseMs = options.heightReuseMs ?? HEIGHT_REUSE_MS
     if (typeof this.heightReuseMs !== 'number' || !(this.heightReuseMs >= 0))
       throw new Error('heightReuseMs must be zero or more')
+    this.sharing = new ReadSharing(this.transport, this.heightReuseMs)
     this.directory = this.api('directory', this.directoryId)
     this.vault = this.api('vault', this.vaultId)
   }
@@ -294,7 +322,13 @@ export class FrozenClient {
       reused = undefined
       first = false
       // What this attempt verifies becomes signable only if the attempt commits.
-      const at: Attempt = { height: before, stage: { touched: new Set() }, began, replied: 0 }
+      const at: Attempt = {
+        height: before.height,
+        ...(before.hash === undefined ? {} : { hash: before.hash }),
+        stage: { touched: new Set() },
+        began,
+        replied: 0,
+      }
       const close = () => {
         since = tracked ? Math.max(began, at.replied) : this.sharing.now()
         return this.sharing.close(since)
@@ -306,20 +340,20 @@ export class FrozenClient {
         this.abandon(at.stage)
         if (isHeightIndependent(error)) throw error
         if (!(error instanceof TipMoved)) {
-          let after: bigint
+          let after: ChainTip
           try {
             after = await close()
           } catch {
             throw error
           }
-          if (after === before) throw error
+          if (sameTip(after, before)) throw error
           if (!free) failures.push(error instanceof Error ? error.message : String(error))
         } else since = this.sharing.now()
         crossed = error
         if (!free) counted++
         continue
       }
-      if (before === (await close())) {
+      if (sameTip(before, await close())) {
         this.commit(at.stage)
         return result
       }
@@ -473,7 +507,9 @@ export class FrozenClient {
    * attempt verifying it, which commits the result only if the attempt commits. `probed`: what the
    * client read from the directory at `at`'s height shows that the directory probed the contract
    * when it selected it (see `probedRecord`): the current policy at policy version 2 or more, or
-   * the preferred marketplace at market version 2 or more.
+   * the preferred marketplace at market version 2 or more. `live`: what is signed for or quoted
+   * under needs facts this client read from the chain, so a contract verified from the
+   * verification cache only is verified again, ignoring it.
    */
   private async verify(
     role: ContractRole,
@@ -482,6 +518,7 @@ export class FrozenClient {
     fromDirectory: boolean,
     at?: Attempt,
     probed = false,
+    live = false,
   ): Promise<void> {
     id = contractId(id)
     const key = id,
@@ -493,8 +530,9 @@ export class FrozenClient {
     if (refusal) throw heightIndependent(refusal)
     const known = this.ledger.verified.get(id)
     // A verification only other attempts staged is no evidence outside them: verify it again,
-    // unless this call belongs to an attempt too, which then commits it with its own evidence.
-    if (known && (!known.pending || stage)) {
+    // unless this call belongs to an attempt too, which then commits it with its own evidence. One
+    // from the verification cache only is verified again where facts read from the chain are needed.
+    if (known && (!known.pending || stage) && !(live && known.cached)) {
       if (known.role !== role)
         throw heightIndependent(new Error('Contract role mismatch'))
       if (known.pending && stage) {
@@ -512,7 +550,7 @@ export class FrozenClient {
       }
       return
     }
-    const run = this.verifyNew(role, id, evidence, fromDirectory, at, probed)
+    const run = this.verifyNew(role, id, evidence, fromDirectory, at, probed, live)
     this.verifying.set(key, run)
     try {
       await run
@@ -527,11 +565,14 @@ export class FrozenClient {
     fromDirectory: boolean,
     at: Attempt | undefined,
     probed: boolean,
+    live: boolean,
   ): Promise<void> {
     const stage = at?.stage
     try {
+      // The directory's record and binding vouch for every other contract: a live verification
+      // takes them from the chain too.
       if (role !== 'directory')
-        await this.verify('directory', this.directoryId, undefined, false, at)
+        await this.verify('directory', this.directoryId, undefined, false, at, false, live)
       const candidate = await this.candidate(role, id, evidence),
         c = candidate.descriptor
       if (c.role !== role) throw new Error('Contract role mismatch')
@@ -547,14 +588,21 @@ export class FrozenClient {
         this.compareEvidence(id, c, evidence, read, false)
       }
       // Facts an earlier verification read are checked like fresh ones; facts that fail a check are
-      // only ignored, and the contract is checked from the chain, which alone can refuse it.
+      // only ignored, and the contract is checked from the chain, which alone can refuse it. What the
+      // directory's record proves needs no facts; `live` takes none from the verification cache.
       const key = this.factsKey(role, id, c),
-        held = this.facts.get(key) ?? (await this.cachedFacts(key)),
-        proven = probed || this.probedRecord(role, record)
+        proven = probed || this.probedRecord(role, record),
+        more = role === 'marketplace' || (role === 'policy' && (c.initHash !== undefined || evidence !== undefined))
+      let held = this.facts.get(key)
+      if (held && !held.live && live) held = undefined
+      if (!held && !live) held = await this.cachedFacts(key)
+      if (proven && !more) held = undefined
       const checked =
         (held && (await this.checkContract(role, id, candidate, evidence, record, at, proven, held.facts))) ||
         (await this.checkContract(role, id, candidate, evidence, record, at, proven))!
-      this.facts.set(key, checked.facts === held?.facts ? held : { facts: checked.facts, kept: false })
+      const cached = checked.facts === held?.facts && !held.live
+      // Facts the record proves alone are never kept: no later client needs to read them.
+      this.facts.set(key, checked.facts === held?.facts ? held : { facts: checked.facts, kept: proven && !more, live: true })
       // Every check passed: only now does the contract become readable, and signable once the
       // snapshot attempt that verified it, if any, commits.
       const addedToRelease = !this.release.contracts.has(id)
@@ -573,6 +621,8 @@ export class FrozenClient {
           role === 'vault' ||
           (c.codeHash !== undefined && c.initHash !== undefined),
         ...(stage ? { pending: new Set([stage]), addedToRelease } : {}),
+        // Facts from the verification cache serve reads; signing reads them from the chain first.
+        ...(cached ? { cached: true } : {}),
       }
       this.ledger.verified.set(id, row)
       this.unkept.set(row, key)
@@ -722,21 +772,30 @@ export class FrozenClient {
       a.sha256 ?? null, a.blake2b256 ?? null, a.blake3 ?? null, a.bytes ?? null,
     ])
   }
-  /** The verification cache's key for facts: also bound to this deployment and its node. */
-  private cacheKey(key: string): string {
-    const m = this.release.manifest
+  /**
+   * The verification cache's key for facts: also bound to the chain state the transport reads (its
+   * namespace), the release's chain, network and directory, with the directory's commitments, and
+   * the vault.
+   */
+  private cacheKey(key: string, namespace: string): string {
+    const m = this.release.manifest,
+      directory = this.release.contracts.get(this.directoryId)
     const digest = hash(
-      'duskds:sdk:verification-cache:v1',
-      stringifyJson([m.chainId, m.network, m.nodeUrl, this.directoryId, this.vaultId, key]),
+      'duskds:sdk:verification-cache:v2',
+      stringifyJson([
+        m.chainId, m.network, namespace, this.directoryId, directory?.codeHash ?? null,
+        directory?.initHash ?? null, this.vaultId, key,
+      ]),
     )
-    return `duskdomains:verified:v1:${hex(digest)}`
+    return `duskdomains:verified:v2:${hex(digest)}`
   }
   /** Facts the verification cache holds for `key`; a malformed or unreadable entry is none. */
-  private async cachedFacts(key: string): Promise<{ facts: Facts; kept: boolean } | undefined> {
-    const cache = this.options.verificationCache
-    if (!cache) return undefined
+  private async cachedFacts(key: string): Promise<{ facts: Facts; kept: boolean; live: boolean } | undefined> {
+    const cache = this.options.verificationCache,
+      namespace = this.cacheNamespace
+    if (!cache || namespace === undefined) return undefined
     try {
-      const text = await cache.getItem(this.cacheKey(key))
+      const text = await cache.getItem(this.cacheKey(key, namespace))
       if (typeof text !== 'string') return undefined
       const entry = object(parseJson(text))
       if (entry.version !== 1) return undefined
@@ -749,7 +808,7 @@ export class FrozenClient {
         if (typeof entry.init !== 'string' || !/^[\da-f]{64}$/u.test(entry.init)) return undefined
         facts.init = entry.init
       }
-      return { facts, kept: true }
+      return { facts, kept: true, live: false }
     } catch {
       return undefined
     }
@@ -759,8 +818,9 @@ export class FrozenClient {
     const key = this.unkept.get(row)
     this.unkept.delete(row)
     const held = key === undefined ? undefined : this.facts.get(key)
-    const cache = this.options.verificationCache
-    if (!cache || !held || held.kept) return
+    const cache = this.options.verificationCache,
+      namespace = this.cacheNamespace
+    if (!cache || namespace === undefined || !held || held.kept) return
     held.kept = true
     const { facts } = held
     const value = stringifyJson({
@@ -771,7 +831,7 @@ export class FrozenClient {
       ...(facts.init === undefined ? {} : { init: facts.init }),
     })
     try {
-      const done = cache.setItem(this.cacheKey(key!), value) as PromiseLike<unknown> | undefined
+      const done = cache.setItem(this.cacheKey(key!, namespace), value) as PromiseLike<unknown> | undefined
       if (typeof done?.then === 'function') done.then(undefined, () => {})
     } catch {
       // Storage is full or unavailable: the next client verifies from the chain.
@@ -1152,18 +1212,28 @@ export class FrozenClient {
     root: Contract,
     hint?: string,
   ): Promise<{ start: string; store: string; forwards: Forward[] } | undefined> {
+    // Stores on a route that ended elsewhere than a Local home: a route from one of them is the
+    // rest of that route and ends there too, so the search does not follow it again.
+    const ended = new Set<string>()
+    const passed = (start: string, forwards: Forward[]) => {
+      ended.add(start)
+      for (const f of forwards) ended.add(contractId(f.destination))
+    }
     if (hint !== undefined)
       try {
         const start = contractId(hint),
           home = await this.followHomeRaw(at, start, root)
         if (home.value === 'Local') return { start, ...home }
+        passed(start, home.forwards)
       } catch {
         // Only reads were spent: the search below decides.
       }
     for (const a of await this.storeList(at)) {
-      const start = contractId(a.id),
-        home = await this.followHomeRaw(at, start, root)
+      const start = contractId(a.id)
+      if (ended.has(start)) continue
+      const home = await this.followHomeRaw(at, start, root)
       if (home.value === 'Local') return { start, ...home }
+      passed(start, home.forwards)
     }
     return undefined
   }
@@ -1374,8 +1444,9 @@ export class FrozenClient {
         'directory', this.directoryId, 'registration_context', null, at,
       )
       const policy = contractId(context.policy)
-      // Past policy version 1, a SetPolicy selected the policy, after probing it.
-      await this.verify('policy', policy, undefined, false, at, context.policy_version >= 2n)
+      // Past policy version 1, a SetPolicy selected the policy, after probing it. A quote that can be
+      // signed is quoted under facts read from the chain, not the verification cache.
+      await this.verify('policy', policy, undefined, false, at, context.policy_version >= 2n, true)
       const config = await this.raw('policy', policy, 'config', null, at)
       let previousGeneration = placement.releasedRoot?.counters.generation ?? 0n
       let previousGraceEnd = placement.releasedRoot?.grace_end ?? null
@@ -1458,8 +1529,9 @@ export class FrozenClient {
         'directory', this.directoryId, 'registration_context', null, at,
       )
       const policy = contractId(context.policy)
-      // Past policy version 1, a SetPolicy selected the policy, after probing it.
-      await this.verify('policy', policy, undefined, false, at, context.policy_version >= 2n)
+      // Past policy version 1, a SetPolicy selected the policy, after probing it. A quote that can be
+      // signed is quoted under facts read from the chain, not the verification cache.
+      await this.verify('policy', policy, undefined, false, at, context.policy_version >= 2n, true)
       const config = await this.raw('policy', policy, 'config', null, at)
       const quote = await this.raw('store', store, 'quote_registration', args, at)
       if (quote.height !== at.height) throw new TipMoved()
@@ -1644,8 +1716,9 @@ export class FrozenClient {
 }
 /**
  * A client for the release `source` names, with its directory verified. Every other contract is
- * verified the first time an operation reads through it; `discover()` verifies every admitted
- * store and resolver, the vault and the preferred marketplace up front.
+ * verified the first time an operation reads through it. `discover()` verifies every admitted
+ * store and resolver, the vault and the preferred marketplace up front, and with `eager` the
+ * factory runs it before returning.
  */
 export async function createClientFromManifest(
   source: unknown,
@@ -1656,5 +1729,6 @@ export async function createClientFromManifest(
     options,
   )
   await client.verifyContract('directory', client.directoryId)
+  if (options.eager) await client.discover()
   return client
 }

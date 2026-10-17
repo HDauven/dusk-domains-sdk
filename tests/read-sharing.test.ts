@@ -25,6 +25,8 @@ const samples = Object.fromEntries(
 
 interface Chain {
   height: bigint
+  /** Bumped when a block replaces the tip at the same height: part of the tip's hash. */
+  fork: number
   stores: Admission[]
   preferred: boolean
   /** Each store's home for a root, by `store:root`; absent means Absent. */
@@ -73,6 +75,7 @@ async function world() {
   }
   const chain: Chain = {
     height: 100n,
+    fork: 0,
     stores: [admission(4, 0), admission(8, 1), admission(9, 2)],
     preferred: false,
     homes: new Map<string, unknown>([
@@ -150,12 +153,15 @@ async function world() {
     }
     throw new Error(`Unexpected read ${target}.${fn}`)
   }
+  // As the default HTTP transport reads it: the tip's height and block hash in one request.
+  const tip = async () => {
+    log.push(H)
+    await chain.onHeight?.()
+    return { height: chain.height, hash: `${chain.height}/${chain.fork}` }
+  }
   const transport: ReadTransport = {
-    currentBlockHeight: async () => {
-      log.push(H)
-      await chain.onHeight?.()
-      return chain.height
-    },
+    currentBlock: tip,
+    currentBlockHeight: async () => (await tip()).height,
     read: async (target, fn, data) => {
       const call = `${target.slice(0, 2)}.${fn}`
       log.push(call)
@@ -872,6 +878,65 @@ it('checks a later height before a failure at a reused height is final, and read
     c(9, 'get_name'), H,
     c(1, 'members'), c(4, 'home'), c(8, 'home'), c(9, 'home'), c(9, 'get_name'), H,
   ])
+})
+
+it('reads again after a block replaces the tip at the same height', async () => {
+  const w = await world()
+  const client = await w.bootstrapped()
+  await client.getName('child.example.dusk')
+  // The same tip: every read is shared.
+  expect(await w.calls(() => client.getName('child.example.dusk'))).toEqual([H])
+  // Another block at height 101: nothing read on the one it replaced is used again.
+  w.chain.fork++
+  w.chain.names.set(`${id(9)}:${hex(child.node)}`, view(child, { expires_at: 4321n }))
+  expect(await w.calls(() => client.getName('child.example.dusk'))).toEqual([
+    H, c(1, 'members'), c(4, 'home'), c(8, 'home'), c(9, 'home'), c(9, 'get_name'), H,
+  ])
+  expect(await client.getName('child.example.dusk')).toMatchObject({ height: 101n, value: { Local: { name: { expires_at: 4321n } } } })
+})
+
+it('reads again when a block replaces the tip at the same height while an operation reads', async () => {
+  const w = await world()
+  const client = await w.bootstrapped()
+  let read = false,
+    replaced = false
+  w.chain.onRead = (call) => {
+    if (call === c(9, 'get_name')) read = true
+  }
+  // The block is replaced once the name was read, before the operation closes.
+  w.chain.onHeight = () => {
+    if (read && !replaced) {
+      replaced = true
+      w.chain.fork++
+      w.chain.names.set(`${id(9)}:${hex(child.node)}`, view(child, { expires_at: 4321n }))
+    }
+  }
+  expect(await client.getName('child.example.dusk')).toMatchObject({ height: 101n, value: { Local: { name: { expires_at: 4321n } } } })
+  expect(w.log.filter((call) => call === c(9, 'get_name'))).toHaveLength(2)
+})
+
+it('by height alone, shares an answered read with another operation only within heightReuseMs, and one in flight always', async () => {
+  vi.useFakeTimers({ toFake: ['performance'] })
+  try {
+    const w = await world()
+    // A transport that reads heights only, without the block's hash.
+    const { currentBlock: _, ...heightOnly } = w.transport
+    const client = new FrozenClient(w.release, { transport: heightOnly, heightReuseMs: 250 })
+    await client.verifyContract('directory', id(1))
+    expect(await w.calls(() => client.directory.config())).toEqual([H, c(1, 'config'), H])
+    vi.advanceTimersByTime(100)
+    expect(await w.calls(() => client.directory.config())).toEqual([H])
+    // Older than the window: read again, though the height is the same.
+    vi.advanceTimersByTime(300)
+    expect(await w.calls(() => client.directory.config())).toEqual([H, c(1, 'config'), H])
+    // 0: only a read still in flight is shared.
+    const strict = new FrozenClient(w.release, { transport: heightOnly, heightReuseMs: 0 })
+    await strict.verifyContract('directory', id(1))
+    expect(await w.calls(() => Promise.all([strict.directory.config(), strict.directory.config()]))).toEqual([H, c(1, 'config'), H])
+    expect(await w.calls(() => strict.directory.config())).toEqual([H, c(1, 'config'), H])
+  } finally {
+    vi.useRealTimers()
+  }
 })
 
 it('throws a refusal at a reused height at once', async () => {

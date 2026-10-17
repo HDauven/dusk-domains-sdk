@@ -1,13 +1,16 @@
 /**
  * Height reads and contract reads one client shares between its snapshot attempts. A node answers at
  * its tip, so a reply proves nothing about a height on its own: it is shared only between attempts
- * that read at the same height, and an attempt closes only with a height read sent after every reply
- * it used had arrived. Internal: no package entrypoint exports it.
+ * that read at the same tip, and an attempt closes only with a height read sent after every reply
+ * it used had arrived. A tip is a height and, where the transport reads it, the block's hash: a block
+ * replaced at the same height is then another tip. By height alone it is not, so a reply that
+ * arrived is shared with another operation only for a short window. Internal: no package entrypoint
+ * exports it.
  * @module
  */
 import { hex } from './bytes.ts'
 import { u64 } from './json.ts'
-import type { ReadTransport } from './transport.ts'
+import type { ChainTip, ReadTransport } from './transport.ts'
 import type { Stage } from './trust.ts'
 import type { Admission } from './types.ts'
 
@@ -15,6 +18,8 @@ import type { Admission } from './types.ts'
 export interface Attempt {
   /** The height it reads at, from a height read that arrived before it sent any read. */
   readonly height: bigint
+  /** The block hash at that height, when the transport reads one. */
+  readonly hash?: string
   /** What it verifies, which becomes signable only when it commits. */
   readonly stage: Stage
   /** When its snapshot began, on the client's clock. */
@@ -29,13 +34,27 @@ export interface Attempt {
 interface Sighting {
   /** When it was sent, on the client's clock. */
   readonly sent: number
-  readonly height: Promise<bigint>
+  readonly tip: Promise<ChainTip>
   settled?: 'ok' | 'failed'
 }
 interface Shared {
   readonly bytes: Promise<Uint8Array>
   /** When its reply or failure arrived, on the client's clock. */
   settled?: number
+  /** When its reply arrived, in milliseconds (`elapsed`). */
+  arrived?: number
+}
+/** Whether two tips are one block: the same height and, where the transport reads one, hash. */
+export function sameTip(a: ChainTip | undefined, b: ChainTip | undefined): boolean {
+  return a !== undefined && b !== undefined && a.height === b.height && a.hash === b.hash
+}
+/** The transport's tip: by height and hash where it reads both together, else by height. */
+async function tipOf(transport: ReadTransport): Promise<ChainTip> {
+  if (!transport.currentBlock) return { height: u64(await transport.currentBlockHeight()) }
+  const tip = await transport.currentBlock()
+  if (tip.hash === undefined) return { height: u64(tip.height) }
+  if (typeof tip.hash !== 'string' || !tip.hash) throw new Error('Invalid block hash')
+  return { height: u64(tip.height), hash: tip.hash }
 }
 /** Replies kept for the height last seen, at most. The oldest is dropped first. */
 const LIMIT = 256
@@ -46,31 +65,38 @@ export class ReadSharing {
   private clock = 0
   /** The height read sent last. */
   private latest?: Sighting
-  /** The height the last height read to arrive reported: the height `shared` holds replies for. */
-  private seen?: bigint
+  /** The tip the last height read to arrive reported: the tip `shared` holds replies for. */
+  private seen?: ChainTip
   /** When that height read arrived, in milliseconds (`elapsed`). */
   private seenAt = -Infinity
   private readonly shared = new Map<string, Shared>()
-  constructor(private readonly transport: ReadTransport) {}
+  /**
+   * `windowMs`: by height alone, how long after a reply arrived another operation may share it.
+   * With a block hash, a reply is shared for as long as the client sees its tip.
+   */
+  constructor(
+    private readonly transport: ReadTransport,
+    private readonly windowMs: number,
+  ) {}
   /** Advance the client's clock, which orders sends and replies. */
   now(): number {
     return ++this.clock
   }
-  /** Read the height now. A height other than the one last seen drops every reply kept for that. */
+  /** Read the tip now. A tip other than the one last seen drops every reply kept for that. */
   private sight(): Sighting {
-    const sighting: { sent: number; height: Promise<bigint>; settled?: 'ok' | 'failed' } = {
+    const sighting: { sent: number; tip: Promise<ChainTip>; settled?: 'ok' | 'failed' } = {
       sent: this.now(),
-      height: undefined as never,
+      tip: undefined as never,
     }
-    sighting.height = (async () => u64(await this.transport.currentBlockHeight()))().then(
-      (height) => {
+    sighting.tip = tipOf(this.transport).then(
+      (tip) => {
         sighting.settled = 'ok'
-        if (height !== this.seen) {
+        if (!sameTip(tip, this.seen)) {
           this.shared.clear()
-          this.seen = height
+          this.seen = tip
         }
         this.seenAt = elapsed()
-        return height
+        return tip
       },
       (error: unknown) => {
         sighting.settled = 'failed'
@@ -81,26 +107,39 @@ export class ReadSharing {
     return sighting
   }
   /**
-   * The height the last height read to arrive reported, if it arrived less than `windowMs` ago.
-   * It arrived before the caller sends any read, so it bounds the height of every reply from below.
+   * The tip the last height read to arrive reported, if it arrived less than `windowMs` ago. It
+   * arrived before the caller sends any read, so it bounds the height of every reply from below.
    */
-  recent(windowMs: number): bigint | undefined {
+  recent(windowMs: number): ChainTip | undefined {
     return this.seen !== undefined && windowMs > 0 && elapsed() - this.seenAt < windowMs ? this.seen : undefined
   }
   /**
-   * The height an attempt reads at: the latest height read if it was sent after `since`, or, for a
+   * The tip an attempt reads at: the latest height read if it was sent after `since`, or, for a
    * snapshot's first attempt (`joinInFlight`), if it is still in flight; otherwise a new one.
    */
-  open(since: number, joinInFlight: boolean): Promise<bigint> {
+  open(since: number, joinInFlight: boolean): Promise<ChainTip> {
     const s = this.latest
-    if (s && s.settled !== 'failed' && (s.sent > since || (joinInFlight && !s.settled))) return s.height
-    return this.sight().height
+    if (s && s.settled !== 'failed' && (s.sent > since || (joinInFlight && !s.settled))) return s.tip
+    return this.sight().tip
   }
   /** A height read sent after `since`: the latest one if it was, else a new one. */
-  close(since: number): Promise<bigint> {
+  close(since: number): Promise<ChainTip> {
     const s = this.latest
-    if (s && s.settled !== 'failed' && s.sent > since) return s.height
-    return this.sight().height
+    if (s && s.settled !== 'failed' && s.sent > since) return s.tip
+    return this.sight().tip
+  }
+  /**
+   * The read another attempt made that attempt `at` may share: at the tip last seen, in flight, or
+   * answered. By height alone, an answered one only while it is younger than the window.
+   */
+  private kept(at: Attempt, key: string): Shared | undefined {
+    if (!sameTip(at, this.seen)) return undefined
+    const entry = this.shared.get(key)
+    if (entry?.arrived !== undefined && at.hash === undefined && elapsed() - entry.arrived >= this.windowMs) {
+      this.shared.delete(key)
+      return undefined
+    }
+    return entry
   }
   /**
    * Read `fn` at contract `id` for attempt `at`. At the height last seen, an identical read another
@@ -115,13 +154,14 @@ export class ReadSharing {
     share = true,
   ): Promise<Uint8Array> {
     if (!at) return this.transport.read(id, fn, input)
-    const key = share && at.height === this.seen ? `${id}/${fn}/${hex(input)}` : undefined
-    let read = key === undefined ? undefined : this.shared.get(key)
+    const key = share && sameTip(at, this.seen) ? `${id}/${fn}/${hex(input)}` : undefined
+    let read = key === undefined ? undefined : this.kept(at, key)
     if (!read) {
-      const entry: { bytes: Promise<Uint8Array>; settled?: number } = { bytes: undefined as never }
+      const entry: { bytes: Promise<Uint8Array>; settled?: number; arrived?: number } = { bytes: undefined as never }
       entry.bytes = (async () => this.transport.read(id, fn, input))().then(
         (bytes) => {
           entry.settled = this.now()
+          entry.arrived = elapsed()
           return new Uint8Array(bytes)
         },
         (error: unknown) => {
@@ -144,7 +184,7 @@ export class ReadSharing {
   }
   /** Whether attempt `at` would share a read of `fn` at `id` with `input` that another attempt made. */
   holds(at: Attempt, id: string, fn: string, input: Uint8Array): boolean {
-    return at.height === this.seen && this.shared.has(`${id}/${fn}/${hex(input)}`)
+    return this.kept(at, `${id}/${fn}/${hex(input)}`) !== undefined
   }
   /** Forget every reply kept. */
   clear(): void {

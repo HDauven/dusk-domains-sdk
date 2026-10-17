@@ -29,6 +29,11 @@ export interface VerifiedContract {
    * signable. It is committed with the first that commits, and dropped when all are abandoned.
    */
   pending?: Set<Stage>
+  /**
+   * Verified with facts the verification cache held, not read by this client: readable, never
+   * signable. Signing verifies it from the chain first (`confirmContract`), which replaces it.
+   */
+  cached?: boolean
   /** Verification added it to the client's release; dropping it removes it again. */
   addedToRelease?: boolean
 }
@@ -60,6 +65,8 @@ export interface Ledger {
   selections: Map<string, Selection>
   /** Quotes this client verified, by the terms a register call carries. */
   quotes: Map<string, QuoteProof>
+  /** Verify a contract again from the chain, ignoring the verification cache. */
+  confirm?: (role: ContractRole, id: string) => Promise<void>
 }
 /** A contract failed a check against immutable evidence. Its client never accepts it again. */
 export class ContractRefusedError extends Error {
@@ -68,6 +75,21 @@ export class ContractRefusedError extends Error {
     super(message)
     this.name = 'ContractRefusedError'
     this.contractId = contract
+  }
+}
+/**
+ * A call's target, or a contract it hands a name to, that this client has not verified: read it
+ * through the client first (or `discover()`), which verifies it, then sign. When the client refused
+ * it, `cause` is that `ContractRefusedError`.
+ */
+export class UnverifiedContractError extends Error {
+  readonly contractId: string
+  readonly role: ContractRole
+  constructor(contract: string, role: ContractRole, message: string, refusal?: ContractRefusedError) {
+    super(message, refusal ? { cause: refusal } : undefined)
+    this.name = 'UnverifiedContractError'
+    this.contractId = contract
+    this.role = role
   }
 }
 /**
@@ -116,7 +138,27 @@ export function signableContract(
   role?: ContractRole,
 ): VerifiedContract | undefined {
   const row = verifiedContract(release, id, role)
-  return row?.signable ? row : undefined
+  return row?.signable && !row.cached ? row : undefined
+}
+/** The refusal of `id` by the client owning `release`, if it refused it. */
+export function refusedContract(release: LoadedRelease, id: string): ContractRefusedError | undefined {
+  return ledgers.get(release)?.refused.get(contractId(id))
+}
+/**
+ * Before signing for a contract the client owning `release` verified from its verification cache
+ * only, verify it from the chain, once: its result replaces the cached one, and a contract that
+ * fails is refused, by that client, for reads too.
+ */
+export async function confirmContract(
+  release: LoadedRelease,
+  id: string,
+  role: ContractRole,
+): Promise<void> {
+  const ledger = ledgers.get(release)
+  id = contractId(id)
+  const row = ledger?.verified.get(id)
+  if (row?.cached && !row.pending && row.role === role && !ledger!.refused.has(id))
+    await ledger!.confirm?.(role, id)
 }
 /** The selection at `version` the client owning `release` read, under a signable policy. */
 export function verifiedSelection(

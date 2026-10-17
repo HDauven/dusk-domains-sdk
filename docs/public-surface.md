@@ -7,9 +7,9 @@ consumers need no TypeScript loader. JSR continues to export TypeScript sources.
 
 | Import                             | Public API                                                                                                                                                                                  |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@duskdomains/sdk`                 | `createClientFromManifest`, `FrozenClient`, `ContractRefusedError`, `UnverifiedQuoteError`, manifest/driver/transport helpers, exact frozen wire types, lossless JSON, name/authority/commitment derivations, write builders and gas policy |
+| `@duskdomains/sdk`                 | `createClientFromManifest`, `FrozenClient`, `ContractRefusedError`, `UnverifiedContractError`, `UnverifiedQuoteError`, manifest/driver/transport helpers, exact frozen wire types, lossless JSON, name/authority/commitment derivations, write builders and gas policy |
 | `@duskdomains/sdk/writes`          | `buildCall`, all public write builders, `registrationCalls`, `transferCall`, `reassignSubnameCall`, `createMarketplaceCalls`, `GAS_LIMITS`                                                  |
-| `@duskdomains/sdk/connect-app`     | `createDuskDomainsConnectApp`, `ConnectWallet`, `ConnectApp`, `PreparedCall`                                                                                                                |
+| `@duskdomains/sdk/connect-app`     | `createDuskDomainsConnectApp`, `ConnectWallet`, `ConnectApp`, `PreparedCall`, `UnverifiedContractError`                                                                                     |
 | `@duskdomains/sdk/marketplace`     | `createMarketplaceCalls`, order/custody/refund types and builders                                                                                                                           |
 | `@duskdomains/sdk/event-catalog`   | `indexerEventCatalog`, `duskDomainsIndexedEventTypes`, `EventTopic`                                                                                                                         |
 | `@duskdomains/sdk/projection`      | Receipt journals, projection, projected reads, digest helpers and event catalog                                                                                                             |
@@ -47,7 +47,9 @@ looks first; it asks every admitted store when they do not lead to the answer.
 `previewRegistration({ label, years, actor }, homeHint?)` returns `{ store, quote,
 height }` for display; only quotes from `quoteRegistration` and `prepareRegistration`
 build calls. Low-level `read(role, id, method, args)` also obtains its height
-automatically.
+automatically. A `ReadTransport` may implement `currentBlock()`, the tip's height and
+block hash in one read, and `namespace`, the chain state it reads; the HTTP transport
+does both.
 
 Every by-name lookup is root-keyed. `NameRef` includes generation and serial.
 `Located<T>` is `'Absent' | { Local: T } | { Forwarded: Forward }`; the client's
