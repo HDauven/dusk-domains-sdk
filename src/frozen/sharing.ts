@@ -21,8 +21,10 @@ export interface Attempt {
   readonly began: number
   /** When the latest reply it used arrived, on the client's clock. */
   replied: number
-  /** The stores the directory admits, read once per attempt. */
+  /** Every store the directory admits, read once per attempt when an operation needs them all. */
   stores?: Promise<Admission[]>
+  /** The admissions of stores this attempt read through, by ID; null where the directory has none. */
+  admitted?: Map<string, Promise<Admission | null>>
 }
 interface Sighting {
   /** When it was sent, on the client's clock. */
@@ -139,6 +141,10 @@ export class ReadSharing {
     } finally {
       at.replied = Math.max(at.replied, read.settled!)
     }
+  }
+  /** Whether attempt `at` would share a read of `fn` at `id` with `input` that another attempt made. */
+  holds(at: Attempt, id: string, fn: string, input: Uint8Array): boolean {
+    return at.height === this.seen && this.shared.has(`${id}/${fn}/${hex(input)}`)
   }
   /** Forget every reply kept. */
   clear(): void {

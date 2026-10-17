@@ -69,11 +69,13 @@ const admission = (n: number, ordinal = 0): Admission => ({
   admitted_at: 1n,
   retiring: false,
 })
+/** A record at version 1, as the directory's init lists a market: checked from the chain. */
 const market = (n: number): Market => ({
   ...sample('Market'),
   id: bytes(n),
   state: 'Listed',
   interface_version: 1,
+  version: 1n,
 })
 const orderRows = { ...fixtures(), ...fixtures('market-v1') }
 const order = wireValue(
@@ -290,6 +292,23 @@ it.each([
   await expect(client.marketplace(id(33)).config()).rejects.toThrow(message)
   await expect(client.verifyContract('marketplace', id(33))).rejects.toThrow(message)
   expect(resolved).toBe(1)
+})
+
+it('takes a market\'s interface and binding from the record a SetMarketplace probed it for, and still checks its order API', async () => {
+  for (const orderApi of [1, 2]) {
+    // Record version 2: a SetMarketplace wrote it, after reading the market's interface and binding.
+    // The live binding names another directory here, which no read sees.
+    const w = await world((c) => {
+      c.markets.set(id(33), { ...market(33), version: 2n })
+      c.live.set(id(33), { role: 'marketplace', wasm: true, bindingDirectory: 9, orderApi })
+    })
+    const client = w.client({ resolveContract: async (role) => resolvedArtifact(role, 33), fetch: serveDriver('marketplace') })
+    const verified = client.verifyContract('marketplace', id(33))
+    if (orderApi === 1) await verified
+    else await expect(verified).rejects.toThrow('order API')
+    expect(w.reads.filter((call) => call.startsWith(id(33)))).toEqual([`${id(33)}.order_api_version`])
+    expect(client.release.contracts.has(id(33))).toBe(orderApi === 1)
+  }
 })
 
 it('admits a resolved contract only after every check passes, and signs for it then', async () => {

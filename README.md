@@ -28,10 +28,15 @@ if (result.value !== 'Absent' && 'Local' in result.value) {
 ```
 
 No wallet or supplied block height is needed. The client fetches the current
-height, discovers directory admissions, and follows permanent forwarding with a
-63-hop default limit. It verifies each contract before reading it: release
-artifact, the directory's admission or market record, interface, deployment binding
-and init commitment. Verification belongs to the client. Nothing becomes readable or
+height and follows permanent forwarding with a 63-hop default limit.
+`createClientFromManifest` verifies the directory; every other contract is verified the
+first time an operation reads through it, and `discover()` verifies every admitted one up
+front. Verification checks the release artifact, the directory's admission or market
+record, interface, deployment binding and init commitment. The directory reads a
+contract's interface and binding when it admits it, so the client reads neither for a
+contract the directory probed, only for those its init admitted unprobed
+([trust model](docs/integration-trust-model.md#the-directorys-admission-as-proof)).
+Verification belongs to the client. Nothing becomes readable or
 signable until every check passes, a contract that fails one stays refused, and
 `client.release` is the client's own copy of the release, so a contract another
 client resolved or verified is never trusted here. Discovery does not
@@ -117,6 +122,16 @@ through `client.store(id).read_primary({ endpoint })` for endpoint cleanup.
 Use `getName` or `quoteRenewal` when the result's destination shard is needed for
 a new write. Every `Located` read follows forwarding. Commitment reads stay on
 their original shard. Never resend an already signed call to a new destination.
+
+Pass the indexer's home store for the name or primary (`homeShard` in its rows, `store`
+in the projection client's) as the hint in `getName(name, homeHint)` and
+`verifyPrimary(endpoint, homeHint)`; `locate`, `quoteRenewal` and every `Located` read
+start at the store they are given. A name page then makes the same reads however many
+stores the directory admits. A hint is only where to look first: a wrong one costs
+reads, never the answer, and without one the client asks every store.
+`previewRegistration({ label, years, actor }, homeHint)` shows a registration quote for
+display, letting the chain place the root; `prepareRegistration`, which reads every
+store's home, builds the registration to sign.
 
 ```ts
 import { storeRenewCall } from '@duskdomains/sdk/writes'

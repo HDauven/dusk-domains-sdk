@@ -36,7 +36,8 @@ function storage() {
 }
 /**
  * Directory 1, vault 2, policy 3, store 4, resolver 5 and the preferred marketplace 6, answering
- * like the frozen contracts. `binding` overrides a contract's binding, by its byte.
+ * like the frozen contracts. All are the directory's init's, which probes none of them, so the
+ * client reads each one's interface and binding. `binding` overrides a contract's binding, by its byte.
  */
 async function world() {
   const release = await jsonRelease()
@@ -61,12 +62,12 @@ async function world() {
         if (n === 1 && fn === 'config')
           return {
             ...samples.DirectoryConfig, binding: { directory: bytes(1), vault: bytes(2), network: 1 },
-            store_count: 1, resolver_count: 1, registration, preferred_marketplace: bytes(6),
+            store_count: 1, resolver_count: 1, registration, preferred_marketplace: bytes(6), market_version: 1n,
           }
         if (n === 1 && fn === 'members')
           return { rows: [{ ...samples.Admission, id: bytes(args.kind === 'Store' ? 4 : 5), ordinal: 0, interface_version: 1, retiring: false }], next: null }
         if (n === 1 && fn === 'member') return { ...samples.Admission, id: args.id, ordinal: 0, interface_version: 1, retiring: false }
-        if (n === 1 && fn === 'market') return { ...samples.Market, id: args.id, interface_version: 1, state: 'Listed' }
+        if (n === 1 && fn === 'market') return { ...samples.Market, id: args.id, interface_version: 1, state: 'Listed', version: 1n }
         if (n === 1 && fn === 'registration_context') return registration
         if (n === 3 && fn === 'config') return launchPolicyConfig()
         if (n === 4 && fn === 'home') return 'Absent'

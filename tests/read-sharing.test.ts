@@ -202,14 +202,14 @@ function gate() {
   return { opened, open }
 }
 
-it('discovers with the calls it always made, and again at the same height with one height read', async () => {
+it('discovers reading the interface and binding of only what the directory did not probe, and again at the same height with one height read', async () => {
   const w = await world()
   const client = w.client()
+  // Stores 8 and 9, past ordinal 0, were probed by the AddStore that admitted them.
   expect(await w.calls(() => client.discover())).toEqual([
     c(1, 'interface_version'), c(1, 'binding'),
     H, c(1, 'config'), c(1, 'members'), c(1, 'members'),
-    c(4, 'interface_version'), c(4, 'binding'), c(8, 'interface_version'), c(8, 'binding'),
-    c(9, 'interface_version'), c(9, 'binding'), c(5, 'interface_version'), c(5, 'binding'),
+    c(4, 'interface_version'), c(4, 'binding'), c(5, 'interface_version'), c(5, 'binding'),
     c(2, 'interface_version'), c(2, 'binding'), H,
   ])
   // Nothing changed at this height: every read is already known, and the height read opens and closes it.
@@ -219,18 +219,21 @@ it('discovers with the calls it always made, and again at the same height with o
 })
 
 it.each([
-  ['getName with a home hint', (client: FrozenClient) => client.getName('child.example.dusk', id(4))],
-  ['getName', (client: FrozenClient) => client.getName('child.example.dusk')],
-])('%s reads membership and each home once, then the name at its home', async (_label, run) => {
+  ['getName', undefined, [c(1, 'members'), c(4, 'home'), c(8, 'home'), c(9, 'home')]],
+  // A hint reads the admission of each store on its route, not the whole list.
+  ['getName from the name\'s first home', id(4), [
+    c(1, 'member'), c(4, 'home'), c(1, 'member'), c(8, 'home'), c(1, 'member'), c(9, 'home'),
+  ]],
+  ['getName from the name\'s home', id(9), [c(1, 'member'), c(9, 'home')]],
+])('%s reads each admission and home on its route once, then the name at its home', async (_label, hint, route) => {
   const w = await world()
   const client = await w.bootstrapped()
-  expect(await w.calls(() => run(client))).toEqual([
-    H, c(1, 'members'), c(4, 'home'), c(8, 'home'), c(9, 'home'), c(9, 'get_name'), H,
-  ])
-  const result = await run(client)
+  const run = () => client.getName('child.example.dusk', hint)
+  expect(await w.calls(run)).toEqual([H, ...route, c(9, 'get_name'), H])
+  const result = await run()
   expect(result).toMatchObject({ store: id(9), height: 101n, value: { Local: view(child) } })
-  expect(result.forwards.map((f) => hex(f.destination))).toEqual([id(8), id(9)])
-  expect(await w.calls(() => run(client))).toEqual([H])
+  expect(result.forwards.map((f) => hex(f.destination))).toEqual(hint === id(9) ? [] : [id(8), id(9)])
+  expect(await w.calls(run)).toEqual([H])
 })
 
 it('getName of an absent name reads every home and the allocation once', async () => {
@@ -256,7 +259,7 @@ it('verifyPrimary reads membership once and the primary\'s home and name once', 
 it('locate, Located reads and renewal quotes reuse the routing a name read made at their height', async () => {
   const w = await world()
   const client = await w.bootstrapped()
-  const route = [H, c(1, 'members'), c(4, 'home'), c(8, 'home'), c(9, 'home')]
+  const route = [H, c(1, 'member'), c(4, 'home'), c(1, 'member'), c(8, 'home'), c(1, 'member'), c(9, 'home')]
   expect(await w.calls(() => client.locate(id(4), child.root, 'read_records', child))).toEqual([...route, c(9, 'read_records'), H])
   expect(await w.calls(() => client.store(id(4)).resolve_record({ key: child, record_key: 'moonlight_address' }))).toEqual([
     H, c(9, 'resolve_record'), H,
@@ -357,7 +360,9 @@ it('concurrent identical reads share one request, and their snapshots one height
   const w = await world()
   const client = await w.bootstrapped()
   const results = await Promise.all(Array.from({ length: 5 }, () => client.getName('child.example.dusk', id(4))))
-  expect(w.log).toEqual([H, c(1, 'members'), c(4, 'home'), c(8, 'home'), c(9, 'home'), c(9, 'get_name'), H])
+  expect(w.log).toEqual([
+    H, c(1, 'member'), c(4, 'home'), c(1, 'member'), c(8, 'home'), c(1, 'member'), c(9, 'home'), c(9, 'get_name'), H,
+  ])
   for (const r of results) expect(r).toEqual(results[0])
   // Each caller gets its own objects.
   results[0].forwards.pop()
@@ -533,8 +538,9 @@ it('validates every hop of a forward that appears at a new height, with the old 
   w.chain.homes.set(`${id(9)}:${hex(child.root)}`, 'Local')
   w.chain.replies.set(c(9, 'get_name'), { Forwarded: forward(child.root, 4, 0) })
   await expect(client.getName('child.example.dusk', id(4))).rejects.toThrow('Non-monotone or invalid shard forwarding')
-  // A hint outside the directory.
-  await expect(client.getName('child.example.dusk', id(0x77))).rejects.toThrow('Unadmitted store')
+  // A hint outside the directory only costs its admission read: the search finds the same route.
+  await expect(client.getName('child.example.dusk', id(0x77))).rejects.toThrow('Non-monotone or invalid shard forwarding')
+  await expect(client.getName('child.example.dusk')).rejects.toThrow('Non-monotone or invalid shard forwarding')
 })
 
 it('enforces the hop limit with the route already known at that height', async () => {
@@ -570,24 +576,31 @@ it('never answers a verification read from what a state read left', async () => 
   const w = await world()
   const client = w.client()
   await client.verifyContract('directory', id(1))
-  // A state read of the directory's admission of store 8, kept at this height.
+  // State reads of the directory's admissions of stores 4 and 8, kept at this height.
+  await client.directory.member({ kind: 'Store', id: bytes(4) })
   await client.directory.member({ kind: 'Store', id: bytes(8) })
   w.log.length = 0
-  // Verification asks the directory itself, and the contract's own interface and binding.
+  // Verification asks the directory itself, and the init's store for its own interface and binding.
+  await client.verifyContract('store', id(4))
+  expect(w.log).toEqual([c(1, 'member'), c(4, 'interface_version'), c(4, 'binding')])
+  // An AddStore admission, past ordinal 0: the directory's own record is the proof of the rest.
+  w.log.length = 0
   await client.verifyContract('store', id(8))
-  expect(w.log).toEqual([c(1, 'member'), c(8, 'interface_version'), c(8, 'binding')])
+  expect(w.log).toEqual([c(1, 'member')])
 })
 
 it('keeps refusing a contract that failed a check, while reads of other contracts are shared', async () => {
   const w = await world()
-  w.chain.replies.set(c(8, 'binding'), { directory: bytes(11), vault: bytes(2), network: 1 })
+  w.chain.replies.set(c(4, 'binding'), { directory: bytes(11), vault: bytes(2), network: 1 })
   const client = w.client()
   await expect(client.discover()).rejects.toThrow('Contract deployment binding mismatch')
-  w.chain.replies.delete(c(8, 'binding'))
+  w.chain.replies.delete(c(4, 'binding'))
   w.chain.height++
   await expect(client.discover()).rejects.toThrow('Contract deployment binding mismatch')
   await expect(client.getName('child.example.dusk', id(4))).rejects.toThrow('Contract deployment binding mismatch')
-  await expect(client.store(id(8)).stats()).rejects.toThrow('Contract deployment binding mismatch')
+  await expect(client.store(id(4)).stats()).rejects.toThrow('Contract deployment binding mismatch')
+  // Reads that do not go through store 4 still answer.
+  expect((await client.getName('child.example.dusk', id(9))).store).toBe(id(9))
 })
 
 it('reads a contract\'s interface and binding once, even when the attempt that verified it is abandoned', async () => {
@@ -608,12 +621,11 @@ it('reads a contract\'s interface and binding once, even when the attempt that v
   const state = await client.discover()
   expect(state.height).toBe(101n)
   const verification = w.log.filter((call) => /interface_version|binding|order_api_version/u.test(call))
+  // What the directory probed (stores 8 and 9, and marketplace 6, past record version 1) is not read.
   expect(verification).toEqual([
     c(1, 'interface_version'), c(1, 'binding'),
-    c(4, 'interface_version'), c(4, 'binding'), c(8, 'interface_version'), c(8, 'binding'),
-    c(9, 'interface_version'), c(9, 'binding'), c(5, 'interface_version'), c(5, 'binding'),
-    c(2, 'interface_version'), c(2, 'binding'),
-    c(6, 'interface_version'), c(6, 'binding'), c(6, 'order_api_version'),
+    c(4, 'interface_version'), c(4, 'binding'), c(5, 'interface_version'), c(5, 'binding'),
+    c(2, 'interface_version'), c(2, 'binding'), c(6, 'order_api_version'),
   ])
   // Both attempts read the directory's state: the second at the new height.
   expect(w.log.filter((call) => call === c(1, 'market'))).toHaveLength(2)
@@ -641,9 +653,10 @@ it.each([0, Infinity])('returns only state read at one height, the tip during th
   w.chain.onRead = sleep
   w.chain.onHeight = sleep
   let running = true
+  // Often enough that some attempts see a block land, rarely enough that others commit.
   const blocks = (async () => {
     while (running) {
-      for (let turns = 20 + Math.floor(random() * 80); turns > 0 && running; turns--) await null
+      for (let turns = 30 + Math.floor(random() * 120); turns > 0 && running; turns--) await null
       w.chain.height++
       state()
     }
@@ -675,6 +688,7 @@ it.each([0, Infinity])('returns only state read at one height, the tip during th
   await blocks
   expect(committed + crossed).toBe(96)
   expect(committed).toBeGreaterThan(0)
+  expect(crossed).toBeGreaterThan(0)
   expect(w.chain.height).toBeGreaterThan(110n)
 }, 60_000)
 
@@ -864,14 +878,11 @@ it('throws a refusal at a reused height at once', async () => {
   const w = await world()
   const client = w.client(reuse)
   await client.directory.config()
-  w.chain.replies.set(c(8, 'binding'), { directory: bytes(11), vault: bytes(2), network: 1 })
+  w.chain.replies.set(c(4, 'binding'), { directory: bytes(11), vault: bytes(2), network: 1 })
   w.log.length = 0
   await expect(client.discover()).rejects.toThrow('Contract deployment binding mismatch')
   // No height read: the refusal does not depend on one.
-  expect(w.log).toEqual([
-    c(1, 'members'), c(1, 'members'), c(4, 'interface_version'), c(4, 'binding'),
-    c(8, 'interface_version'), c(8, 'binding'),
-  ])
+  expect(w.log).toEqual([c(1, 'members'), c(1, 'members'), c(4, 'interface_version'), c(4, 'binding')])
 })
 
 it('prices a registration again at the new height when a quote at a reused height is priced later', async () => {

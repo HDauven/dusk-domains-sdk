@@ -8,15 +8,20 @@ metadata.
 
 ## Contract verification
 
-A `FrozenClient` verifies each contract once, before it reads it:
+A `FrozenClient` verifies each contract once, the first time an operation reads
+through it. `createClientFromManifest` verifies the directory only; `discover()`
+verifies every admitted store and resolver, the vault and the preferred marketplace up
+front. Verification checks:
 
+- the release artifact: role, driver digests and byte count;
 - interface kind/version, move/custody versions and the network/directory/vault
-  binding, against chain reads;
+  binding: from the directory's record for a contract the directory probed when it
+  admitted it ([below](#the-directorys-admission-as-proof)), else against chain reads;
 - for a store or resolver, the directory's admission (`member`), and for a
   marketplace, the directory's market record (`market`): interface version 1, and its
   code and init hashes against the release's `codeHash` (or `contractWasm.blake3`) and
-  `initHash` when the release carries them. Discovery checks every admitted store
-  and resolver and the preferred marketplace this way, and so does any later read;
+  `initHash` when the release carries them;
+- for a marketplace, its order API version, against a chain read;
 - for a policy, whose admission no directory read returns, the init commitment
   recomputed from its live binding and immutable config, against the release's
   `initHash` and against the admission an `admitDirectoryEvent` supplies. Its code
@@ -47,14 +52,47 @@ read. Another client, even one built on the same release object, never changes t
 client's decisions.
 
 A contract's interface, binding, order API version and, for a policy, init commitment
-never change once it is deployed. A client reads them once: an attempt it abandoned
-checks them again from what it read, without new reads. With `verificationCache`, such
-as `sessionStorage`, a later client does the same with what an earlier one read. An
-entry is bound to the manifest's chain, network and node URL, the directory and vault,
-and the contract's ID, role and release descriptor, and is written only for a contract
-whose verification committed. An entry that fails a check is ignored, never a refusal:
-the contract is checked from the chain instead. The directory's admission and market
-records, and all other state, are always read from the chain.
+never change once it is deployed. A client reads those the directory has not proved
+once: an attempt it abandoned checks them again from what it read, without new reads.
+With `verificationCache`, such as `sessionStorage`, a later client does the same with
+what an earlier one read. An entry is bound to the manifest's chain, network and node
+URL, the directory and vault, and the contract's ID, role and release descriptor, and is
+written only for a contract whose verification committed. An entry that fails a check
+is ignored, never a refusal: the contract is checked from the chain instead. The
+directory's admission and market records, and all other state, are always read from
+the chain.
+
+### The directory's admission as proof
+
+Before the directory executes an `AddStore`, `AddResolver`, `SetPolicy`,
+`SetMarketplace` or `SetPreferredMarketplace` (with a market), its `probe` reads the
+contract's `interface_version` and `binding` and requires them to equal
+`interface(kind)` and the directory's own binding; otherwise the action traps. Neither
+can change later: every frozen contract answers `interface_version` with a constant of
+its code, and sets its binding once, at init. The client verified the directory's
+binding against the manifest's directory, vault and network, so a contract the
+directory probed passes the client's interface and binding checks, and the client
+does not read them. The directory's records show which contracts it probed:
+
+- a store or resolver admitted at ordinal 1 or more: `AddStore` and `AddResolver`
+  admit only at the next ordinal, and the directory's init admits ordinal 0;
+- a market record past version 1: only `SetMarketplace` writes one, probing the market
+  each time;
+- the preferred marketplace while the directory's market version is past 1: the last
+  `SetPreferredMarketplace` selected it, probing it;
+- the selected policy while the directory's policy version is past 1: the last
+  `SetPolicy` selected it, probing it.
+
+The directory's init probes nothing. The vault, the store and resolver at ordinal 0,
+the init's policy (policy version 1), a market record at version 1 (which may be the
+init's) and the directory itself are checked against chain reads, once per client and,
+with `verificationCache`, once per cache. The probe does not read a marketplace's order
+API or check a policy's init commitment, so the client still does: the order API
+against a chain read, and a probed policy's init commitment over the directory's
+binding and the config it reads. The code and init hashes in the directory's record are
+governance's claims, compared with the release as before: no read shows a contract's
+code. This rests on the directory running its reviewed code, which its ID derives
+from, and on a deployed contract's code never changing.
 
 ## What the node can and cannot do
 
@@ -120,6 +158,32 @@ All Located results follow with a hop bound. A failed destination read never
 falls back to stale source data. Commitment reads and cleanup remain at their
 original shard. After RootForwarded, invalidate name, slot, primary and order
 caches and construct a newly reviewed/signed write for the new home.
+
+A route reads the directory's admission of each store it reads through, at the
+operation's height, and checks each forward against them: the destination admitted at
+the forward's ordinal, ordinals rising, no store twice. A hint, such as the indexer's
+home store for a name or primary (`homeShard`) passed to `getName` or `verifyPrimary`,
+or the store a `Located` read, `locate` or `quoteRenewal` starts at, is not trusted: it
+is only where the client looks first. The client accepts what it finds there only when
+the chain leads from that store to a `Local` home over forwards that pass these checks.
+Anything else (an `Absent` or staged home, a store the directory does not admit or the
+client refused, a malformed hint, a failed read) sends the search to every admitted
+store in admission order, as without a hint. A wrong or lying hint so costs reads, never
+the answer. Two answers rest on the protocol's uniqueness rather than on every store's
+answer: a name found at its hinted home (a root has one canonical home), and a primary
+the hinted store verifies (`set_primary` refuses an endpoint another admitted store
+links). Without a hint, `verifyPrimary` asks every store and rejects two verified
+primaries.
+
+Some answers need every store, and still read each one: a name no store holds (absence),
+a primary without a hint, `registrationPlacement` and `prepareRegistration` (signing a
+registration needs an existing root's home, and proof that no store holds an unseen
+one), and `discover()`. `previewRegistration` shows a quote without that, from the
+store the hint or the directory's newest store names: `quote_registration` checks
+placement against every admitted store on chain, and refuses a root it would not
+register there, which sends the preview to the full placement. It is for display only:
+`registrationCalls` and Connect take only a quote `quoteRegistration` or
+`prepareRegistration` returned.
 
 ## Writes
 

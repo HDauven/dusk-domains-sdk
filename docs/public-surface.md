@@ -39,10 +39,15 @@ types. Unit reads take no arguments.
 
 `getName(spelling, homeHint?)` returns `{ store, value, forwards, height }`.
 `quoteRenewal(store, args)` retains the same routing metadata. `locate` supports
-other `Located` reads when destination metadata is needed. `verifyPrimary`
-reads `resolve_primary` across the pool and verifies current owner/manager authority,
-home, incarnation, lifecycle, forward resolution and uniqueness.
-Low-level `read(role, id, method, args)` also obtains its height automatically.
+other `Located` reads when destination metadata is needed. `verifyPrimary(endpoint,
+homeHint?)` reads `resolve_primary` and verifies current owner/manager authority,
+home, incarnation, lifecycle, forward resolution and uniqueness. A hint, such as the
+indexer's `homeShard`, and the store a `Located` read starts at, are where the client
+looks first; it asks every admitted store when they do not lead to the answer.
+`previewRegistration({ label, years, actor }, homeHint?)` returns `{ store, quote,
+height }` for display; only quotes from `quoteRegistration` and `prepareRegistration`
+build calls. Low-level `read(role, id, method, args)` also obtains its height
+automatically.
 
 Every by-name lookup is root-keyed. `NameRef` includes generation and serial.
 `Located<T>` is `'Absent' | { Local: T } | { Forwarded: Forward }`; the client's

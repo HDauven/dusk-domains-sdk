@@ -36,6 +36,7 @@ quote: a stored, copied or edited quote throws `UnverifiedQuoteError`.
 - Share identical reads at one height between a client's operations, and read membership and each home once per snapshot.
 - Add `verificationCache` to keep verification reads across clients, for example in `sessionStorage`.
 - Open a snapshot at a height read that arrived within `heightReuseMs` (1000 by default; 0 reads it every time).
+- Read a name from its home-store hint, verify contracts on first use, and take a probed admission's interface and binding from the directory; add `previewRegistration`.
 
 ## 0.3.4 (2026-10-12)
 
