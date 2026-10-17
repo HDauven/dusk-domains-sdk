@@ -60,6 +60,10 @@ async function chain(
           })
         if (fn === 'binding')
           return enc({ directory: bytes(1), vault: bytes(2), network: 1 })
+        if (fn === 'member') {
+          const { id: wanted } = dec(data) as { id: number[] }
+          return enc(admissions.find((a) => hex(a.id) === hex(wanted)) ?? null)
+        }
         if (fn === 'members') {
           const { start, limit } = dec(data) as { start: number; limit: number }
           return enc({

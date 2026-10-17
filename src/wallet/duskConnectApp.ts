@@ -5,9 +5,12 @@ import { MAX_AUTO_GAS_PRICE, MAX_GAS_LIMIT } from '../frozen/gas.ts'
 import { stringifyJson, u64 } from '../frozen/json.ts'
 import { contractId, equalBytes, hex } from '../frozen/bytes.ts'
 import {
+  confirmContract,
+  refusedContract,
   registrationProof,
   selectedPolicy,
   signableContract,
+  UnverifiedContractError,
   verifiedContract,
   verifiedSelection,
   type VerifiedContract,
@@ -18,6 +21,7 @@ import {
   checkPublicBalanceForWrite,
   WriteBalanceError,
 } from '../writes/balance.ts'
+export { UnverifiedContractError } from '../frozen/trust.ts'
 export interface ConnectWallet {
   request(method: string, params?: unknown): Promise<unknown>
 }
@@ -54,7 +58,10 @@ export function createDuskDomainsConnectApp(
   release: LoadedRelease,
   options: ConnectOptions = {},
 ): ConnectApp {
-  const chain = release.manifest.chainId
+  const chain = release.manifest.chainId,
+    directory = release.manifest.contracts.find((c) => c.role === 'directory')!.contractId,
+    absent = 'Target is absent from verified release',
+    custodyAbsent = 'Custody target is not a marketplace verified for this release'
   async function assertChain(): Promise<void> {
     if ((await wallet.request('dusk_chainId')) !== chain)
       throw new Error(`Wallet must be connected to ${chain}`)
@@ -105,6 +112,7 @@ export function createDuskDomainsConnectApp(
       checked.gasLimit > MAX_GAS_LIMIT
     )
       throw new Error('Call deposit or gas policy was modified')
+    await confirm(checked)
     const target = authorize(checked)
     await assertChain()
     const encoded = target.driver.encodeInput(
@@ -136,12 +144,31 @@ export function createDuskDomainsConnectApp(
     }
   }
   /**
+   * Verify from the chain, once, each contract `authorize` checks that the client verified from its
+   * verification cache only: the directory, the target, the policy a registration selects, and the
+   * custody market. One that fails throws its `ContractRefusedError`.
+   */
+  async function confirm(checked: FrozenCall): Promise<void> {
+    // The directory's binding and records vouch for the rest, so it is confirmed first.
+    await confirmContract(release, directory, 'directory', absent)
+    await confirmContract(release, checked.contractId, checked.role, absent)
+    if (checked.role !== 'store') return
+    if (checked.functionName === 'register' || checked.functionName === 'issue_reserved') {
+      const version = (checked.args as Register | IssueReserved).expected_policy_version,
+        policy = selectedPolicy(release, version)
+      if (policy)
+        await confirmContract(release, policy, 'policy', `Registration policy selection ${version} is not verified against this release`)
+    }
+    if (checked.functionName === 'transfer_and_call')
+      await confirmContract(release, hex((checked.args as TransferAndCall).target), 'marketplace', custodyAbsent)
+  }
+  /**
    * What this client verified decides what can be signed, not the release maps. Synchronous, so
    * a check right before sending sees the ledger as the transaction leaves.
    */
   function authorize(checked: FrozenCall): VerifiedContract {
     const target = signable(checked.contractId, checked.role)
-    if (!target) throw new Error('Target is absent from verified release')
+    if (!target) throw unverified(checked.contractId, checked.role, absent)
     // A reveal runs under the policy its expected version selects, at the price its quote showed:
     // sign only terms this client quoted itself, under the policy it read as that selection.
     if (checked.role === 'store' && checked.functionName === 'register') {
@@ -168,9 +195,8 @@ export function createDuskDomainsConnectApp(
     // with that market's encoding of terms for this store and name.
     if (checked.role === 'store' && checked.functionName === 'transfer_and_call') {
       const args = checked.args as TransferAndCall
-      if (!verifiedContract(release, hex(args.target), 'marketplace'))
-        throw new Error('Custody target is not a marketplace verified for this release')
-      const market = signable(hex(args.target), 'marketplace')!
+      const market = signable(hex(args.target), 'marketplace')
+      if (!market) throw unverified(hex(args.target), 'marketplace', custodyAbsent)
       let intent: CustodyIntent
       try {
         intent = wireValue(
@@ -195,16 +221,29 @@ export function createDuskDomainsConnectApp(
     return target
   }
   /**
-   * A verified contract the release committed to, or undefined when unverified. A verified one
-   * without both commitments throws: it is readable, never signable.
+   * A contract this client cannot sign for: unverified, or refused, or vouched for by a directory it
+   * refused. The refusal is the error's cause.
+   */
+  function unverified(id: string, role: FrozenCall['role'], message: string): UnverifiedContractError {
+    return new UnverifiedContractError(
+      contractId(id),
+      role,
+      message,
+      refusedContract(release, id) ?? refusedContract(release, directory),
+    )
+  }
+  /**
+   * A verified contract the release committed to that this client may sign for, or undefined. A
+   * verified one without both commitments throws: it is readable, never signable.
    */
   function signable(id: string, role: FrozenCall['role']): VerifiedContract | undefined {
     const row = signableContract(release, id, role)
-    if (!row && verifiedContract(release, id, role))
+    if (row) return row
+    if (verifiedContract(release, id, role)?.signable === false)
       throw new Error(
         `${role[0].toUpperCase()}${role.slice(1)} ${contractId(id)} has no reviewed code and init commitments in this release: it can be read, not signed for`,
       )
-    return row
+    return undefined
   }
   return {
     prepare: async (call) => (await prepare(call)).prepared,

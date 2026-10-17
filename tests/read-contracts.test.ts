@@ -98,18 +98,10 @@ for (const [role, methods] of Object.entries(methodCatalog))
               expect(hex(args)).toBe(input.rkyv)
               return Uint8Array.from(fromHex(output.rkyv))
             }
-            if (fn === 'members')
-              return encode({
-                rows: [
-                  {
-                    ...sample('Admission'),
-                    id: bytes(4),
-                    ordinal: 0,
-                    interface_version: 1,
-                  },
-                ],
-                next: null,
-              })
+            const store4 = { ...sample('Admission'), id: bytes(4), ordinal: 0, interface_version: 1 }
+            if (fn === 'members') return encode({ rows: [store4], next: null })
+            if (fn === 'member')
+              return encode(hex((parseJson(new TextDecoder().decode(args)) as { id: number[] }).id) === id(4) ? store4 : null)
             if (fn === 'home')
               return Uint8Array.from(
                 fromHex(

@@ -52,14 +52,15 @@ async function setup(initial = 'holder', twoStores = false) {
     })
     r.drivers.set(id(8), r.drivers.get(id(4))!)
   }
-  let scenario = fixtures.cases[initial]
+  let scenario = fixtures.cases[initial],
+    tip = scenario.height
   const calls: string[] = []
   const overrides = new Map<string, Reply | Error>()
   // Both input encoding/decoding and output decoding use the pinned real WASM
   // drivers. Only transport is simulated, with Rust-generated rkyv replies.
   const client = new FrozenClient(r, {
     transport: {
-      currentBlockHeight: async () => scenario.height,
+      currentBlockHeight: async () => tip,
       read: async (target, method, input) => {
         const args = r.drivers.get(target)!.decodeInput(method, input)
         calls.push(`${target}:${method}`)
@@ -92,8 +93,11 @@ async function setup(initial = 'holder', twoStores = false) {
   calls.length = 0
   return {
     client, calls, overrides,
+    // The chain moves on to another case's state in a block of its own: at the case's height, or
+    // the next one when the case is at a height already read.
     select: (name: string) => {
       scenario = fixtures.cases[name]
+      tip = scenario.height > tip ? scenario.height : tip + 1n
     },
   }
 }

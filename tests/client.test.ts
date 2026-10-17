@@ -59,7 +59,8 @@ async function setup(
   n.name.expires_at = 1000n
   n.name.incarnation = { generation: 7n, serial: 2n }
   const calls: { id: string; fn: string; args: unknown }[] = []
-  let heights = 0
+  let heights = 0,
+    tip = 100n
   const responses = new Map<string, unknown>()
   const forward = (to: number, ordinal: number): Forward => ({
     root: key.root,
@@ -72,7 +73,7 @@ async function setup(
   const transport: ReadTransport = {
     currentBlockHeight: async () => {
       heights++
-      return options.height ? options.height() : 100n
+      return options.height ? options.height() : tip
     },
     read: async (target, fn, data) => {
       const args = decode(data)
@@ -145,6 +146,10 @@ async function setup(
     transport,
     heights: () => heights,
     admissions,
+    /** Land a block: state the test changes next is read at a new height, as on chain. */
+    block: () => {
+      tip++
+    },
   }
 }
 it('canonical reads acquire block heights and follow monotone forwarding across shards', async () => {
@@ -166,7 +171,9 @@ it('canonical reads acquire block heights and follow monotone forwarding across 
   expect(renewal.value).toMatchObject({
     Local: { schedule_version: 9007199254740993n, total_lux: '123' },
   })
-  expect(t.heights()).toBeGreaterThanOrEqual(6)
+  // Each read takes its height itself: discovery reads it to open and close, and each read after
+  // it at least to close, opening at the height the read before it closed with.
+  expect(t.heights()).toBeGreaterThanOrEqual(4)
 })
 it('every Located ABI read follows, including absent and unknown descendants', async () => {
   const t = await setup()
@@ -272,24 +279,38 @@ it('propagates missing height and retries reads at a stable height', async () =>
     (await stable.client.getName('child.example.dusk', id(4))).height,
   ).toBe(3n)
 })
-it('HTTP transport reads latest height losslessly and rejects missing GraphQL data', async () => {
-  const urls: string[] = []
+it('HTTP transport reads the latest height and block hash in one request, losslessly, and rejects missing GraphQL data', async () => {
+  const urls: string[] = [],
+    bodies: unknown[] = []
+  const hash = 'AE39A08CB1B3B441CC3688F2C8B3F86F0A42517059EE7AD50EF90CFFD33193AA'
   const t = createHttpTransport(
     'https://node.invalid/',
     async (input, init) => {
       urls.push(String(input))
+      bodies.push(init?.body)
       expect(init?.method).toBe('POST')
-      return new Response('{"block":{"header":{"height":9007199254740993}}}')
+      return new Response(`{"block":{"header":{"height":9007199254740993,"hash":"${hash}"}}}`)
     },
   )
+  expect(await t.currentBlock!()).toEqual({ height: 9007199254740993n, hash: hash.toLowerCase() })
   expect(await t.currentBlockHeight()).toBe(9007199254740993n)
-  expect(urls[0]).toBe('https://node.invalid/on/graphql/query')
+  expect(urls).toEqual(['https://node.invalid/on/graphql/query', 'https://node.invalid/on/graphql/query'])
+  expect(bodies[0]).toBe('query { block(height: -1) { header { height hash } } }')
+  // Verification cache entries are keyed by the node it reads.
+  expect(t.namespace).toBe('https://node.invalid')
   await expect(
     createHttpTransport(
       'https://node.invalid',
       async () => new Response('{}'),
     ).currentBlockHeight(),
   ).rejects.toThrow()
+  // A tip without its block's hash is no tip.
+  await expect(
+    createHttpTransport(
+      'https://node.invalid',
+      async () => new Response('{"block":{"header":{"height":5}}}'),
+    ).currentBlock!(),
+  ).rejects.toThrow('Block hash query failed')
 })
 it('primary verification requires matching incarnation, active lifecycle and forward endpoint; resolver errors propagate', async () => {
   const t = await setup()
@@ -316,12 +337,15 @@ it('primary verification requires matching incarnation, active lifecycle and for
   })
   expect((await t.client.verifyPrimary(endpoint))?.store).toBe(id(9))
   t.responses.set(`${id(9)}:resolve_record`, { Local: null })
+  t.block()
   expect(await t.client.verifyPrimary(endpoint)).toBeNull()
   t.responses.delete(`${id(9)}:resolve_record`)
+  t.block()
   await expect(t.client.verifyPrimary(endpoint)).rejects.toThrow(
     'resolve_record',
   )
   t.n.name.expires_at = 100n
+  t.block()
   expect(await t.client.verifyPrimary(endpoint)).toBeNull()
 })
 
@@ -432,11 +456,14 @@ it('keeps a non-retiring canonical home even when sealed and refuses unseen-root
   t.responses.set(`${id(4)}:capacity`, { ...sample('Capacity'), sealed: true })
   expect((await t.client.registrationPlacement(t.key.root)).store).toBe(id(4))
   t.responses.set(`${id(4)}:home`, 'Absent')
+  t.block()
   expect((await t.client.registrationPlacement(t.key.root)).store).toBe(id(9))
   t.admissions[2].retiring = true
+  t.block()
   await expect(t.client.registrationPlacement(t.key.root)).rejects.toThrow()
   t.admissions[2].retiring = false
   t.responses.set(`${id(9)}:capacity`, { ...sample('Capacity'), sealed: true })
+  t.block()
   await expect(t.client.registrationPlacement(t.key.root)).rejects.toThrow()
 })
 it('rejects a successor quote that omits the previous lifecycle', async () => {

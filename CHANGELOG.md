@@ -33,6 +33,13 @@ quote: a stored, copied or edited quote throws `UnverifiedQuoteError`.
 - Add `projectedProposal` and `projectedProposals`, deriving `Expired` and `Invalidated`.
 - Export `ContractRefusedError` for a contract a client refused.
 - Mirror the launch policy's reserved list (61 labels): add human, reserved on request.
+- Share identical reads at one height between a client's operations, and read membership and each home once per snapshot.
+- Add `verificationCache` to keep verification reads across clients, for example in `sessionStorage`.
+- Open a snapshot at a height read that arrived within `heightReuseMs` (1000 by default; 0 reads it every time).
+- Read a name from its home-store hint, verify contracts on first use, and take a probed admission's interface and binding from the directory; add `previewRegistration`.
+- Sign for, or quote under, a contract only `verificationCache` vouched for after verifying it, and the directory, from the chain; key entries by `transportNamespace`, keeping none for a custom transport or `fetch` without one.
+- Read the tip's block hash with its height, so a block replaced at the same height is read again.
+- Add `UnverifiedContractError` and the `eager` option of `createClientFromManifest`.
 
 ## 0.3.4 (2026-10-12)
 

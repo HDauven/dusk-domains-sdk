@@ -28,10 +28,17 @@ if (result.value !== 'Absent' && 'Local' in result.value) {
 ```
 
 No wallet or supplied block height is needed. The client fetches the current
-height, discovers directory admissions, and follows permanent forwarding with a
-63-hop default limit. It verifies each contract before reading it: release
-artifact, the directory's admission or market record, interface, deployment binding
-and init commitment. Verification belongs to the client. Nothing becomes readable or
+height and follows permanent forwarding with a 63-hop default limit.
+`createClientFromManifest` verifies the directory; every other contract is verified the
+first time an operation reads through it, so a contract that fails a check throws its
+`ContractRefusedError` there. `discover()` verifies every admitted one up front, as a
+health check, and `{ eager: true }` makes the factory run it before returning.
+Verification checks the release artifact, the directory's admission or market
+record, interface, deployment binding and init commitment. The directory reads a
+contract's interface and binding when it admits it, so the client reads neither for a
+contract the directory probed, only for those its init admitted unprobed
+([trust model](docs/integration-trust-model.md#the-directorys-admission-as-proof)).
+Verification belongs to the client. Nothing becomes readable or
 signable until every check passes, a contract that fails one stays refused, and
 `client.release` is the client's own copy of the release, so a contract another
 client resolved or verified is never trusted here. Discovery does not
@@ -42,10 +49,19 @@ against the release wherever it is quoted, built or signed. `quoteRegistration` 
 only the unchanged quote object they returned, and the Connect app signs a reveal only
 for terms its client quoted under the selection it read. Connect signs only for
 contracts whose release descriptor commits to their code and initialization (`codeHash`
-and `initHash`); others are readable only. Multi-read operations, including
+and `initHash`); others are readable only. For a target its client has not verified, it
+throws an `UnverifiedContractError`, whose `cause` is the client's refusal when it
+refused the contract. Multi-read operations, including
 `prepareRegistration`, run at one height: a sequence that crosses a block is read
-again, up to three times. Use a consistent node endpoint;
-height bracketing is not a historical-state or same-height-reorg proof. The node is a
+again, up to three times. The default transport reads the tip's height and block hash in
+one request, so a block that replaces the tip at the same height counts as a new tip.
+Operations share identical reads made at one tip, in flight or answered, open at a
+height read that arrived in the last `heightReuseMs` (1 s by default), and close with a
+height read sent after every reply they used, so a page reads each fact about once per
+block. A custom transport without `currentBlock` gives heights only: operations then
+share an answered read only within `heightReuseMs`, as such a transport cannot show a
+same-height replacement. Use a consistent node endpoint; height bracketing is not a
+historical-state proof. The node is a
 trust root for reads; the chain still enforces what a signed call pays
 ([trust model](docs/integration-trust-model.md#what-the-node-can-and-cannot-do)).
 Unavailable dependencies throw; they are never interpreted as absence.
@@ -93,7 +109,16 @@ be overridden explicitly in options. New admissions are discovered from reads;
 `resolveContract(role, id, admission)` can supply reviewed release metadata for
 an implementation absent from the initial manifest. It is subjected to the same
 artifact, admission, interface, binding and init checks, and enters `client.release`
-only once all of them pass. `admitDirectoryEvent` also accepts committed,
+only once all of them pass. `verificationCache` (for example `sessionStorage`) keeps
+what verification read about each contract, which a deployed contract cannot change,
+for clients created later; every check runs again on it, and state is never kept. A
+contract verified from it serves reads only: before Connect signs for it, or a
+registration is quoted under it, the client verifies it from the chain, once, and the
+directory with it. Entries are keyed by the chain state the client's reads reach:
+`transportNamespace` when given, else the default transport's node URL. A custom
+`transport` without a `namespace`, or a custom `fetch`, keeps no entries unless
+`transportNamespace` names where its reads go, and a custom `fetch` must otherwise send
+each request to its URL. `admitDirectoryEvent` also accepts committed,
 authenticated directory initialization/admission events; one that contradicts what
 the client reads is rejected, and the contract stays verified.
 
@@ -112,6 +137,16 @@ through `client.store(id).read_primary({ endpoint })` for endpoint cleanup.
 Use `getName` or `quoteRenewal` when the result's destination shard is needed for
 a new write. Every `Located` read follows forwarding. Commitment reads stay on
 their original shard. Never resend an already signed call to a new destination.
+
+Pass the indexer's home store for the name or primary (`homeShard` in its rows, `store`
+in the projection client's) as the hint in `getName(name, homeHint)` and
+`verifyPrimary(endpoint, homeHint)`; `locate`, `quoteRenewal` and every `Located` read
+start at the store they are given. A name page then makes the same reads however many
+stores the directory admits. A hint is only where to look first: a wrong one costs
+reads, never the answer, and without one the client asks every store.
+`previewRegistration({ label, years, actor }, homeHint)` shows a registration quote for
+display, letting the chain place the root; `prepareRegistration`, which reads every
+store's home, builds the registration to sign.
 
 ```ts
 import { storeRenewCall } from '@duskdomains/sdk/writes'
