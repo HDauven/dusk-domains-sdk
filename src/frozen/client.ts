@@ -1188,6 +1188,12 @@ export class FrozenClient {
         ...forwards.map((f) => contractId(f.destination)),
       ])
     for (let hops = forwards.length; hops <= this.hopLimit; hops++) {
+      // Each store on the route vouched for the next: one a concurrent verification refused since
+      // the route was followed stops the read too.
+      for (const passed of seen) {
+        const refusal = this.ledger.refused.get(passed)
+        if (refusal) throw heightIndependent(refusal)
+      }
       const value = (await this.raw(
         'store',
         store,

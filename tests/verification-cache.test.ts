@@ -2,13 +2,14 @@ import { it, expect, vi } from 'vitest'
 import { ContractRefusedError, FrozenClient, UnverifiedContractError, type ClientOptions } from '../src/frozen/client.ts'
 import { registrationCalls } from '../src/frozen/actions.ts'
 import { parseJson, stringifyJson } from '../src/frozen/json.ts'
-import { fromHex } from '../src/frozen/bytes.ts'
+import { fromHex, nameKey } from '../src/frozen/bytes.ts'
 import { estimateRegistrationQuote, launchPolicyConfig } from '../src/core/pricing.ts'
 import { createDuskDomainsConnectApp } from '../src/wallet/duskConnectApp.ts'
 import { buildCall } from '../src/frozen/calls.ts'
 import { bytes, id, jsonRelease, sample } from './helpers.ts'
 import type { ReadTransport } from '../src/frozen/transport.ts'
 import type { LoadedRelease, ReleaseContract } from '../src/frozen/manifest.ts'
+import type { Forward } from '../src/frozen/types.ts'
 
 const encode = (v: unknown) => new TextEncoder().encode(stringifyJson(v))
 const decode = (b: Uint8Array) => parseJson(new TextDecoder().decode(b)) as Record<string, any>
@@ -55,6 +56,8 @@ async function world({ probed = false } = {}) {
     onHeight: undefined as undefined | (() => void),
     /** Runs as a read arrives, before it is answered. */
     onRead: undefined as undefined | ((call: string) => void | Promise<void>),
+    /** A root store 4 forwards to store 7, which holds it no more than any other store. */
+    forward: undefined as undefined | Forward,
     /** The policy's live config, when it differs from the one the release committed to. */
     policyConfig: undefined as undefined | ReturnType<typeof launchPolicyConfig>,
   }
@@ -90,7 +93,8 @@ async function world({ probed = false } = {}) {
         if (n === 1 && fn === 'market') return { ...samples.Market, id: args.id, interface_version: 1, state: 'Listed', version: 1n }
         if (n === 1 && fn === 'registration_context') return registration
         if (n === 3 && fn === 'config') return chain.policyConfig ?? launchPolicyConfig()
-        if (n === 4 && fn === 'home') return 'Absent'
+        if ((n === 4 || n === 7) && (fn === 'home' || fn === 'read_records'))
+          return n === 4 && chain.forward ? { Forwarded: chain.forward } : 'Absent'
         if ((n === 4 || n === 7) && fn === 'capacity') return { ...samples.Capacity, sealed: false }
         if (n === 4 && fn === 'quote_registration') {
           const { estimate, total_lux, ...quote } = estimateRegistrationQuote(launchPolicyConfig(), {
@@ -453,4 +457,39 @@ it('keeps no entries for a custom fetch without a transport namespace, which may
   } finally {
     vi.unstubAllGlobals()
   }
+})
+
+it('stops a read whose route passed a store that a concurrent verification refused meanwhile', async () => {
+  const w = await world({ probed: true })
+  const cache = storage()
+  await w.client({ verificationCache: cache }).discover()
+  // Store 4, the init's, now has a binding naming another directory, which its cached facts hide. It
+  // forwards a root to store 7, and no store holds that root.
+  w.chain.binding.set(4, { directory: bytes(9), vault: bytes(2), network: 1 })
+  const gone = nameKey('gone.dusk')
+  w.chain.forward = { root: gone.root, destination: bytes(7), destination_ordinal: 1, move_id: bytes(10), generation: 1n, completed_at: 90n }
+  const client = w.client({ verificationCache: cache })
+  await client.discover()
+  w.chain.height++
+  // The read follows store 4's route to store 7, then pauses on the membership the search for the
+  // root's home reads next.
+  let resume!: () => void
+  const held = new Promise<void>((resolve) => {
+    resume = resolve
+  })
+  let paused = false
+  w.chain.onRead = async (call) => {
+    if (call !== '01.members') return
+    paused = true
+    await held
+  }
+  const reading = client.locate(id(4), gone.root, 'read_records', gone)
+  reading.catch(() => {})
+  await vi.waitFor(() => expect(paused).toBe(true))
+  // Meanwhile, signing verifies store 4 from the chain, and refuses it.
+  const signing = await createDuskDomainsConnectApp(wallet, client.release).prepare(commitAt(4)).catch((e: unknown) => e)
+  expect((signing as Error).cause).toMatchObject({ contractId: id(4), message: 'Contract deployment binding mismatch' })
+  resume()
+  await expect(reading).rejects.toThrow(ContractRefusedError)
+  await expect(reading).rejects.toThrow('Contract deployment binding mismatch')
 })
