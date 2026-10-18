@@ -221,6 +221,107 @@ register there, which sends the preview to the full placement. It is for display
 `registrationCalls` and Connect take only a quote `quoteRegistration` or
 `prepareRegistration` returned.
 
+### The read lens
+
+A release may have a read lens: the manifest's top-level `lens` entry, pinned like a
+`contracts` entry by `contractId`, `codeHash`, `initHash` and its `dataDriver` (in
+`contracts`, SDKs before the lens reject the unknown role). With one, the client
+answers `getName`, `resolve`, `verifyPrimary`, `namePage`, `previewRegistration`,
+`pricing` and `bootstrap` with one contract query each: the lens reads the directory,
+every store and the policy inside that query, at one state root. Without one, or with
+`useLens: false`, every read is direct, as above, and the lens driver is never fetched.
+Nor is it for an entry without `codeHash` or `initHash`. A lens driver that cannot be
+fetched leaves the client reading directly; bytes other than the entry pins fail the
+release, as for every driver.
+
+The lens's ID-to-code mapping rests on the manifest, exactly as the directory's and the
+vault's: no read returns a contract's code, and the deploy tool derives the ID from the
+reviewed WASM, nonce and owner. The client checks the rest once, on its first lens read:
+`initHash` is the init commitment of `InitLens { directory }` over the release's
+directory with the entry's driver, and the deployed lens's `binding` and
+`lens_interface` are the release's directory, vault and network and lens v1 with the
+pool's bounds. A lens that fails a check is not used again by that client.
+
+Each reply is decoded with the verified driver against strict schemas, and used only
+when it is at its snapshot's height exactly (on Rusk the lens's `block_height()` is the
+tip height the client brackets the snapshot with) and passes these checks:
+
+- every admitted store, in admission order, up to the highest ordinal the client saw at
+  or below the reply's height, in a committed direct snapshot that read the directory's
+  member list (public or internal; a single `member` admission counts only beside it) or
+  an accepted lens reply; and each
+  resolver whose records it read: a contract the release lists in that role, at
+  interface version 1, with the release's code and init hashes and those the client
+  verified it with, and not one the client refused;
+- routes over listed stores at rising ordinals from a start below the first hop, and a
+  record only for an active name with a record slot, whose resolver is listed;
+- the selected policy's whole config, whose init commitment over the release's binding
+  is the release's `initHash`, and the policy the client last read at that selection
+  version (a committed registration-context or directory-config read, or a quote); the
+  allocation and newest store as the directory derives them, from the last admissions;
+- for a name page's own primary, everything `verifyPrimary` checks against the page's
+  name;
+- for `previewRegistration`, a registered root's own name in its lifecycle, a placement
+  consistent with the listed admissions, neither stop flag set, registration open, a
+  label that is not denied, and the price recomputed from the committed config. Only the
+  published v1 policy's pricing is known to the SDK: under another, `previewRegistration`
+  and `pricing` read directly.
+
+The lens checks the interface and binding of what the directory did not probe (the
+store and resolver at ordinal 0, the vault, a genesis policy or market) in the same
+query, as the client would. A hint is passed to the lens, which reads every store
+anyway: it only orders the lens's reads.
+
+Anything else (a refusal, a failed query, a reply that does not decode, is at another
+height or fails a check) sends that call to the direct reads, never to part of the reply,
+and is reported to `onLensFallback` with its reason. A failed deployment check turns the
+lens off for the client; three decode or evidence failures of one method without a lens
+answer in between turn it off for that method (`disabled` says so). A reply that misses a
+store only this client's observations require, or rests on a policy whose pricing the
+SDK does not know (`unsupported`), adds no such failure. A request the lens refused, in
+its reply or inside it (a page's primary), is read directly at that height, and a refusal
+for lack of resources (`GasBudget`, `ReadFailed`) makes that method read directly for
+30 s; no refusal turns anything off.
+
+The lens adds no trust in the node. What its evidence cannot show, the reviewed lens
+checked on chain, and a node that lies can answer either way, as it can a direct read:
+
+- stores past the highest ordinal the client saw (a fresh client cannot tell a shortened
+  list), where a route started (only that a start exists below its first hop), and the
+  current flags and versions of the admissions and config `bootstrap` reports;
+- for a primary whose name the reply does not carry (`verifyPrimary`, or a page's
+  primary for another name), the name's lifecycle, holder and incarnation, its home, and
+  which listed resolver its record came from;
+- for a registration, which store holds a registered root, the placement store's
+  capacity, and a released root's lineage beyond what its request and admissions show;
+- a renewal schedule reported together with prices derived from it, and the selected
+  policy before the client has read the selection directly;
+- the store ordinals a client sees: a node that reports a higher one beside a member
+  list raises the mark, and lens replies then read directly, which costs reads and is
+  safe.
+
+What signing takes from the lens is exactly this:
+
+- lens replies never enter the verification ledger, the verification cache or quote
+  provenance: the Connect app signs only for contracts this client verified directly
+  (verify a write's target with `verifyContract`, or a direct read through it);
+- registration quotes for signing come only from direct store quotes
+  (`quoteRegistration`, `prepareRegistration`); a lens quote, like any
+  `previewRegistration`, is for display;
+- every call builder refuses an argument holding an object a lens `bootstrap()`
+  returned, and the governance proposal builders refuse its admissions and config, as
+  defense in depth for operator actions: build proposals from direct reads
+  (`discover()`, `client.directory.member`, `client.directory.config()`);
+- any other value a caller passes into a builder is the caller's responsibility, exactly
+  as with a direct read: the node vouches for both alike, and Connect checks contracts,
+  not where an argument came from.
+
+Before signing a write about a name the user only saw through the lens, an app may read
+it again directly: `await client.store(page.store).get_name(page.key)`, since the
+per-contract read scopes never use the lens (as `quoteRenewal`, `locate`,
+`quoteRegistration` and `prepareRegistration` do not), or a client created with
+`useLens: false`.
+
 ## Writes
 
 Calls freeze reviewed arguments. Paid calls derive the exact deposit from those

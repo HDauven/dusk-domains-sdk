@@ -98,6 +98,8 @@ interface SdkManifestFields {
       blake3?: string // at least one digest; every supplied digest is verified
     }
   }>
+  // Optional: the read lens, top-level only. The same fields, role 'lens', both commitments.
+  lens?: { role?: 'lens'; contractId: string; codeHash: string; initHash: string; dataDriver: object }
 }
 ```
 
@@ -147,6 +149,23 @@ reads, never the answer, and without one the client asks every store.
 `previewRegistration({ label, years, actor }, homeHint)` shows a registration quote for
 display, letting the chain place the root; `prepareRegistration`, which reads every
 store's home, builds the registration to sign.
+
+`resolve(name, recordKeys, homeHint)` adds up to 16 records by key to `getName`.
+`namePage(name, homeHint)` reads what a name's page shows at one height: the name, its
+records, the verified primary of its `moonlight_address` endpoint and, for a root, its
+renewal inputs. `pricing()` and `bootstrap()` read the selected policy's config and the
+directory's state for a home page. When the release lists a `lens`, these, `getName`,
+`verifyPrimary` and `previewRegistration` take one contract query each, however many
+stores the directory admits; the client checks the lens once and every reply's evidence
+against the release, and reads directly instead when a check fails or the lens refuses
+(`onLensFallback` reports why; `useLens: false` always reads directly). Lens replies
+never enter the client's verification or quote provenance, so the Connect app signs only
+for contracts verified directly (`verifyContract`, or a direct read through it), and a
+registration only from a direct quote. Builders refuse objects a lens `bootstrap()`
+returned; any other value passed to a builder is the caller's responsibility, as from a
+direct read. To re-read a name directly before signing:
+`client.store(page.store).get_name(page.key)`
+([trust model](docs/integration-trust-model.md#the-read-lens)).
 
 ```ts
 import { storeRenewCall } from '@duskdomains/sdk/writes'
@@ -255,7 +274,10 @@ npx jsr publish --dry-run --allow-dirty
 ```
 
 Golden tests run the protocol's real, pinned WASM data drivers and JSON/rkyv
-fixtures locally. No test contacts a chain. `npm run generate` regenerates the
+fixtures locally, the lens's against replies read from the testnet lens. To compare the
+client without a lens against the SDK before it, point `SDK_BASELINE` at a checkout of
+`fedc2d24` with its dependencies installed:
+`SDK_BASELINE=/path/to/sdk npx vitest run tests/lens-baseline.test.ts` (skipped otherwise). No test contacts a chain. `npm run generate` regenerates the
 TypeScript types, builders and catalog from reviewed schema snapshots. This
 repository does not publish or deploy as part of the build.
 

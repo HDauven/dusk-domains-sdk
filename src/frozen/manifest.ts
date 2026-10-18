@@ -6,6 +6,7 @@ import { contractId, hex } from './bytes.ts'
 import { parseJson } from './json.ts'
 import { loadDataDriver, type DataDriver } from './driver.ts'
 import { methodCatalog } from './catalog.ts'
+import { lensCatalog } from './lens-schema.ts'
 export type ContractRole =
   | 'directory'
   | 'store'
@@ -32,12 +33,28 @@ export interface ReleaseContract {
   ordinal?: number
   [key: string]: unknown
 }
+/**
+ * The read lens: the manifest's top-level `lens`, pinned like a `contracts` entry. It is never one
+ * of `contracts`, where SDKs before the lens reject an unknown role, and never signed for.
+ */
+export interface LensContract {
+  role: 'lens'
+  contractId: string
+  dataDriver: Artifact
+  /** BLAKE3 of the reviewed lens WASM. The client uses a lens only when its entry carries it. */
+  codeHash?: string
+  /** H("duskds:init:v1" || canonical InitLens { directory }), recomputed against the directory. */
+  initHash?: string
+  [key: string]: unknown
+}
 export interface ReleaseManifest {
   chainId: string
   network: number
   nodeUrl: string
   indexerUrl: string
   contracts: ReleaseContract[]
+  /** The release's read lens, if it has one. */
+  lens?: LensContract
   [key: string]: unknown
 }
 export interface ManifestOptions {
@@ -50,12 +67,22 @@ export interface ManifestOptions {
   artifactBaseUrl?: string
   nodeUrl?: string
   indexerUrl?: string
+  /**
+   * Read through the release's lens, when it has one: `getName`, `resolve`, `verifyPrimary`,
+   * `namePage`, `previewRegistration`, `pricing` and `bootstrap` then take one contract query each.
+   * `false` reads directly, as without a lens, and never fetches the lens driver.
+   */
+  useLens?: boolean
 }
 export interface LoadedRelease {
   manifest: ReleaseManifest
   contracts: Map<string, ReleaseContract>
   drivers: Map<string, DataDriver>
   artifactBaseUrl: string
+  /** The read lens and its verified driver, when the manifest has one the client may use. */
+  lens?: { contract: LensContract; driver: DataDriver }
+  /** Why the manifest's lens was not loaded: no code or init commitment, or its driver fetch failed. */
+  lensError?: unknown
 }
 export function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
@@ -89,6 +116,19 @@ export function validateReleaseContract(
     role = (c.role ?? c.key ?? roleHint) as ContractRole
   if (!roles.includes(role))
     throw new Error(`Unknown contract role ${String(role)}`)
+  return descriptor(c, role)
+}
+/** A `lens` entry, validated as every other role's. */
+export function validateLensContract(value: unknown, roleHint?: string): LensContract {
+  const c = object(value)
+  if ((c.role ?? c.key ?? roleHint) !== 'lens') throw new Error('Expected the lens role')
+  return descriptor(c, 'lens')
+}
+function descriptor<R extends ContractRole | 'lens'>(
+  c: Record<string, unknown>,
+  role: R,
+): R extends 'lens' ? LensContract : ReleaseContract
+function descriptor(c: Record<string, unknown>, role: ContractRole | 'lens'): ReleaseContract | LensContract {
   const id = contractId(c.contractId as string)
   const a = object(c.dataDriver)
   if (typeof a.path !== 'string' || !a.path)
@@ -176,8 +216,10 @@ export function validateReleaseManifest(
       for (const row of Array.isArray(c) ? c : [c])
         contracts.push(validateReleaseContract(row, role))
     }
+  // The lens is top-level only: an SDK before it rejects the unknown role in `contracts`.
+  const lens = m.lens === undefined ? undefined : validateLensContract(m.lens, 'lens')
   const ids = new Set<string>()
-  for (const c of contracts) {
+  for (const c of [...contracts, ...(lens ? [lens] : [])]) {
     if (ids.has(c.contractId)) throw new Error('Duplicate contract ID')
     ids.add(c.contractId)
   }
@@ -186,13 +228,15 @@ export function validateReleaseManifest(
     if (!count || (['directory', 'vault'].includes(role) && count !== 1))
       throw new Error(`Missing or ambiguous ${role} role`)
   }
+  const { lens: _lens, ...metadata } = m
   return {
-    ...m,
+    ...metadata,
     chainId: m.chainId,
     network,
     nodeUrl: url(options.nodeUrl ?? m.nodeUrl),
     indexerUrl: url(options.indexerUrl ?? m.indexerUrl),
     contracts,
+    ...(lens ? { lens } : {}),
   }
 }
 /** Every supplied digest must match before the driver can execute. */
@@ -211,23 +255,37 @@ export function verifyArtifact(bytes: Uint8Array, artifact: Artifact): void {
       throw new Error(`Driver ${key} mismatch`)
 }
 export async function fetchDriver(
-  contract: ReleaseContract,
+  contract: ReleaseContract | LensContract,
   base: string,
   fetcher: typeof fetch = fetch,
 ): Promise<DataDriver> {
+  return driverFrom(contract, await fetchArtifact(contract, base, fetcher))
+}
+/** A driver artifact's bytes, unverified: every failure here is the fetch's. */
+async function fetchArtifact(
+  contract: ReleaseContract | LensContract,
+  base: string,
+  fetcher: typeof fetch,
+): Promise<Uint8Array> {
   const artifactUrl = new URL(contract.dataDriver.path, base)
   if (!['http:', 'https:'].includes(artifactUrl.protocol))
     throw new Error('Unsupported artifact URL')
   const response = await fetcher(artifactUrl)
   if (!response.ok)
     throw new Error(`Driver fetch failed: HTTP ${response.status}`)
-  const bytes = new Uint8Array(await response.arrayBuffer())
+  return new Uint8Array(await response.arrayBuffer())
+}
+/** Instantiate artifact bytes only once every digest matches, and check the driver's schema. */
+async function driverFrom(contract: ReleaseContract | LensContract, bytes: Uint8Array): Promise<DataDriver> {
   verifyArtifact(bytes, contract.dataDriver)
   const driver = await loadDataDriver(bytes)
   const schema = object(driver.schema())
   if (!Array.isArray(schema.functions))
     throw new Error('Missing driver function schema')
-  for (const expected of methodCatalog[contract.role]) {
+  if (contract.role === 'lens' && schema.lens_version !== 1)
+    throw new Error('Unsupported lens driver version')
+  const catalog = contract.role === 'lens' ? lensCatalog : methodCatalog[contract.role]
+  for (const expected of catalog as readonly { name: string; input: string; output: string; mode: string }[]) {
     if (expected.mode === 'metadata') {
       if (object(schema.metadata)[expected.name] !== expected.input)
         throw new Error('Driver metadata schema does not match its role')
@@ -284,5 +342,26 @@ export async function loadReleaseManifest(
     }
     drivers.set(c.contractId, driver)
   }
-  return { manifest, contracts, drivers, artifactBaseUrl: base }
+  // The lens is optional: it is not fetched when it is not used or has no commitments, and a failed
+  // fetch leaves the release without it. Bytes that arrive are verified like every driver's: other
+  // bytes than the manifest pins fail the release.
+  const entry = manifest.lens
+  let lens: LoadedRelease['lens'], lensError: unknown
+  if (entry && options.useLens !== false) {
+    let bytes: Uint8Array | undefined
+    if (entry.codeHash === undefined || entry.initHash === undefined)
+      lensError = new Error('The release lens has no code or init commitment')
+    else
+      try {
+        bytes = await fetchArtifact(entry, base, f)
+      } catch (error) {
+        lensError = error
+      }
+    if (bytes) lens = { contract: entry, driver: await driverFrom(entry, bytes) }
+  }
+  return {
+    manifest, contracts, drivers, artifactBaseUrl: base,
+    ...(lens ? { lens } : {}),
+    ...(lensError === undefined ? {} : { lensError }),
+  }
 }
