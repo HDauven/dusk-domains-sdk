@@ -1,4 +1,4 @@
-import { it, expect } from 'vitest'
+import { it, expect, vi } from 'vitest'
 import { estimateRegistrationQuote, launchPolicyConfig } from '../src/core/pricing.ts'
 import { FrozenClient } from '../src/frozen/client.ts'
 import { createHttpTransport } from '../src/frozen/transport.ts'
@@ -311,6 +311,70 @@ it('HTTP transport reads the latest height and block hash in one request, lossle
       async () => new Response('{"block":{"header":{"height":5}}}'),
     ).currentBlock!(),
   ).rejects.toThrow('Block hash query failed')
+})
+it('HTTP transport reports a refused read\'s status, and the wait its Retry-After names, counted by the reply\'s own Date', async () => {
+  type Refusal = Error & { status?: number; retryAfterMs?: number }
+  const sent = Date.UTC(2026, 9, 18, 12, 0, 0),
+    date = (ms: number) => new Date(ms).toUTCString()
+  const refused = (status: number, headers: Record<string, string>) =>
+    createHttpTransport('https://node.invalid', async () => new Response('slow down', { status, headers }))
+      .read(id(1), 'config', new Uint8Array()).catch((error: unknown) => error as Refusal)
+  // The local clock an hour ahead of the node's.
+  const clock = vi.spyOn(Date, 'now').mockReturnValue(sent + 3_600_000)
+  try {
+    const e = await refused(429, { 'Retry-After': '3' })
+    expect([e.name, e.status, e.retryAfterMs, e.message]).toEqual(['NodeReadError', 429, 3000, `Contract read failed (${id(1)}.config): slow down`])
+    for (const [headers, wait] of [
+      [{ 'Retry-After': '86400' }, 86_400_000],
+      // Delay-seconds too many for a number: a wait longer than any retry, never none.
+      [{ 'Retry-After': '9'.repeat(400) }, Number.MAX_SAFE_INTEGER],
+      // An HTTP date, from the reply's own Date; without a readable one, from the local clock.
+      [{ Date: date(sent), 'Retry-After': date(sent + 5_000) }, 5_000],
+      [{ Date: 'yesterday', 'Retry-After': date(sent + 3_605_000) }, 5_000],
+      [{ 'Retry-After': date(0) }, 0],
+      [{}, undefined], [{ 'Retry-After': 'soon' }, undefined], [{ 'Retry-After': '-1' }, undefined],
+    ] as const) {
+      const r = await refused(503, headers)
+      expect([r.status, r.retryAfterMs, 'retryAfterMs' in r], JSON.stringify(headers)).toEqual([503, wait, wait !== undefined])
+    }
+  } finally {
+    clock.mockRestore()
+  }
+  const tip = await createHttpTransport('https://node.invalid', async () => new Response('', { status: 429, headers: { 'Retry-After': '1' } }))
+    .currentBlock!().catch((error: unknown) => error as Refusal)
+  expect([tip.message, tip.status, tip.retryAfterMs]).toEqual(['Block height read failed: HTTP 429', 429, 1000])
+})
+it('HTTP transport builds a refused read\'s error from its status and headers, with at most a short part of its body', async () => {
+  const transport = (body: BodyInit | null, status = 429) =>
+    createHttpTransport('https://node.invalid', async () => new Response(body, { status, headers: { 'Retry-After': '2' } }))
+  const failure = (t: ReturnType<typeof transport>) =>
+    // Fails here, rather than hanging, if the transport waits for a body that never ends.
+    Promise.race([
+      t.read(id(1), 'config', new Uint8Array()).then(() => undefined, (error: unknown) => error as Error & { status?: number; retryAfterMs?: number }),
+      new Promise<'hung'>((resolve) => setTimeout(() => resolve('hung'), 3_000)),
+    ])
+  const text = new TextEncoder()
+  // A body that never ends: what arrived soon is kept, and the error is thrown regardless.
+  const started = Date.now()
+  const open = await failure(transport(new ReadableStream({ start: (c) => c.enqueue(text.encode('slow down')) })))
+  expect(open).not.toBe('hung')
+  expect(Date.now() - started).toBeLessThan(2_000)
+  expect(open).toMatchObject({ name: 'NodeReadError', status: 429, retryAfterMs: 2_000, message: `Contract read failed (${id(1)}.config): slow down` })
+  // A body whose stream fails: the status alone.
+  const broken = await failure(transport(new ReadableStream({ pull: (c) => c.error(new Error('connection reset')) })))
+  expect(broken).toMatchObject({ name: 'NodeReadError', status: 429, retryAfterMs: 2_000, message: `Contract read failed (${id(1)}.config): HTTP 429` })
+  // A huge body: its start.
+  const huge = await failure(transport('x'.repeat(1 << 20), 503))
+  expect(huge).toMatchObject({ name: 'NodeReadError', status: 503, retryAfterMs: 2_000 })
+  expect((huge as Error).message.length).toBeLessThan(1_000)
+  expect((huge as Error).message).toMatch(/^Contract read failed \([0-9a-f]{64}\.config\): x+…$/u)
+  // Endless empty chunks: read once, not to the stream's end.
+  let pulls = 0
+  const empty = await failure(transport(new ReadableStream({ pull: (c) => (++pulls > 100_000 ? c.error(new Error('enough')) : c.enqueue(new Uint8Array(0))) })))
+  expect(empty).toMatchObject({ name: 'NodeReadError', status: 429, message: `Contract read failed (${id(1)}.config): HTTP 429` })
+  expect(pulls).toBeLessThan(100)
+  // None at all.
+  expect(await failure(transport(null, 500))).toMatchObject({ status: 500, message: `Contract read failed (${id(1)}.config): HTTP 500` })
 })
 it('primary verification requires matching incarnation, active lifecycle and forward endpoint; resolver errors propagate', async () => {
   const t = await setup()

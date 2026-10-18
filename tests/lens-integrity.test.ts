@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { FrozenClient, createClientFromManifest } from '../src/frozen/client.ts'
 import { bytes, driverBytes, fixtures, id, jsonDriver, policyInitHash, release as wasmRelease } from './helpers.ts'
 import { authority, fromHex, hex, nameKey } from '../src/frozen/bytes.ts'
@@ -8,7 +8,7 @@ import { directoryProposeCall } from '../src/frozen/builders.ts'
 import { buildCall } from '../src/frozen/calls.ts'
 import { createMarketplaceCalls } from '../src/frozen/actions.ts'
 import { loadReleaseManifest } from '../src/frozen/manifest.ts'
-import { child, endpoint, forward, lensEntry, lensWorld, ref, released, store, view, type LensWorld } from './lens-world.ts'
+import { H, child, clocks, endpoint, forward, lensEntry, lensWorld, rateLimited, ref, released, store, view, type LensWorld } from './lens-world.ts'
 
 const lensCalls = (log: string[]) => log.filter((call) => /^08\.(?!binding|lens_interface)/u.test(call))
 const preview = (label: string) => ({ label, years: 1, actor: bytes(10) })
@@ -315,18 +315,17 @@ describe('a lens that keeps failing a method', () => {
       await run()
       return lensCalls(w.log)
     }
-    const now = Date.now()
-    const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+    const clock = clocks()
     try {
       expect(await ask(() => c.namePage('child.example.dusk', w.newest))).toEqual(['08.name_page'])
       // The same request at this height, then any page for 30 s: read directly.
       expect(await ask(() => c.namePage('child.example.dusk', w.newest))).toEqual([])
       w.chain.height++
       expect(await ask(() => c.namePage('example.dusk'))).toEqual([])
-      clock.mockReturnValue(now + 30_001)
+      clock.advance(30_001)
       expect(await ask(() => c.namePage('example.dusk'))).toEqual(['08.name_page'])
     } finally {
-      clock.mockRestore()
+      clock.restore()
     }
     expect(w.fallbacks[0]).toMatchObject({ method: 'namePage', reason: 'refused', disabled: false })
   })
@@ -360,8 +359,7 @@ describe('a lens that keeps failing a method', () => {
     expect(await ask(() => c.getName('child.example.dusk', w.newest))).toEqual(['08.resolve'])
     expect(w.fallbacks.map((f) => f.reason)).toEqual(['refused', 'refused', 'refused', 'refused'])
     // A resource refusal: the method reads directly for 30 s, whatever the request.
-    const now = Date.now()
-    const clock = vi.spyOn(Date, 'now').mockReturnValue(now)
+    const clock = clocks()
     try {
       refuse('GasBudget')
       w.chain.height++
@@ -369,11 +367,11 @@ describe('a lens that keeps failing a method', () => {
       w.chain.height++
       expect(await ask(() => c.getName('example.dusk', w.newest))).toEqual([])
       expect(await ask(() => c.namePage('child.example.dusk', w.newest))).toEqual(['08.name_page'])
-      clock.mockReturnValue(now + 30_001)
+      clock.advance(30_001)
       w.chain.lensReply = undefined
       expect(await ask(() => c.getName('example.dusk', w.newest))).toEqual(['08.resolve'])
     } finally {
-      clock.mockRestore()
+      clock.restore()
     }
   })
 })
@@ -550,5 +548,188 @@ describe('registration through the lens', () => {
       expect(r.viaLens).toEqual(r.direct)
       expect(r.reasons).toEqual(['evidence'])
     }
+  })
+})
+
+describe('rate limits, failed reads and holdoffs', () => {
+  const lensReads = (log: string[]) => log.filter((call) => call.startsWith('08.'))
+  const page = (c: FrozenClient, w: LensWorld) => c.namePage('child.example.dusk', w.newest)
+  const memory = () => {
+    const items = new Map<string, string>()
+    return { getItem: (k: string) => items.get(k) ?? null, setItem: (k: string, v: string) => void items.set(k, v) }
+  }
+
+  it('sends a rate-limited lens read again after its wait, three times a call, then fails the call without reading directly', async () => {
+    const w = await lensWorld(4)
+    const c = await w.client()
+    await page(c, w)
+    let limited = 2
+    w.chain.onRead = (call) => {
+      if (call === '08.name_page' && limited-- > 0) throw rateLimited(call, 40)
+    }
+    w.chain.height++
+    w.log.length = 0
+    const started = Date.now()
+    expect((await page(c, w)).height).toBe(w.chain.height)
+    expect(Date.now() - started).toBeGreaterThanOrEqual(75)
+    expect(w.log).toEqual(Array(3).fill('08.name_page'))
+    // Limited every time: three retries, then the node's error.
+    w.chain.onRead = (call) => {
+      if (call === '08.name_page') throw rateLimited(call, 1)
+    }
+    w.log.length = 0
+    await expect(page(c, w)).rejects.toMatchObject({ status: 429 })
+    expect(w.log).toEqual(Array(4).fill('08.name_page'))
+    // A wait over 10 s, or one too long to count, is never waited out.
+    for (const [status, wait] of [[429, 10_001], [429, Infinity], [503, Infinity], [503, Number.MAX_SAFE_INTEGER]] as const) {
+      w.chain.onRead = (call) => {
+        if (call === '08.name_page') throw rateLimited(call, wait, status)
+      }
+      w.log.length = 0
+      await expect(page(c, w), `${status} after ${wait}`).rejects.toMatchObject({ status })
+      expect(w.log).toEqual(['08.name_page'])
+    }
+    expect(w.fallbacks).toEqual([])
+  })
+
+  it('shares one retry budget across a view: its snapshot\'s attempts, and the query before them', async () => {
+    const queries = (log: string[]) => log.filter((call) => call === H || call === '08.name_page')
+    // One query: a reply below what the client saw after three 429s, then its snapshot's 429.
+    const v = await lensWorld(4)
+    const d = await v.client()
+    await page(d, v)
+    v.chain.height = 105n
+    await d.directory.config()
+    let n = 0
+    v.chain.onRead = (call) => {
+      if (call === '08.name_page' && ++n !== 4) throw rateLimited(call, 5)
+    }
+    v.chain.lensReply = (fn, reply) => {
+      if (fn === 'name_page' && reply.Ok) reply.Ok.height -= 1n
+      return reply
+    }
+    v.log.length = 0
+    await expect(page(d, v)).rejects.toMatchObject({ status: 429 })
+    expect(queries(v.log)).toEqual([...Array(4).fill('08.name_page'), H, '08.name_page'])
+  })
+
+  it('holds nothing off after a check or query it could not read, and sends the check\'s reads one after the other', async () => {
+    const w = await lensWorld(4)
+    const c = await w.client()
+    // A check the node cannot answer: each call tries it, then reads directly.
+    w.chain.replies.set('08.lens_interface', new Error('Contract read failed (lens.lens_interface): unavailable'))
+    w.log.length = 0
+    await page(c, w)
+    await page(c, w)
+    w.chain.replies.delete('08.lens_interface')
+    // A query that failed: only that call reads directly.
+    let failing = 1
+    w.chain.onRead = (call) => {
+      if (call === '08.name_page' && failing-- > 0) throw new TypeError('fetch failed')
+    }
+    await page(c, w)
+    await page(c, w)
+    expect(lensReads(w.log)).toEqual(['08.binding', '08.lens_interface', '08.binding', '08.lens_interface', '08.binding', '08.lens_interface', '08.name_page', '08.name_page'])
+    expect(w.fallbacks.map((f) => [f.reason, f.disabled])).toEqual([['deployment', false], ['deployment', false], ['read', false]])
+    // A binding read that fails ends the check: no interface read, then or later.
+    const v = await lensWorld(4)
+    v.chain.replies.set('08.binding', new Error('Contract read failed (lens.binding): HTTP 500'))
+    v.chain.onRead = (call) => {
+      if (call === '08.lens_interface') throw rateLimited(call, 10)
+    }
+    await page(await v.client(), v)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(lensReads(v.log)).toEqual(['08.binding'])
+    // A rate-limited check read is sent again after its wait.
+    v.chain.replies.delete('08.binding')
+    let limited = 1
+    v.chain.onRead = (call) => {
+      if (call === '08.binding' && limited-- > 0) throw rateLimited(call, 5)
+    }
+    v.log.length = 0
+    await page(await v.client(), v)
+    expect(lensReads(v.log)).toEqual(['08.binding', '08.binding', '08.lens_interface', '08.name_page'])
+  })
+
+  it('holds a failed deployment and a tripped method off for 10 minutes, here and in later clients, on a monotonic clock', async () => {
+    const w = await lensWorld(4)
+    const cache = memory()
+    const clock = clocks()
+    try {
+      w.chain.replies.set('08.binding', { directory: bytes(11), vault: bytes(2), network: 1 })
+      const c = await w.client({ verificationCache: cache })
+      await page(c, w)
+      expect(w.fallbacks.map((f) => [f.reason, f.disabled])).toEqual([['deployment', true]])
+      w.chain.replies.delete('08.binding')
+      clock.advance(599_999)
+      w.log.length = 0
+      await page(c, w)
+      await page(await w.client({ verificationCache: cache }), w)
+      expect(lensReads(w.log)).toEqual([])
+      clock.advance(1)
+      w.log.length = 0
+      await page(c, w)
+      expect(lensReads(w.log)).toEqual(['08.binding', '08.lens_interface', '08.name_page'])
+      // Three replies that fail a check trip the method, however the wall clock is set meanwhile.
+      tamper(w, (ok, fn) => fn === 'name_page' && (ok.consulted.stores[0].code_hash = bytes(8)))
+      for (let i = 0; i < 3; i++) await page(c, w)
+      w.chain.lensReply = undefined
+      clock.setWall(-3_600_000)
+      clock.advance(599_999)
+      w.log.length = 0
+      await page(c, w)
+      expect(lensReads(w.log)).toEqual([])
+      clock.advance(1)
+      w.log.length = 0
+      await page(c, w)
+      expect(lensReads(w.log)).toEqual(['08.name_page'])
+    } finally {
+      clock.restore()
+    }
+  })
+
+  it('backs a method off after a refusal for lack of resources in its own client only', async () => {
+    const w = await lensWorld(4)
+    const cache = memory()
+    w.chain.lensReply = (fn, reply) => (fn === 'name_page' && reply.Ok ? { Refused: { code: 'GasBudget', contract: null, cause: null, height: reply.Ok.height } } : reply)
+    const c = await w.client({ verificationCache: cache })
+    await page(c, w)
+    w.chain.lensReply = undefined
+    w.chain.height++
+    w.log.length = 0
+    await page(c, w)
+    expect(lensCalls(w.log)).toEqual([])
+    await page(await w.client({ verificationCache: cache }), w)
+    expect(lensCalls(w.log)).toEqual(['08.name_page'])
+  })
+
+  it('costs a visitor no more reads than the retries when the node rate-limits a burst', async () => {
+    // Five page loads of a session: home, search, a name page, the market, an unregistered name.
+    const visit = async (burst: number) => {
+      const w = await lensWorld(4)
+      const cache = memory()
+      w.chain.onRead = (call) => {
+        if (/^08\.(?!binding|lens_interface)/u.test(call) && burst-- > 0) throw rateLimited(call, 0)
+      }
+      const loads: ((c: FrozenClient) => Promise<unknown>)[] = [
+        async (c) => (await c.bootstrap(), c.pricing()),
+        (c) => c.previewRegistration(preview('fresh')).catch(() => undefined),
+        async (c) => (await page(c, w), await c.verifyPrimary(endpoint, w.newest), c.bootstrap()),
+        (c) => c.bootstrap(),
+        async (c) => (await c.namePage('fresh.dusk'), c.previewRegistration(preview('fresh')).catch(() => undefined)),
+      ]
+      let reads = 0
+      for (const run of loads) {
+        w.chain.height++
+        w.log.length = 0
+        const c = new FrozenClient(w.release, { transport: w.transport, heightReuseMs: 0, verificationCache: cache })
+        await c.verifyContract('directory', id(1))
+        await run(c)
+        reads += w.log.length
+      }
+      return reads
+    }
+    expect(await visit(0)).toBe(13)
+    expect(await visit(3)).toBe(16)
   })
 })

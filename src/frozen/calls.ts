@@ -49,7 +49,11 @@ function freeze<T>(value: T): T {
   }
   return value
 }
-/** Build a user-callable write. System callbacks cannot be submitted as wallet calls. */
+/**
+ * Build a user-callable write. System callbacks cannot be submitted as wallet calls. Lens `bootstrap()` and
+ * `previewRenewal` objects are refused; any other argument is the caller's, so read a value copied out of
+ * a lens reply again directly, or quote again, before signing it.
+ */
 export function buildCall<R extends ContractRole, M extends Method<R>>(
   role: R,
   target: string,

@@ -51,7 +51,9 @@ export interface ConnectApp {
  * Pass app.wallet from @dusk/connect and a client's `client.release`: calls are prepared and
  * signed only for contracts that client verified against release commitments, and a reveal
  * only for terms it quoted. `submit` checks again immediately before dusk_sendTransaction,
- * which receives the encoded bytes directly.
+ * which receives the encoded bytes directly. Other arguments are the caller's: the app checks
+ * contracts and quotes, not where a value came from, so read one copied from a lens reply again
+ * directly before signing it.
  */
 export function createDuskDomainsConnectApp(
   wallet: ConnectWallet,

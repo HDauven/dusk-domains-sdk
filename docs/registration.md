@@ -74,7 +74,9 @@ permitted. Registration events record the effective value. A changed quote,
 policy version, deadline or home requires review and a newly signed call.
 
 Renew with `client.quoteRenewal(store, { name, years })`. Follow its returned
-`store`; use the Local schedule version/total in `storeRenewCall`. Renewal binds
+`store`; use the Local schedule version/total in `storeRenewCall`. To show a price on a
+name page, `client.previewRenewal(page, years)` answers as `quoteRenewal` would at the
+page's height; builders refuse it. Renewal binds
 the complete NameRef, exact price, schedule version and deadline. It uses the
 directory's published renewal schedule, including its referral rate, without a
 registration-policy dependency. Anyone may pay, including while the name is in

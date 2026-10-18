@@ -302,33 +302,43 @@ export function registrationProof(
     ? proof
     : undefined
 }
-/** Objects a lens reply supplied, at every depth: no signed call takes them as arguments. */
+/** Objects a lens `bootstrap()` reply supplied, at every depth: no call builder takes them as arguments. */
 const lensRows = new WeakSet<object>()
-export function markLensRows(values: readonly unknown[]): void {
-  const mark = (value: unknown): void => {
-    if (!value || typeof value !== 'object' || lensRows.has(value)) return
-    lensRows.add(value)
-    for (const child of Object.values(value)) mark(child)
+/** Objects of a quote computed for display (`previewRenewal`), at every depth: no call builder takes them either. */
+const displayRows = new WeakSet<object>()
+function mark(rows: WeakSet<object>, values: readonly unknown[]): void {
+  const add = (value: unknown): void => {
+    if (!value || typeof value !== 'object' || rows.has(value)) return
+    rows.add(value)
+    for (const child of Object.values(value)) add(child)
   }
-  for (const value of values) mark(value)
+  for (const value of values) add(value)
+}
+export function markLensRows(values: readonly unknown[]): void {
+  mark(lensRows, values)
+}
+export function markDisplayRows(values: readonly unknown[]): void {
+  mark(displayRows, values)
 }
 export function isLensRow(value: unknown): boolean {
   return Boolean(value && typeof value === 'object' && lensRows.has(value))
 }
 /**
- * A call takes no object a lens `bootstrap()` returned: check caller input before any copy, which
- * would drop the mark.
+ * A call takes no object a lens `bootstrap()` returned, nor one of a display quote: check caller input
+ * before any copy, which would drop the mark.
  */
 export function refuseLensRows(input: unknown): void {
-  if (holdsLensRow(input))
+  if (holds(input, lensRows))
     throw new Error('A lens bootstrap reply is not evidence for a signed call: read its values directly')
+  if (holds(input, displayRows))
+    throw new Error('A display quote is not evidence for a signed call: quote it with quoteRenewal')
 }
-/** Whether `value` holds, at any depth, an object a lens reply supplied. */
-export function holdsLensRow(value: unknown, seen = new Set<object>()): boolean {
+/** Whether `value` holds, at any depth, an object of `rows`. */
+function holds(value: unknown, rows: WeakSet<object>, seen = new Set<object>()): boolean {
   if (!value || typeof value !== 'object' || seen.has(value)) return false
-  if (lensRows.has(value)) return true
+  if (rows.has(value)) return true
   seen.add(value)
-  return Object.values(value).some((child) => holdsLensRow(child, seen))
+  return Object.values(value).some((child) => holds(child, rows, seen))
 }
 export function heightIndependent<E>(error: E): E {
   if (error && typeof error === 'object') independent.add(error)

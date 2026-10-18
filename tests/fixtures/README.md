@@ -53,3 +53,14 @@ The lens fixtures come from the deployed testnet lens, not from this repository:
 
 The tests decode every golden with the real driver, recompute the init commitment, and run
 the SDK's evidence checks and a client on the real replies.
+
+## Renewal exactness
+
+`renewal-exactness.json.gz` (`dusk-domains/renewal-exactness/v1`, 254 states, pinned by its
+SHA-256 in `tests/renewal-exactness.test.ts`) is what protocol `ab905e64`'s own code answers:
+the store's `get_name`, its production `quote_renewal` entrypoint at year counts 0 to 12 and
+255, and the lens's `renewal_inputs`. Its states cover every label-length tier, registrations
+of 1 and 10 years with and without a referrer, every horizon step, valid and invalid renewal
+schedules, a subname, moves, custody, renewals in grace, re-registration, an absent name, a
+grace end off the grace period and heights at the end of u64. The generator, which runs the
+store's code natively in a checkout of that revision, is kept outside this repository.

@@ -36,7 +36,7 @@ type StoreGovernance = Pick<Admission, 'id'> &
 type RecipientGovernance = Pick<DirectoryConfig, 'operator_epoch'> &
   Partial<Pick<DirectoryConfig, 'recipient_version'>>
 
-/** A lens reply is shown, never signed on: governance reads its evidence directly. */
+/** No governance proposal is built from a lens `bootstrap()` row: its evidence is read directly. */
 function notFromLens(row: object, read: string): void {
   if (isLensRow(row))
     throw new Error(`Read the ${read} directly (not through the lens) before proposing governance changes`)

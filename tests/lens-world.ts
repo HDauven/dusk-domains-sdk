@@ -5,6 +5,7 @@
  * the lens's reads independently of the SDK, so a client that reads through it can be compared with one
  * that reads the contracts directly.
  */
+import { vi } from 'vitest'
 import { FrozenClient, type ClientOptions, type LensFallback } from '../src/frozen/client.ts'
 import { parseJson, stringifyJson } from '../src/frozen/json.ts'
 import { authority, equalBytes, fromHex, hex, nameKey } from '../src/frozen/bytes.ts'
@@ -71,7 +72,8 @@ export function lensEntry(change: Partial<LensContract> = {}): LensContract {
   }
 }
 
-export async function lensWorld(n: number, r = 3, { lens = true }: { lens?: boolean } = {}) {
+/** `storeCode`: the code hash every store's release entry and admission carry, such as the published v1 store's. */
+export async function lensWorld(n: number, r = 3, { lens = true, storeCode }: { lens?: boolean; storeCode?: string } = {}) {
   const base = await jsonRelease()
   const release: LoadedRelease = {
     ...base, manifest: structuredClone(base.manifest), contracts: new Map(base.contracts), drivers: new Map(base.drivers),
@@ -81,7 +83,9 @@ export async function lensWorld(n: number, r = 3, { lens = true }: { lens?: bool
     ...Array.from({ length: r }, (_, j) => [resolver(j), id(5)]),
   ]
   for (const [contract, template] of ids) {
-    release.contracts.set(contract, { ...release.contracts.get(template)!, contractId: contract })
+    release.contracts.set(contract, {
+      ...release.contracts.get(template)!, contractId: contract, ...(storeCode && template === id(4) ? { codeHash: storeCode } : {}),
+    })
     release.drivers.set(contract, release.drivers.get(id(4))!)
   }
   // The policy is the published v1 policy, whose pricing the SDK recomputes.
@@ -93,7 +97,9 @@ export async function lensWorld(n: number, r = 3, { lens = true }: { lens?: bool
   const newest = store(n - 1)
   const chain = {
     height: 100n,
-    stores: Array.from({ length: n }, (_, i) => admission(store(i), i)),
+    /** Bumped when a block replaces the tip at the same height: the tip's hash changes, its height not. */
+    fork: 0,
+    stores: Array.from({ length: n }, (_, i) => ({ ...admission(store(i), i), ...(storeCode ? { code_hash: fromHex(storeCode, 32) } : {}) })),
     resolvers: Array.from({ length: r }, (_, j) => admission(resolver(j), j)),
     /** The policy the directory selects, and its selection version: past 1, a SetPolicy selected it. */
     policy: bytes(3),
@@ -116,6 +122,9 @@ export async function lensWorld(n: number, r = 3, { lens = true }: { lens?: bool
     /** Change a lens reply before it is sent, as a faulty lens or node would. */
     lensReply: undefined as undefined | ((fn: string, reply: any) => unknown),
     onRead: undefined as undefined | ((call: string) => void | Promise<void>),
+    /** Run before a height read is answered, and after a reply was computed, before it arrives. */
+    onHeight: undefined as undefined | (() => void | Promise<void>),
+    onReply: undefined as undefined | ((call: string) => void | Promise<void>),
   }
   const log: string[] = []
   const fallbacks: LensFallback[] = []
@@ -349,10 +358,12 @@ export async function lensWorld(n: number, r = 3, { lens = true }: { lens?: bool
   const transport: ReadTransport = {
     currentBlock: async () => {
       log.push(H)
-      return { height: chain.height, hash: `${chain.height}` }
+      await chain.onHeight?.()
+      return { height: chain.height, hash: `${chain.height}/${chain.fork}` }
     },
     currentBlockHeight: async () => {
       log.push(H)
+      await chain.onHeight?.()
       return chain.height
     },
     namespace: 'lens-world',
@@ -368,9 +379,12 @@ export async function lensWorld(n: number, r = 3, { lens = true }: { lens?: bool
       const args = decode(data) ?? {}
       if (target === lensId) {
         const reply = lensAnswer(fn, args)
-        return encode(chain.lensReply ? chain.lensReply(fn, structuredClone(reply)) : reply)
+        const bytes = encode(chain.lensReply ? chain.lensReply(fn, structuredClone(reply)) : reply)
+        await chain.onReply?.(call)
+        return bytes
       }
       const reply = answer(target, fn, args)
+      await chain.onReply?.(call)
       if (reply instanceof Error) throw reply
       return encode(reply)
     },
@@ -407,3 +421,29 @@ export function released(w: LensWorld, label: string, i = 0): NameKey {
   return k
 }
 export const pages = (n: number) => Math.ceil(n / 16)
+/** A node's refusal of a read it rate-limits, as the HTTP transport reports one: its status and wait. */
+export const rateLimited = (call: string, retryAfterMs?: number, status = 429): Error =>
+  Object.assign(new Error(`Contract read failed (${call}): HTTP ${status}`), { status, ...(retryAfterMs === undefined ? {} : { retryAfterMs }) })
+/**
+ * The client's two clocks, stopped: `advance` moves both, as time does; `setWall` only the wall clock
+ * (`Date.now`), as setting it does, not the monotonic one (`performance.now`). `restore` lets them run.
+ */
+export function clocks() {
+  const wall = Date.now(),
+    // Whole milliseconds, so sums of them stay exact and a deadline falls on the boundary it names.
+    mono = Math.floor(performance.now())
+  let w = 0,
+    m = 0
+  const spies = [vi.spyOn(Date, 'now').mockImplementation(() => wall + w), vi.spyOn(performance, 'now').mockImplementation(() => mono + m)]
+  return {
+    wall: () => wall + w,
+    advance(ms: number) {
+      w += ms
+      m += ms
+    },
+    setWall(ms: number) {
+      w += ms
+    },
+    restore: () => spies.forEach((s) => s.mockRestore()),
+  }
+}

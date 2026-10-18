@@ -58,7 +58,9 @@ client's decisions.
 
 A contract's interface, binding, order API version and, for a policy, init commitment
 never change once it is deployed. A client reads those the directory has not proved
-once: an attempt it abandoned checks them again from what it read, without new reads.
+once: an attempt it abandoned checks them again from what it read, without new reads. A
+policy's config, once it decoded and its init commitment is the release's, also answers the
+state read of that config at its tip, so a quote reads it once.
 With `verificationCache`, such as `sessionStorage`, a later client does the same with
 what an earlier one read. An entry is bound to the release's chain, network and
 directory with its commitments, the vault, the chain state the client's reads reach
@@ -70,6 +72,26 @@ request to its URL. It is written only for a contract whose verification committ
 entry that fails a check is ignored, never a refusal: the contract is checked from the
 chain instead. The directory's admission and market records, and all other state, are
 always read from the chain.
+
+The cache also keeps what the lens deployment check read, once both checks passed on chain
+reads, checked again on every load, and the lens's health under the release and this SDK's
+reply checks: each method's strikes, and when a tripped method or a deployment that failed
+a check stops being held off, 10 minutes after it began. A client times its holdoffs on a
+monotonic clock; one loaded from the cache holds off for what is left of it on the wall
+clock, 10 minutes at most, and one ending later is written back ending then. A malformed
+entry is ignored whole and written again. Within one JavaScript realm, updates of an entry
+through one cache object run one at a time, each merging into the entry as it is (a strike
+adds one to its count, a holdoff keeps the latest), so none undoes another; across realms,
+health is best effort, and a cache operation that does not settle within a second ends the
+client's use of the cache for it. Lens entries are bound as contract entries are, and to the lens entry's ID,
+commitments and driver.
+
+`verificationCache` is trusted for read correctness: an entry holding the facts a check
+expects stands in for the chain reads, so whatever can write it can make a client read
+through a lens misbound to another directory, which reply evidence does not catch. Lens data
+never enters verification state or signable quote provenance (below); display quotes
+(`previewRegistration`, `previewRenewal`) and write fields a caller supplies may rest on it.
+Whatever can write a site's `sessionStorage` can already run code on its pages.
 
 Storage is not the chain: whoever can write it can fill an entry with the facts a check
 expects. So a contract verified from an entry serves reads only. Before the Connect app
@@ -179,7 +201,8 @@ flight for another operation, or a new one. It closes with a tip read sent after
 and after every reply it used arrived, possibly the one it opened with. Each reply was
 then answered at a tip between the two, so equal tips mean one block, and that block was
 the tip while the operation ran however old its opening read was: the window only
-decides how often a first attempt opens at a tip the chain has already left. Such an
+decides how often a first attempt opens at a tip the chain has already left. A view the
+lens answers in one query needs no tip read ([below](#the-read-lens)). Such an
 attempt is read again at the new tip and is not one of the three. `snapshot` closes with
 a tip read sent after its operation settles, since that operation may read through the
 transport itself. A consistent node endpoint is required. By height alone, a block
@@ -236,15 +259,30 @@ release, as for every driver.
 
 The lens's ID-to-code mapping rests on the manifest, exactly as the directory's and the
 vault's: no read returns a contract's code, and the deploy tool derives the ID from the
-reviewed WASM, nonce and owner. The client checks the rest once, on its first lens read:
+reviewed WASM, nonce and owner. The client checks the rest once, on its first lens read
+or from its `verificationCache`:
 `initHash` is the init commitment of `InitLens { directory }` over the release's
 directory with the entry's driver, and the deployed lens's `binding` and
-`lens_interface` are the release's directory, vault and network and lens v1 with the
-pool's bounds. A lens that fails a check is not used again by that client.
+`lens_interface`, read one after the other, are the release's directory, vault and network
+and lens v1 with the pool's bounds. A lens that fails a check is held off for 10 minutes.
 
-Each reply is decoded with the verified driver against strict schemas, and used only
-when it is at its snapshot's height exactly (on Rusk the lens's `block_height()` is the
-tip height the client brackets the snapshot with) and passes these checks:
+Each reply is decoded with the verified driver against strict schemas. A view it answers
+reads no tip: one contract query reads one state, and its reply reports that state's
+height, which is the view's (on Rusk the lens's `block_height()`, the tip the node read).
+The client uses a reply only at or above the highest height it has seen, from a tip read
+or a reply it used; one below it, or a request the lens refused at that height, is read
+again in a snapshot bracketed by tip reads and used only at that snapshot's height, so a
+node whose tip went back is read at its tip. Each view sends its own query.
+
+A reply reports no block hash, so a block that replaced the one a query read, at the same
+height, while it ran is not seen: that view shows the replaced block, the tip while its query
+ran, and the next view the new one. No reply is kept to answer another read, and lens data
+never enters verification state or signable quote provenance. Display quotes
+(`previewRegistration`, `previewRenewal`) and write fields a caller copies from a reply may
+rest on it: read those again directly, or quote again, before signing.
+The fix is a node that reports the height and block hash a query ran on.
+
+A reply is used only if it passes these checks:
 
 - every admitted store, in admission order, up to the highest ordinal the client saw at
   or below the reply's height, in a committed direct snapshot that read the directory's
@@ -274,14 +312,24 @@ anyway: it only orders the lens's reads.
 
 Anything else (a refusal, a failed query, a reply that does not decode, is at another
 height or fails a check) sends that call to the direct reads, never to part of the reply,
-and is reported to `onLensFallback` with its reason. A failed deployment check turns the
-lens off for the client; three decode or evidence failures of one method without a lens
-answer in between turn it off for that method (`disabled` says so). A reply that misses a
+and is reported to `onLensFallback` with its reason. A failed deployment check holds the
+lens off for 10 minutes, and three decode or evidence failures of one method without a lens
+answer in between hold that method off for 10 minutes (`disabled` says so), across the
+clients of a `verificationCache`; no other failure holds anything off. A reply that misses a
 store only this client's observations require, or rests on a policy whose pricing the
 SDK does not know (`unsupported`), adds no such failure. A request the lens refused, in
 its reply or inside it (a page's primary), is read directly at that height, and a refusal
 for lack of resources (`GasBudget`, `ReadFailed`) makes that method read directly for
-30 s; no refusal turns anything off.
+30 s in its client; no refusal turns anything off.
+
+A lens read the node rate-limits (429, or 503 with `Retry-After`) is sent again after the
+wait the node names, 1 s if none, and never after one over 10 s, however large; an HTTP
+date counts from the reply's own `Date`. A call has three retries in all, its deployment
+check, query and snapshot attempts together, then fails with that error rather than
+multiply the node's load with direct reads: a view sends at most 8 lens queries, 2 more
+for its client's deployment check, and 4 tip reads, and waits
+at most 30 s. The HTTP transport makes its error from the status and headers, quoting at
+most 512 bytes of the body that arrive within 250 ms.
 
 The lens adds no trust in the node. What its evidence cannot show, the reviewed lens
 checked on chain, and a node that lies can answer either way, as it can a direct read:
@@ -294,8 +342,9 @@ checked on chain, and a node that lies can answer either way, as it can a direct
   which listed resolver its record came from;
 - for a registration, which store holds a registered root, the placement store's
   capacity, and a released root's lineage beyond what its request and admissions show;
-- a renewal schedule reported together with prices derived from it, and the selected
-  policy before the client has read the selection directly;
+- a renewal schedule reported together with prices derived from it, which a
+  `previewRenewal` price shows too, and the selected policy before the client has read
+  the selection directly;
 - the store ordinals a client sees: a node that reports a higher one beside a member
   list raises the mark, and lens replies then read directly, which costs reads and is
   safe.
@@ -312,11 +361,16 @@ What signing takes from the lens is exactly this:
   returned, and the governance proposal builders refuse its admissions and config, as
   defense in depth for operator actions: build proposals from direct reads
   (`discover()`, `client.directory.member`, `client.directory.config()`);
+- `previewRenewal` computes a renewal price from a name page this client returned only
+  where it is exactly the home's `quote_renewal` at the page's height (a root with no move
+  pending, years within the page's horizon, a home of the published v1 store's code), and
+  quotes directly anywhere else; every builder refuses what it returns, so a renewal is
+  signed from `quoteRenewal`;
 - any other value a caller passes into a builder is the caller's responsibility, exactly
-  as with a direct read: the node vouches for both alike, and Connect checks contracts,
-  not where an argument came from.
+  as with a direct read: the node vouches for both alike, and Connect checks contracts and
+  quotes, not where an argument came from.
 
-Before signing a write about a name the user only saw through the lens, an app may read
+Before signing a write about a name the user only saw through the lens, an app should read
 it again directly: `await client.store(page.store).get_name(page.key)`, since the
 per-contract read scopes never use the lens (as `quoteRenewal`, `locate`,
 `quoteRegistration` and `prepareRegistration` do not), or a client created with

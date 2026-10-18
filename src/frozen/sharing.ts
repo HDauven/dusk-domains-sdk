@@ -59,7 +59,7 @@ async function tipOf(transport: ReadTransport): Promise<ChainTip> {
 /** Replies kept for the height last seen, at most. The oldest is dropped first. */
 const LIMIT = 256
 /** Milliseconds, on a clock that never runs back where the platform has one. */
-const elapsed = (): number => (typeof performance === 'object' && performance ? performance.now() : Date.now())
+export const elapsed = (): number => (typeof performance === 'object' && performance ? performance.now() : Date.now())
 
 export class ReadSharing {
   private clock = 0
@@ -69,6 +69,8 @@ export class ReadSharing {
   private seen?: ChainTip
   /** When that height read arrived, in milliseconds (`elapsed`). */
   private seenAt = -Infinity
+  /** The highest height any height read that arrived reported. */
+  private top?: bigint
   private readonly shared = new Map<string, Shared>()
   /**
    * `windowMs`: by height alone, how long after a reply arrived another operation may share it.
@@ -91,6 +93,7 @@ export class ReadSharing {
     sighting.tip = tipOf(this.transport).then(
       (tip) => {
         sighting.settled = 'ok'
+        if (this.top === undefined || tip.height > this.top) this.top = tip.height
         if (!sameTip(tip, this.seen)) {
           this.shared.clear()
           this.seen = tip
@@ -112,6 +115,10 @@ export class ReadSharing {
    */
   recent(windowMs: number): ChainTip | undefined {
     return this.seen !== undefined && windowMs > 0 && elapsed() - this.seenAt < windowMs ? this.seen : undefined
+  }
+  /** The highest height a height read that arrived reported, of all of them; none before the first. */
+  highest(): bigint | undefined {
+    return this.top
   }
   /**
    * The tip an attempt reads at: the latest height read if it was sent after `since`, or, for a
@@ -181,6 +188,13 @@ export class ReadSharing {
     } finally {
       at.replied = Math.max(at.replied, read.settled!)
     }
+  }
+  /** Keep a reply `at` read unshared, which its caller checked, for the state reads at its tip; never over one kept. */
+  publish(at: Attempt, id: string, fn: string, input: Uint8Array, bytes: Uint8Array): void {
+    const key = `${id}/${fn}/${hex(input)}`
+    if (!sameTip(at, this.seen) || this.shared.has(key)) return
+    this.shared.set(key, { bytes: Promise.resolve(new Uint8Array(bytes)), settled: this.now(), arrived: elapsed() })
+    if (this.shared.size > LIMIT) this.shared.delete(this.shared.keys().next().value!)
   }
   /** Whether attempt `at` would share a read of `fn` at `id` with `input` that another attempt made. */
   holds(at: Attempt, id: string, fn: string, input: Uint8Array): boolean {
