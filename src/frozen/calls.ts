@@ -3,6 +3,7 @@ import { methodCatalog } from './catalog.ts'
 import { contractId } from './bytes.ts'
 import { wireInput } from './wire.ts'
 import { walletGasLimit } from './wallet-gas.ts'
+import { refuseLensRows } from './trust.ts'
 import type { Methods } from './types.ts'
 import type { ContractRole } from './manifest.ts'
 export type Method<R extends ContractRole> = keyof Methods[R] & string
@@ -58,6 +59,7 @@ export function buildCall<R extends ContractRole, M extends Method<R>>(
   const definition = methodDefinition(role, method)
   if (definition.mode !== 'write')
     throw new Error('Method is not a public wallet action')
+  refuseLensRows(args)
   const checked = wireInput(
     role,
     method,

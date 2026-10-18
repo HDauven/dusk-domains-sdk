@@ -23,7 +23,7 @@ import {
   type ContractRole,
   type ReleaseContract,
 } from './manifest.ts'
-import { parseJson, stringifyJson } from './json.ts'
+import { parseJson, stringifyJson, u64 } from './json.ts'
 import { wireValue } from './wire.ts'
 import { primaryNameStatus } from '../core/primary.ts'
 import { createHttpTransport, type ChainTip, type ReadTransport } from './transport.ts'
@@ -36,10 +36,43 @@ import {
   isHeightIndependent,
   noteSelection,
   noteVerifiedQuote,
+  refuseLensRows,
+  selectedPolicy,
   type Ledger,
   type Stage,
   type VerifiedContract,
 } from './trust.ts'
+import {
+  LensFailure,
+  checkAvailability,
+  checkBootstrap,
+  checkNamePage,
+  checkPricing,
+  checkResolution,
+  checkReverse,
+  lensInitCommitment,
+  lensInput,
+  lensOutput,
+  lifecycle,
+  replyStores,
+  moonlightEndpoint,
+  renewalInputs,
+  sameBinding,
+  type Bootstrap,
+  type EvidenceContext,
+  type LensAvailability,
+  type LensBootstrap,
+  type LensFallbackReason,
+  type LensNamePage,
+  type LensPricing,
+  type LensResolution,
+  type LensRefusal,
+  type LensReverse,
+  type NamePage,
+  type Pricing,
+  type Resolved,
+} from './lens.ts'
+import { LENS_INTERFACE, type LensMethod } from './lens-schema.ts'
 import type { DataDriver } from './driver.ts'
 import type { ReadMethods } from './read-types.ts'
 import type {
@@ -62,6 +95,7 @@ import type {
   RenewalQuote,
   StoreQuoteRenewalArgs,
   DirectoryConfig,
+  RecordsView,
   ContractKind,
   Interface,
   Binding,
@@ -70,6 +104,45 @@ import type {
 } from './types.ts'
 
 export { ContractRefusedError, UnverifiedContractError, UnverifiedQuoteError } from './trust.ts'
+export type { Bootstrap, LensFallbackReason, NameLifecycle, NamePage, Pricing, RenewalInputs, Resolved } from './lens.ts'
+/** A read that fell back from the release's lens to direct reads, and why. */
+export interface LensFallback {
+  /** The client method, such as `getName`. */
+  method: string
+  /**
+   * `deployment`: the lens could not be verified for this client; `refused`: it refused; `decode`: its
+   * reply did not decode; `height`: it answered at another height; `evidence`: what it rests on failed
+   * a release check; `read`: the query failed.
+   */
+  reason: LensFallbackReason
+  error: unknown
+  /**
+   * This fallback turned the lens off: for the client (`deployment`), or for this method after its
+   * third decode or evidence failure without a lens answer in between. Later calls read directly.
+   */
+  disabled: boolean
+}
+/** A malformed hint is no hint: the lens and the direct reads both ignore it. */
+function lensHint(hint: string | undefined): number[] | null {
+  if (hint === undefined) return null
+  try {
+    return fromHex(contractId(hint), 32)
+  } catch {
+    return null
+  }
+}
+/** Check and map a lens reply: whatever fails here is a fact about that reply, at its height. */
+function settle<T>(check: () => T): T {
+  try {
+    return check()
+  } catch (error) {
+    throw heightIndependent(
+      error instanceof LensFailure
+        ? error
+        : new LensFailure('evidence', `Lens evidence does not check: ${error instanceof Error ? error.message : String(error)}`),
+    )
+  }
+}
 /** An operation saw a block land; its snapshot runs it again. */
 class TipMoved extends Error {}
 const policyAdmissionMismatch = () =>
@@ -150,12 +223,25 @@ export interface ClientOptions extends ManifestOptions {
    * and with 0 only one still in flight.
    */
   heightReuseMs?: number
+  /** Called, never awaited, whenever a read falls back from the lens to direct reads. */
+  onLensFallback?: (fallback: LensFallback) => void
 }
 /**
  * A tenth of Dusk's block time of about 10 s: a height read this recent has gone stale about one time
  * in ten at most, and then costs one attempt that does not count, whose closing read opens the next.
  */
 const HEIGHT_REUSE_MS = 1000
+/**
+ * What one attempt read about stores and selections: the store ordinals it read contiguously from 0
+ * (a member list, or a lens reply's), the highest single admission, and each selection.
+ */
+interface Observed {
+  prefix: number
+  single: number
+  selections: [string, string][]
+}
+/** How long a method reads directly after a lens refusal for lack of resources (`GasBudget`, `ReadFailed`). */
+const LENS_BACKOFF_MS = 30_000
 export type ReadApi<R extends ContractRole> = {
   [M in ReadMethods[R] & Method<R>]: (
     ...args: Input<R, M> extends null ? [] : [args: Input<R, M>]
@@ -241,6 +327,27 @@ export class FrozenClient {
   private readonly cacheNamespace: string | undefined
   /** Contracts an attempt verified, whose facts the cache gets once the attempt commits. */
   private readonly unkept = new WeakMap<VerifiedContract, string>()
+  /** The lens deployment check, once per client; a failed read is checked again by the next call. */
+  private lensCheck?: Promise<void>
+  /** The lens deployment failed a check: this client reads directly from now on. */
+  private lensOff = false
+  /** Decode and evidence failures per lens method since its last answer, and methods turned off. */
+  private readonly lensStrikes = new Map<LensMethod, number>()
+  private readonly lensBroken = new Set<LensMethod>()
+  /**
+   * Store ordinals this client saw in a committed snapshot, a direct read or a lens reply, with the
+   * height it saw each at: heights and ordinals rising. Admissions are never removed, so a lens reply
+   * lists every store seen at or below its height.
+   */
+  private readonly storeMarks: { height: bigint; ordinal: number }[] = []
+  /** Policy selections this client read directly, by selection version; '' where two reads disagree. */
+  private readonly selectionsSeen = new Map<string, string>()
+  /** What an attempt read about stores and selections, kept only if the attempt commits. */
+  private readonly observed = new WeakMap<Attempt, Observed>()
+  /** Lens refusals by method, argument and height: the same request there reads directly. */
+  private readonly lensRefusals = new Map<string, LensRefusal>()
+  /** Until when, on the client's clock, a method whose lens read ran short of resources reads directly. */
+  private readonly lensBackoff = new Map<LensMethod, number>()
   /**
    * The client trusts only what it verified itself. `client.release` is its own copy of
    * `release`: contracts it resolves are added there, not to `release` or another client's.
@@ -358,6 +465,7 @@ export class FrozenClient {
       }
       if (sameTip(before, await close())) {
         this.commit(at.stage)
+        this.commitObserved(at)
         return result
       }
       this.abandon(at.stage)
@@ -422,10 +530,12 @@ export class FrozenClient {
       stringifyJson(wireValue(spec.input, args)),
     )
     const bytes = await this.sharing.read(at, id, method, input, shared)
-    return wireValue(
+    const value = wireValue(
       spec.output,
       contract.driver.decodeOutput(method, bytes),
     ) as Output<R, M>
+    if (at && role === 'directory') this.observe(at, method, args, value)
+    return value
   }
   /** The exact ABI read surface, with lossless typed output and automatic height acquisition. */
   async read<R extends ContractRole, M extends ReadMethods[R] & Method<R>>(
@@ -947,6 +1057,53 @@ export class FrozenClient {
     }
     throw new Error('Directory membership exceeds frozen bound')
   }
+  /** The highest store ordinal this client saw at or below `height`. */
+  private storeMark(height: bigint): number {
+    let mark = -1
+    for (const m of this.storeMarks) if (m.height <= height && m.ordinal > mark) mark = m.ordinal
+    return mark
+  }
+  /** Keep that `ordinal` was admitted by `height`, dropping what it makes redundant. */
+  private sawStores(height: bigint, ordinal: number): void {
+    if (this.storeMark(height) >= ordinal) return
+    for (let i = this.storeMarks.length - 1; i >= 0; i--)
+      if (this.storeMarks[i].height >= height && this.storeMarks[i].ordinal <= ordinal) this.storeMarks.splice(i, 1)
+    this.storeMarks.push({ height, ordinal })
+    this.storeMarks.sort((a, b) => (a.height < b.height ? -1 : a.height > b.height ? 1 : 0))
+  }
+  /** Stage what a directory read shows about stores and the policy selection, for `at`'s commit. */
+  private observe(at: Attempt, method: string, args: unknown, value: unknown): void {
+    if (!['member', 'members', 'registration_context', 'config'].includes(method)) return
+    const seen = this.observing(at)
+    const kind = (args as { kind?: unknown } | null)?.kind
+    if (method === 'member' && kind === 'Store' && value) seen.single = Math.max(seen.single, (value as Admission).ordinal)
+    if (method === 'members' && kind === 'Store')
+      for (const row of (value as { rows: Admission[] }).rows) if (row.ordinal === seen.prefix + 1) seen.prefix = row.ordinal
+    const context = method === 'registration_context' ? value : method === 'config' ? (value as DirectoryConfig).registration : undefined
+    if (context) {
+      const c = context as { policy: Contract; policy_version: bigint }
+      seen.selections.push([u64(c.policy_version).toString(), contractId(c.policy)])
+    }
+  }
+  private observing(at: Attempt): Observed {
+    let seen = this.observed.get(at)
+    if (!seen) this.observed.set(at, (seen = { prefix: -1, single: -1, selections: [] }))
+    return seen
+  }
+  /**
+   * A committed attempt's observations become this client's. A single admission extends the mark only
+   * in an attempt that also read the stores before it: alone, one reply's ordinal would hold every
+   * later lens reply to stores no list showed.
+   */
+  private commitObserved(at: Attempt): void {
+    const seen = this.observed.get(at)
+    if (!seen) return
+    if (seen.prefix >= 0) this.sawStores(at.height, Math.max(seen.prefix, seen.single))
+    for (const [version, policy] of seen.selections) {
+      const known = this.selectionsSeen.get(version)
+      this.selectionsSeen.set(version, known === undefined || known === policy ? policy : '')
+    }
+  }
   /**
    * The directory's configuration and membership at one height, with every admitted store and
    * resolver, the vault and the preferred marketplace verified up front. Reads do not need it: each
@@ -954,47 +1111,50 @@ export class FrozenClient {
    */
   async discover(): Promise<DirectoryState> {
     await this.verifyContract('directory', this.directoryId)
-    return this.attempts(async (at) => {
-      const config = await this.raw(
-        'directory',
-        this.directoryId,
-        'config',
-        null,
-        at,
-      )
-      const stores = await this.members('Store', at),
-        resolvers = await this.members('Resolver', at)
-      if (
-        stores.length !== config.store_count ||
-        resolvers.length !== config.resolver_count
-      )
-        throw new Error('Directory member count mismatch')
-      for (const a of stores) await this.verify('store', contractId(a.id), a, true, at)
-      for (const a of resolvers)
-        await this.verify('resolver', contractId(a.id), a, true, at)
-      await this.verify('vault', this.vaultId, undefined, false, at)
-      // A SetPolicy can select a policy this release does not list yet. Only registration uses
-      // it, and quoteRegistration verifies it there; other operations never need it.
-      if (config.preferred_marketplace) {
-        const market = await this.raw('directory', this.directoryId, 'market', {
-          id: config.preferred_marketplace,
-        }, at)
-        if (!market)
-          throw new Error(
-            `Marketplace ${contractId(config.preferred_marketplace)} is not admitted`,
-          )
-        // Past market version 1, a SetPreferredMarketplace selected the market, after probing it.
-        await this.verify(
-          'marketplace',
-          contractId(config.preferred_marketplace),
-          market,
-          true,
-          at,
-          config.market_version >= 2n,
+    return this.attempts(async (at) => (await this.discoverAt(at)).state, true)
+  }
+  /** `discover()` inside the caller's attempt, with the preferred marketplace's directory record. */
+  private async discoverAt(at: Attempt): Promise<{ state: DirectoryState; market: Market | null }> {
+    const config = await this.raw(
+      'directory',
+      this.directoryId,
+      'config',
+      null,
+      at,
+    )
+    const stores = await this.members('Store', at),
+      resolvers = await this.members('Resolver', at)
+    if (
+      stores.length !== config.store_count ||
+      resolvers.length !== config.resolver_count
+    )
+      throw new Error('Directory member count mismatch')
+    for (const a of stores) await this.verify('store', contractId(a.id), a, true, at)
+    for (const a of resolvers)
+      await this.verify('resolver', contractId(a.id), a, true, at)
+    await this.verify('vault', this.vaultId, undefined, false, at)
+    // A SetPolicy can select a policy this release does not list yet. Only registration uses
+    // it, and quoteRegistration verifies it there; other operations never need it.
+    if (config.preferred_marketplace) {
+      const market = await this.raw('directory', this.directoryId, 'market', {
+        id: config.preferred_marketplace,
+      }, at)
+      if (!market)
+        throw new Error(
+          `Marketplace ${contractId(config.preferred_marketplace)} is not admitted`,
         )
-      }
-      return { height: at.height, config, stores, resolvers }
-    }, true)
+      // Past market version 1, a SetPreferredMarketplace selected the market, after probing it.
+      await this.verify(
+        'marketplace',
+        contractId(config.preferred_marketplace),
+        market,
+        true,
+        at,
+        config.market_version >= 2n,
+      )
+      return { state: { height: at.height, config, stores, resolvers }, market }
+    }
+    return { state: { height: at.height, config, stores, resolvers }, market: null }
   }
   /**
    * Accept only already authenticated, committed directory effects from the projection. An
@@ -1292,6 +1452,158 @@ export class FrozenClient {
     )
   }
   /**
+   * Answer a read with one lens query, or return undefined so the caller reads directly: when the
+   * release lists no lens, the client does not use it, the arguments do not encode, the lens deployment
+   * fails its check, or the reply refuses, does not decode, is at another height or rests on anything
+   * that fails a release check (`check`). A reply is used whole or not at all, and never verifies a
+   * contract: nothing it shows becomes signable. Every fallback is reported to `onLensFallback`.
+   */
+  private async viaLens<R extends { height: bigint }, T>(
+    method: string,
+    lensMethod: LensMethod,
+    args: unknown,
+    check: (reply: R, context: EvidenceContext) => T,
+  ): Promise<{ value: T } | undefined> {
+    const lens = this.release.lens
+    if (
+      this.options.useLens === false || this.lensOff || this.lensBroken.has(lensMethod) ||
+      (this.lensBackoff.get(lensMethod) ?? -Infinity) > Date.now() || this.ledger.refused.has(this.directoryId)
+    )
+      return undefined
+    if (!lens) {
+      // A lens the release has but did not load: said once, then every read is direct.
+      if (this.release.lensError !== undefined && !this.lensOff) {
+        this.lensOff = true
+        this.lensFell(method, 'deployment', this.release.lensError, true)
+      }
+      return undefined
+    }
+    let input: Uint8Array
+    try {
+      input = lensInput(lens.driver, lensMethod, args)
+    } catch {
+      // Arguments the lens cannot take: the direct reads decide, with their own errors.
+      return undefined
+    }
+    try {
+      await (this.lensCheck ??= this.checkLens().catch((error: unknown) => {
+        this.lensCheck = undefined
+        throw error
+      }))
+    } catch (error) {
+      this.lensFell(method, 'deployment', error, this.lensOff)
+      return undefined
+    }
+    const id = contractId(lens.contract.contractId)
+    try {
+      const value = await this.attempts(async (at) => {
+        // A request the lens refused at this height is refused again: read directly.
+        const request = `${lensMethod}/${hex(input)}/${at.height}`,
+          refused = this.lensRefusals.get(request)
+        if (refused)
+          throw heightIndependent(new LensFailure('refused', `Lens ${lensMethod} refused this request at this height: ${refused.code}`, { refusal: refused }))
+        const bytes = await this.sharing.read(at, id, lensMethod, input)
+        try {
+          let reply: R
+          try {
+            reply = lensOutput<R>(lens.driver, lensMethod, bytes)
+          } catch (error) {
+            // A refusal from another tip says nothing about this attempt's: its close decides.
+            if (error instanceof LensFailure && error.refusal && error.refusal.height !== at.height)
+              throw new LensFailure('height', `Lens ${lensMethod} refused at height ${error.refusal.height}, not ${at.height}`)
+            throw heightIndependent(error)
+          }
+          // Read in one contract query, a reply is the state at its height: the attempt's, or no answer.
+          if (reply.height !== at.height)
+            throw new LensFailure('height', `Lens ${lensMethod} answered at height ${reply.height}, not ${at.height}`)
+          const checked = settle(() => check(reply, this.evidenceContext(reply.height)))
+          // The stores an accepted reply lists, from ordinal 0: kept if its snapshot commits.
+          const seen = this.observing(at)
+          seen.prefix = Math.max(seen.prefix, replyStores(reply).length - 1)
+          return checked
+        } catch (error) {
+          // A refusal at this height, of the reply or inside it (a page's primary), is kept for it.
+          if (error instanceof LensFailure && error.refusal && error.refusal.height === at.height)
+            this.lensRefused(request, lensMethod, error.refusal)
+          throw error
+        }
+      }, true)
+      this.lensStrikes.delete(lensMethod)
+      return { value }
+    } catch (error) {
+      const reason = error instanceof LensFailure ? error.reason : 'read'
+      // A reply that does not decode or check, three times without an answer in between, is not a
+      // passing fault: the lens is not asked for this method again.
+      const strikes = (this.lensStrikes.get(lensMethod) ?? 0) + (error instanceof LensFailure && error.strikes ? 1 : 0)
+      this.lensStrikes.set(lensMethod, strikes)
+      if (strikes >= 3) this.lensBroken.add(lensMethod)
+      this.lensFell(method, reason, error, strikes >= 3)
+      return undefined
+    }
+  }
+  /**
+   * The lens deployment, once per client: its entry commits to its code and to an initialization bound
+   * to the release's directory, and the deployed lens reports that directory's binding and lens v1's
+   * interface. A mismatch can never pass later, so it turns the lens off for this client.
+   */
+  private async checkLens(): Promise<void> {
+    const { contract, driver } = this.release.lens!,
+      id = contractId(contract.contractId)
+    // Its replies rest on the directory: they are used only through one this client verified.
+    await this.verify('directory', this.directoryId, undefined, false)
+    const off = (message: string): never => {
+      this.lensOff = true
+      throw new LensFailure('deployment', message)
+    }
+    if (contract.codeHash === undefined || contract.initHash === undefined)
+      off('The release lens has no code or init commitment')
+    if (lensInitCommitment(driver, this.directoryId) !== contract.initHash)
+      off("The release lens entry's init commitment is not bound to the release's directory")
+    const read = async <T>(method: 'binding' | 'lens_interface'): Promise<T> =>
+      lensOutput<T>(driver, method, await this.sharing.read(undefined, id, method, lensInput(driver, method, null)))
+    const [binding, face] = await Promise.all([
+      read<Binding>('binding'),
+      read<typeof LENS_INTERFACE>('lens_interface'),
+    ])
+    if (!sameBinding(binding, this.directoryBinding())) off('Lens deployment binding mismatch')
+    if (Object.entries(LENS_INTERFACE).some(([k, v]) => face[k as keyof typeof face] !== v))
+      off('Unsupported lens interface')
+  }
+  /** What a lens reply is checked against: this client's release, refusals and verified commitments. */
+  /**
+   * A refusal at the attempt's height: kept for that request, and for a refusal that ran short of
+   * resources, the method reads directly for a while. Other refusals turn nothing off.
+   */
+  private lensRefused(request: string, method: LensMethod, refusal: LensRefusal): void {
+    this.lensRefusals.set(request, refusal)
+    if (this.lensRefusals.size > 256) this.lensRefusals.delete(this.lensRefusals.keys().next().value!)
+    if (refusal.code === 'GasBudget' || refusal.code === 'ReadFailed') this.lensBackoff.set(method, Date.now() + LENS_BACKOFF_MS)
+  }
+  private evidenceContext(height: bigint): EvidenceContext {
+    return {
+      release: this.release,
+      refused: this.ledger.refused,
+      known: (id) => this.ledger.verified.get(id),
+      // The selection this client quoted under, or read directly: two that disagree match nothing.
+      selection: (version) => {
+        const quoted = selectedPolicy(this.release, version),
+          seen = this.selectionsSeen.get(u64(version).toString())
+        return quoted !== undefined && seen !== undefined && quoted !== seen ? '' : (quoted ?? seen)
+      },
+      storeMark: this.storeMark(height),
+      directoryId: this.directoryId,
+      vaultId: this.vaultId,
+    }
+  }
+  private lensFell(method: string, reason: LensFallbackReason, error: unknown, disabled = false): void {
+    try {
+      const done = this.options.onLensFallback?.({ method, reason, error, disabled }) as PromiseLike<unknown> | undefined
+      if (typeof done?.then === 'function') done.then(undefined, () => {})
+    } catch {
+      // A diagnostics hook never changes a read.
+    }
+  }
+  /**
    * The name at its home store, found from `homeHint` when one is given (such as the indexer's
    * `homeShard`), else by every admitted store in admission order. A hint is only where to look
    * first (see `homeOf`): a wrong one costs reads and gives the same answer. Absent everywhere, the
@@ -1302,38 +1614,160 @@ export class FrozenClient {
     homeHint?: string,
   ): Promise<Routed<NameView>> {
     const key = nameKey(spelling)
+    const lens = await this.viaLens('getName', 'resolve', { name: spelling, record_keys: [], hint: lensHint(homeHint) },
+      (r: LensResolution, ctx) => checkResolution(ctx, r, key, []))
+    if (lens) return { store: lens.value.store, value: lens.value.value, forwards: lens.value.forwards, height: lens.value.height }
+    return this.attempts(async (at) => ({ ...(await this.nameAt(at, key, homeHint)), height: at.height }), true)
+  }
+  /**
+   * `getName`, with the name's records for up to 16 distinct keys at the same height: each the home's
+   * `resolve_record` answer, null unless the name is active and holds that key. A hint is where to
+   * look first, as for `getName`.
+   */
+  async resolve(spelling: string, recordKeys: readonly string[], homeHint?: string): Promise<Resolved> {
+    const key = nameKey(spelling),
+      keys = [...recordKeys]
+    const encoder = new TextEncoder()
+    if (
+      keys.length > 16 ||
+      new Set(keys).size !== keys.length ||
+      keys.some((k) => typeof k !== 'string' || !k || encoder.encode(k).length > 64)
+    )
+      throw new Error('Expected at most 16 distinct record keys of 1 to 64 bytes')
+    const lens = await this.viaLens('resolve', 'resolve', { name: spelling, record_keys: keys, hint: lensHint(homeHint) },
+      (r: LensResolution, ctx) => checkResolution(ctx, r, key, keys))
+    if (lens) return lens.value
     return this.attempts(async (at) => {
-      const height = at.height,
-        home = await this.homeOf(at, key.root, homeHint)
-      // Read where the home was found Local, as `followRaw` from that store would, without reading
-      // its admission and home again.
-      if (home?.local)
-        return {
-          ...(await this.followFrom(
-            at,
-            home.store,
-            { store: home.store, forwards: [] },
-            key.root,
-            'get_name',
-            key as never,
-          )),
-          forwards: home.forwards,
-          height,
-        } as Routed<NameView>
-      const allocation = await this.raw(
-        'directory',
-        this.directoryId,
-        'allocation',
-        null,
-        at,
-      )
-      return {
-        store: contractId(allocation.newest_store),
-        value: 'Absent',
-        forwards: [],
-        height,
+      const name = await this.nameAt(at, key, homeHint),
+        view = typeof name.value === 'object' && 'Local' in name.value ? name.value.Local : undefined,
+        records: (RecordValue | null)[] = []
+      for (const record_key of keys) {
+        if (!view) {
+          records.push(null)
+          continue
+        }
+        const found = await this.followFrom(
+          at, name.store, { store: name.store, forwards: [] }, key.root, 'resolve_record', { key, record_key } as never,
+        )
+        records.push(typeof found.value === 'object' && 'Local' in found.value ? (found.value.Local as RecordValue | null) : null)
       }
+      return { ...name, height: at.height, status: lifecycle(name.value, key), records }
     }, true)
+  }
+  /**
+   * What a name's page shows, at one height: the name at its home (as `getName`), its records, the
+   * verified primary of its own `moonlight_address` endpoint (as `verifyPrimary`, looking at its home
+   * first) and, for a root, what its renewal quote reads. A primary that cannot be verified leaves the
+   * rest of the page, with `primary.error`. For display: quote a renewal with `quoteRenewal`.
+   */
+  async namePage(spelling: string, homeHint?: string): Promise<NamePage> {
+    const key = nameKey(spelling)
+    const lens = await this.viaLens('namePage', 'name_page', { name: spelling, hint: lensHint(homeHint) },
+      (r: LensNamePage, ctx) => checkNamePage(ctx, r, key))
+    if (lens) return lens.value
+    return this.attempts(async (at) => {
+      const name = await this.nameAt(at, key, homeHint),
+        view = typeof name.value === 'object' && 'Local' in name.value ? name.value.Local : undefined
+      const page: NamePage = {
+        height: at.height, key, store: name.store, forwards: name.forwards, value: name.value,
+        status: lifecycle(name.value, key), records: null,
+        primary: { endpoint: null, verified: null, isPrimary: false, error: null }, renewal: null,
+      }
+      if (!view) return page
+      const read = await this.followFrom(
+        at, name.store, { store: name.store, forwards: [] }, key.root, 'read_records', key as never,
+      )
+      page.records = typeof read.value === 'object' && 'Local' in read.value ? (read.value.Local as RecordsView) : null
+      const endpoint = page.records && moonlightEndpoint(page.records)
+      if (endpoint) {
+        page.primary.endpoint = endpoint
+        try {
+          const verified = await this.primaryIn(at, endpoint, name.store),
+            p = verified?.primary.primary.name
+          page.primary.verified = verified
+          page.primary.isPrimary = Boolean(
+            p && equalBytes(p.key.root, key.root) && equalBytes(p.key.node, key.node) &&
+              p.incarnation.generation === view.name.incarnation.generation &&
+              p.incarnation.serial === view.name.incarnation.serial,
+          )
+        } catch (error) {
+          page.primary.error = error
+        }
+      }
+      if (equalBytes(key.root, key.node))
+        page.renewal = renewalInputs(
+          view, await this.raw('directory', this.directoryId, 'renewal_schedule', null, at), at.height,
+        )
+      return page
+    }, true)
+  }
+  /**
+   * The directory's registration context and the policy it selects, with that policy's whole config,
+   * verified against the release, at one height. For display: a registration is quoted and signed
+   * with `quoteRegistration` or `prepareRegistration`.
+   */
+  async pricing(): Promise<Pricing> {
+    const lens = await this.viaLens('pricing', 'pricing', null, (r: LensPricing, ctx) => checkPricing(ctx, r))
+    if (lens) return lens.value
+    await this.verifyContract('directory', this.directoryId)
+    return this.attempts(async (at) => {
+      const context = await this.raw('directory', this.directoryId, 'registration_context', null, at)
+      const policy = contractId(context.policy)
+      // Past policy version 1, a SetPolicy selected the policy, after probing it.
+      await this.verify('policy', policy, undefined, false, at, context.policy_version >= 2n)
+      const config = await this.raw('policy', policy, 'config', null, at)
+      return { height: at.height, context, policy, config }
+    }, true)
+  }
+  /**
+   * `discover()`'s directory state with the allocation and the preferred marketplace's directory
+   * record, at one height. Read directly, it is `discover()`, and verifies what it does; through the
+   * lens it verifies nothing for signing: a write's target is verified when it is read directly, or
+   * by `verifyContract`.
+   */
+  async bootstrap(): Promise<Bootstrap> {
+    const lens = await this.viaLens('bootstrap', 'bootstrap', null, (r: LensBootstrap, ctx) => checkBootstrap(ctx, r))
+    if (lens) return lens.value
+    await this.verifyContract('directory', this.directoryId)
+    return this.attempts(async (at) => {
+      const { state, market } = await this.discoverAt(at)
+      const allocation = await this.raw('directory', this.directoryId, 'allocation', null, at)
+      return { ...state, allocation, market }
+    }, true)
+  }
+  /** `getName` inside the caller's attempt: the name at its home, or Absent at the newest store. */
+  private async nameAt(
+    at: Attempt,
+    key: NameKey,
+    homeHint?: string,
+  ): Promise<{ store: string; value: Located<NameView>; forwards: Forward[] }> {
+    const home = await this.homeOf(at, key.root, homeHint)
+    // Read where the home was found Local, as `followRaw` from that store would, without reading
+    // its admission and home again.
+    if (home?.local)
+      return {
+        ...(await this.followFrom(
+          at,
+          home.store,
+          { store: home.store, forwards: [] },
+          key.root,
+          'get_name',
+          key as never,
+        )),
+        forwards: home.forwards,
+      } as { store: string; value: Located<NameView>; forwards: Forward[] }
+    const allocation = await this.raw(
+      'directory',
+      this.directoryId,
+      'allocation',
+      null,
+      at,
+    )
+    return {
+      store: contractId(allocation.newest_store),
+      value: 'Absent',
+      forwards: [],
+    }
   }
   async listControllers(): Promise<Controllers> {
     return this.directory.controllers()
@@ -1448,6 +1882,8 @@ export class FrozenClient {
       commitmentStore?: string
     },
   ): Promise<PreparedRegistration> {
+    // Before the copy, which drops a lens mark: the reveal is built from this input.
+    refuseLensRows(registrationInput)
     // Fixed before any await: a caller changing its object meanwhile changes nothing here.
     const input = Object.freeze(copyNow(registrationInput))
     const key = nameKey(`${input.label}.dusk`)
@@ -1583,6 +2019,14 @@ export class FrozenClient {
     const key = nameKey(`${input.label}.dusk`)
     if (!equalBytes(key.root, key.node))
       throw new Error('Registration requires a root label')
+    // The lens places the root itself, reading every store; the hint only orders direct reads.
+    const lens = await this.viaLens('previewRegistration', 'availability', { label: input.label, years: input.years, actor: input.actor },
+      (r: LensAvailability, ctx) => checkAvailability(ctx, r, key, input))
+    if (lens) {
+      // As the direct reads find it: placement refuses a root its home still holds.
+      if (lens.value === 'registered') throw new Error('Registration root is not released')
+      return lens.value
+    }
     await this.verifyContract('directory', this.directoryId)
     return this.attempts(async (at) => {
       const context = await this.raw(
@@ -1654,23 +2098,28 @@ export class FrozenClient {
    * is asked and at most one may verify.
    */
   async verifyPrimary(endpoint: number[], homeHint?: string): Promise<VerifiedPrimary | null> {
-    return this.attempts(async (at) => {
-      if (homeHint !== undefined)
-        try {
-          const found = await this.primaryAt(at, contractId(homeHint), endpoint)
-          if (found) return found
-        } catch {
-          // Only reads were spent: every store is asked below.
-        }
-      let found: VerifiedPrimary | null = null
-      for (const a of await this.storeList(at)) {
-        const candidate = await this.primaryAt(at, contractId(a.id), endpoint)
-        if (!candidate) continue
-        if (found) throw new Error('Multiple verified pool primaries')
-        found = candidate
+    const lens = await this.viaLens('verifyPrimary', 'reverse', { endpoint, hint: lensHint(homeHint) },
+      (r: LensReverse, ctx) => checkReverse(ctx, r, endpoint))
+    if (lens) return lens.value
+    return this.attempts((at) => this.primaryIn(at, endpoint, homeHint), true)
+  }
+  /** `verifyPrimary` inside the caller's attempt. */
+  private async primaryIn(at: Attempt, endpoint: number[], homeHint?: string): Promise<VerifiedPrimary | null> {
+    if (homeHint !== undefined)
+      try {
+        const found = await this.primaryAt(at, contractId(homeHint), endpoint)
+        if (found) return found
+      } catch {
+        // Only reads were spent: every store is asked below.
       }
-      return found
-    }, true)
+    let found: VerifiedPrimary | null = null
+    for (const a of await this.storeList(at)) {
+      const candidate = await this.primaryAt(at, contractId(a.id), endpoint)
+      if (!candidate) continue
+      if (found) throw new Error('Multiple verified pool primaries')
+      found = candidate
+    }
+    return found
   }
   /** The primary `store` resolves for `endpoint` at this height, if every check of it passes. */
   private async primaryAt(

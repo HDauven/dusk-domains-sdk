@@ -1,0 +1,208 @@
+{
+ "source": "testnet rehearsal of protocol 686f2501 (directory 0x7d2544d3...) and the testnet lens deployment handoff",
+ "chainId": "dusk:2",
+ "network": 2,
+ "binding": {
+  "directory": [
+   125,
+   37,
+   68,
+   211,
+   54,
+   205,
+   25,
+   230,
+   177,
+   0,
+   163,
+   74,
+   85,
+   39,
+   10,
+   225,
+   160,
+   211,
+   156,
+   129,
+   89,
+   128,
+   28,
+   11,
+   101,
+   51,
+   82,
+   244,
+   103,
+   122,
+   84,
+   12
+  ],
+  "vault": [
+   63,
+   166,
+   132,
+   20,
+   247,
+   16,
+   225,
+   171,
+   4,
+   31,
+   215,
+   230,
+   32,
+   164,
+   44,
+   113,
+   99,
+   118,
+   1,
+   148,
+   239,
+   113,
+   46,
+   39,
+   125,
+   191,
+   162,
+   128,
+   205,
+   100,
+   138,
+   232
+  ],
+  "network": 2
+ },
+ "contracts": [
+  {
+   "role": "policy",
+   "contractId": "e01551ebfafa31a5fe2f7c813628a74bf14e33f0b7f68aa76f7b5be07cb8c09d",
+   "codeHash": "c6a9d9013d8dc2c0e3415b8aafbcc1d5c91d275531d7e677ab3cff57b22de678",
+   "initHash": "c32ba38c9c4d41c76ba34ac6421ef8fadc92b5892d3d60bb45915c1d884e7e4e",
+   "dataDriver": {
+    "path": "contracts/dusk-domains-policy.586bc1d4a2905f984c997ed6329c89e5f9607efe1c4f262aaa3570a08c17967f.data-driver.wasm",
+    "sha256": "586bc1d4a2905f984c997ed6329c89e5f9607efe1c4f262aaa3570a08c17967f"
+   }
+  },
+  {
+   "role": "vault",
+   "contractId": "3fa68414f710e1ab041fd7e620a42c7163760194ef712e277dbfa280cd648ae8",
+   "codeHash": "6dc1a0a6380a534dd69150268ce897ecb8e2e8884571ca2099b4a0a3cf7b373f",
+   "initHash": "af406e2166fa27592aa1b8f95c222361103f2d3157d5547d0ef84dd8f685bdc4",
+   "dataDriver": {
+    "path": "contracts/dusk-domains-vault.6bc3c7d8bd84d293b1025afcd08f71efa0553661f9de5a5c6ceec93d0257b239.data-driver.wasm",
+    "sha256": "6bc3c7d8bd84d293b1025afcd08f71efa0553661f9de5a5c6ceec93d0257b239"
+   }
+  },
+  {
+   "role": "resolver",
+   "contractId": "7576d6f8afdb12f652ef9b200a4fe167850ee00a9259d684398323f249b3d9f0",
+   "codeHash": "1f0626da0995d3d7f10e99cd8b1e22e106a197d897804310d654c68c70421c9b",
+   "initHash": "d009eb2f632ce339e6d22e758d6604b381ba303caa7b087d96b49561e8aa5b77",
+   "dataDriver": {
+    "path": "contracts/dusk-domains-frozen-resolver.bafca75234d2ef74949503f99b2a8b9020e5af25c0c579d0ec83c8e8ca9d9399.data-driver.wasm",
+    "sha256": "bafca75234d2ef74949503f99b2a8b9020e5af25c0c579d0ec83c8e8ca9d9399"
+   }
+  },
+  {
+   "role": "store",
+   "contractId": "699af21be61935b5bb9768e5a956bec057321583157422fff1a464248d2b1e83",
+   "codeHash": "ab7c6e22b4bda3707cee67e584b0070b158821bf404d0da37c1b6c69f84094b2",
+   "initHash": "d009eb2f632ce339e6d22e758d6604b381ba303caa7b087d96b49561e8aa5b77",
+   "dataDriver": {
+    "path": "contracts/dusk-domains-store.d04cca5830918ba130b1296057c1830292c8d5a94ae2e773390a4beb9704a7bf.data-driver.wasm",
+    "sha256": "d04cca5830918ba130b1296057c1830292c8d5a94ae2e773390a4beb9704a7bf"
+   }
+  },
+  {
+   "role": "marketplace",
+   "contractId": "26568f7731a29e3968ee36a1bbbfe6ecd9183d2486dd123f360dedfb1fb57a27",
+   "codeHash": "72ca21b9be5cd790199d96cfd958df6717c0b298341d75d0f37c2669da0e79e1",
+   "initHash": "d009eb2f632ce339e6d22e758d6604b381ba303caa7b087d96b49561e8aa5b77",
+   "dataDriver": {
+    "path": "contracts/dusk-domains-marketplace-v1.b8408dded3b5f6a01cde070491bc798f9f6cdf709851b3526d83cd05c78c38d0.data-driver.wasm",
+    "sha256": "b8408dded3b5f6a01cde070491bc798f9f6cdf709851b3526d83cd05c78c38d0"
+   }
+  },
+  {
+   "role": "directory",
+   "contractId": "7d2544d336cd19e6b100a34a55270ae1a0d39c8159801c0b653352f4677a540c",
+   "codeHash": "371c258da431028f819e27856d9d1995877f16cc80c4b3d6be3db7786d6beeb5",
+   "initHash": "f98195b2fef78ee29cc1a72829875d54117d737b6823b365b21daf530c481244",
+   "dataDriver": {
+    "path": "contracts/dusk-domains-directory.fc8327e02ca0fe43c0701d5ed0ce1d8a16833d8ecf6ad9ca0c15640fabfca2bf.data-driver.wasm",
+    "sha256": "fc8327e02ca0fe43c0701d5ed0ce1d8a16833d8ecf6ad9ca0c15640fabfca2bf"
+   }
+  }
+ ],
+ "lens": {
+  "role": "lens",
+  "contractId": "0x9a0dd8847fa6d7ad5ad4f905d59b83181521259a8d23fbbda9b1ec9373b2c2ed",
+  "dataDriver": {
+   "path": "contracts/dusk-domains-lens.63198ec4b085d2c97b571adf77eecf9f49a2a5663dd4470d0c0e96a3ec8779ad.data-driver.wasm",
+   "sha256": "63198ec4b085d2c97b571adf77eecf9f49a2a5663dd4470d0c0e96a3ec8779ad",
+   "bytes": 364299
+  },
+  "codeHash": "fe64a751a435ffc5e5bf176f152fd87135816909ebd32b34451793e91a893b75",
+  "initHash": "a175e555321794f1a843220b9f56a5a2f74998d14990b60b6f3a23d84cba63f7",
+  "deployNonce": "306",
+  "deploymentOwner": "90461437416f3816d6ce207544914e6c6c259ccf14153852c90ce0c15a242940fa0c02b221920c36c2439408c0c1b2771664ba1059fa3c217086963391cdf52a7fa2455241bde1103465da30b960e117774108dadc9966035c2109d96afa3112",
+  "directory": "0x7d2544d336cd19e6b100a34a55270ae1a0d39c8159801c0b653352f4677a540c",
+  "binding": {
+   "directory": "0x7d2544d336cd19e6b100a34a55270ae1a0d39c8159801c0b653352f4677a540c",
+   "vault": "0x3fa68414f710e1ab041fd7e620a42c7163760194ef712e277dbfa280cd648ae8",
+   "network": 2
+  },
+  "interface": {
+   "version": 1,
+   "max_stores": 64,
+   "max_hops": 63,
+   "max_record_keys": 16
+  }
+ },
+ "lensDeployment": {
+  "key": "lens",
+  "kind": "Lens",
+  "deployNonce": "306",
+  "id": "9a0dd8847fa6d7ad5ad4f905d59b83181521259a8d23fbbda9b1ec9373b2c2ed",
+  "codeHash": "fe64a751a435ffc5e5bf176f152fd87135816909ebd32b34451793e91a893b75",
+  "init": {
+   "directory": [
+    125,
+    37,
+    68,
+    211,
+    54,
+    205,
+    25,
+    230,
+    177,
+    0,
+    163,
+    74,
+    85,
+    39,
+    10,
+    225,
+    160,
+    211,
+    156,
+    129,
+    89,
+    128,
+    28,
+    11,
+    101,
+    51,
+    82,
+    244,
+    103,
+    122,
+    84,
+    12
+   ]
+  },
+  "initArchive": "7d2544d336cd19e6b100a34a55270ae1a0d39c8159801c0b653352f4677a540c",
+  "initHash": "a175e555321794f1a843220b9f56a5a2f74998d14990b60b6f3a23d84cba63f7"
+ }
+}

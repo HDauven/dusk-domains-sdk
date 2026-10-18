@@ -34,3 +34,22 @@ To regenerate, copy `primary-verification.rs` into
 `contracts/crates/dusk-domains-types/examples/` in an isolated checkout of the
 reference revision, run `cargo run -p dusk-domains-types --example primary-verification
 --features serde` from `contracts`, and gzip stdout with `gzip -n`.
+
+## Read lens
+
+The lens fixtures come from the deployed testnet lens, not from this repository:
+
+- `lens.wasm.gz`: the lens data driver, `dusk-domains-lens` built with `data-driver-js`
+  from protocol `feat/read-lens` (9a89d6e2): SHA-256
+  `63198ec4b085d2c97b571adf77eecf9f49a2a5663dd4470d0c0e96a3ec8779ad`, 364,299 bytes,
+  as the testnet deployment handoff pins it. Its contract WASM is `f4a86245…`.
+- `testnet-lens-golden.json.gz` (`dusk-domains/lens-golden/v1`): arguments and replies,
+  as rkyv hex and decoded JSON, read from testnet lens
+  `0x9a0dd8847fa6d7ad5ad4f905d59b83181521259a8d23fbbda9b1ec9373b2c2ed` at height 4,618,370,
+  with the lens's init argument and `initHash`.
+- `testnet-release.json`: the SDK fields of the testnet rehearsal release that lens is
+  bound to (protocol 686f2501, directory `0x7d2544d3…`, network 2), and the lens
+  deployment handoff's SDK `lens` entry and `init`, `initArchive` and `initHash`.
+
+The tests decode every golden with the real driver, recompute the init commitment, and run
+the SDK's evidence checks and a client on the real replies.

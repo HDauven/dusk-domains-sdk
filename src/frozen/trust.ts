@@ -302,6 +302,34 @@ export function registrationProof(
     ? proof
     : undefined
 }
+/** Objects a lens reply supplied, at every depth: no signed call takes them as arguments. */
+const lensRows = new WeakSet<object>()
+export function markLensRows(values: readonly unknown[]): void {
+  const mark = (value: unknown): void => {
+    if (!value || typeof value !== 'object' || lensRows.has(value)) return
+    lensRows.add(value)
+    for (const child of Object.values(value)) mark(child)
+  }
+  for (const value of values) mark(value)
+}
+export function isLensRow(value: unknown): boolean {
+  return Boolean(value && typeof value === 'object' && lensRows.has(value))
+}
+/**
+ * A call takes no object a lens `bootstrap()` returned: check caller input before any copy, which
+ * would drop the mark.
+ */
+export function refuseLensRows(input: unknown): void {
+  if (holdsLensRow(input))
+    throw new Error('A lens bootstrap reply is not evidence for a signed call: read its values directly')
+}
+/** Whether `value` holds, at any depth, an object a lens reply supplied. */
+export function holdsLensRow(value: unknown, seen = new Set<object>()): boolean {
+  if (!value || typeof value !== 'object' || seen.has(value)) return false
+  if (lensRows.has(value)) return true
+  seen.add(value)
+  return Object.values(value).some((child) => holdsLensRow(child, seen))
+}
 export function heightIndependent<E>(error: E): E {
   if (error && typeof error === 'object') independent.add(error)
   return error

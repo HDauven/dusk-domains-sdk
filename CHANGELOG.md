@@ -40,6 +40,10 @@ quote: a stored, copied or edited quote throws `UnverifiedQuoteError`.
 - Sign for, or quote under, a contract only `verificationCache` vouched for after verifying it, and the directory, from the chain; key entries by `transportNamespace`, keeping none for a custom transport or `fetch` without one.
 - Read the tip's block hash with its height, so a block replaced at the same height is read again.
 - Add `UnverifiedContractError` and the `eager` option of `createClientFromManifest`.
+- Read through the release's top-level `lens` when it has one, falling back to direct reads.
+- Add `resolve`, `namePage`, `pricing` and `bootstrap`.
+- Add the `useLens` and `onLensFallback` options.
+- Refuse call arguments holding objects a lens `bootstrap()` returned.
 
 ## 0.3.4 (2026-10-12)
 

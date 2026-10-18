@@ -13,7 +13,7 @@ import {
   REGISTRATION_MAX_COMMITMENT_AGE_BLOCKS,
 } from '../core/commitment.ts'
 import { wireValue } from './wire.ts'
-import { isVerifiedQuote, UnverifiedQuoteError } from './trust.ts'
+import { isLensRow, isVerifiedQuote, refuseLensRows, UnverifiedQuoteError } from './trust.ts'
 import type { DataDriver } from './driver.ts'
 import type {
   Authority,
@@ -36,6 +36,11 @@ type StoreGovernance = Pick<Admission, 'id'> &
 type RecipientGovernance = Pick<DirectoryConfig, 'operator_epoch'> &
   Partial<Pick<DirectoryConfig, 'recipient_version'>>
 
+/** A lens reply is shown, never signed on: governance reads its evidence directly. */
+function notFromLens(row: object, read: string): void {
+  if (isLensRow(row))
+    throw new Error(`Read the ${read} directly (not through the lens) before proposing governance changes`)
+}
 function currentVersion(version: bigint | undefined, field: string): bigint {
   if (version === undefined || version < 1n)
     throw new Error(
@@ -49,6 +54,7 @@ export function setAcceptsMovesProposalCall(
   admission: StoreGovernance,
   value: boolean,
 ): FrozenCall<'directory', 'propose'> {
+  notFromLens(admission, 'store admission')
   return buildCall('directory', directory, 'propose', {
     action: {
       SetAcceptsMoves: {
@@ -65,6 +71,7 @@ export function setRetiringProposalCall(
   admission: StoreGovernance,
   value: boolean,
 ): FrozenCall<'directory', 'propose'> {
+  notFromLens(admission, 'store admission')
   return buildCall('directory', directory, 'propose', {
     action: {
       SetRetiring: {
@@ -81,6 +88,7 @@ export function setRecipientProposalCall(
   config: RecipientGovernance,
   recipient: Endpoint,
 ): FrozenCall<'directory', 'propose'> {
+  notFromLens(config, 'directory config')
   return buildCall('directory', directory, 'propose', {
     action: {
       SetRecipient: {
@@ -240,6 +248,7 @@ export function createMarketplaceCalls(
       )
   }
   function reviewed(order: Order, kind?: Terms['kind']): Order {
+    refuseLensRows(order)
     checkTerms(order.terms, kind)
     return wireValue('Order', order)
   }
@@ -247,6 +256,7 @@ export function createMarketplaceCalls(
     intent: CustodyIntent,
     kind: Terms['kind'],
   ): FrozenCall<'store', 'transfer_and_call'> {
+    refuseLensRows(intent)
     checkTerms(intent.terms, kind)
     const data = driver.encodeInput(
       'custody_intent',

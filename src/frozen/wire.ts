@@ -1,5 +1,6 @@
 /** Strict frozen data-driver JSON validation and normalization. @module */
 import { definitions } from './schema.ts'
+import { lensDefinitions } from './lens-schema.ts'
 import { parseJson, stringifyJson, u64, lux } from './json.ts'
 import type { WireTypes } from './types.ts'
 
@@ -22,6 +23,8 @@ interface Schema {
   pattern?: string
   format?: string
 }
+/** A frozen wire type, or else a read lens type; lens types never shadow frozen ones. */
+const schemaOf = (name: string): unknown => definitions[name] ?? lensDefinitions[name]
 const transferContract = [1, ...Array<number>(31).fill(0)]
 const isTransfer = (value: unknown): boolean =>
   Array.isArray(value) &&
@@ -61,7 +64,7 @@ export function wireValue<T extends keyof WireTypes>(
 ): WireTypes[T]
 export function wireValue(type: string, value: unknown): unknown
 export function wireValue(type: string, value: unknown): unknown {
-  const root = definitions[type] as Schema | undefined
+  const root = schemaOf(type) as Schema | undefined
   if (!root) throw new Error(`Unknown wire type: ${type}`)
   function check(
     s: Schema,
@@ -76,7 +79,7 @@ export function wireValue(type: string, value: unknown): unknown {
     if (s.$ref) {
       const name = s.$ref.slice(8)
       const checked = check(
-        definitions[name] as Schema,
+        schemaOf(name) as Schema,
         v,
         path,
         name,

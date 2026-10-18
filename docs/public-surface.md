@@ -46,8 +46,14 @@ indexer's `homeShard`, and the store a `Located` read starts at, are where the c
 looks first; it asks every admitted store when they do not lead to the answer.
 `previewRegistration({ label, years, actor }, homeHint?)` returns `{ store, quote,
 height }` for display; only quotes from `quoteRegistration` and `prepareRegistration`
-build calls. Low-level `read(role, id, method, args)` also obtains its height
-automatically. A `ReadTransport` may implement `currentBlock()`, the tip's height and
+build calls. `resolve(spelling, recordKeys, homeHint?)` returns `getName`'s result
+with `status` and one record (or null) per key. `namePage(spelling, homeHint?)` returns
+`{ height, key, store, forwards, value, status, records, primary, renewal }`,
+`pricing()` returns `{ height, context, policy, config }` and `bootstrap()` returns
+`discover()`'s state with `allocation` and `market`. With a release `lens` (top-level),
+these and `getName`, `verifyPrimary` and `previewRegistration` read through it, falling
+back to direct reads (`useLens`, `onLensFallback`). Low-level `read(role, id, method, args)`
+also obtains its height automatically. A `ReadTransport` may implement `currentBlock()`, the tip's height and
 block hash in one read, and `namespace`, the chain state it reads; the HTTP transport
 does both.
 
