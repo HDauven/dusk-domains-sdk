@@ -18,6 +18,7 @@ import {
   fetchDriver,
   object,
   validateReleaseContract,
+  type LensContract,
   type LoadedRelease,
   type ManifestOptions,
   type ContractRole,
@@ -27,13 +28,14 @@ import { parseJson, stringifyJson, u64 } from './json.ts'
 import { wireValue } from './wire.ts'
 import { primaryNameStatus } from '../core/primary.ts'
 import { createHttpTransport, type ChainTip, type ReadTransport } from './transport.ts'
-import { ReadSharing, sameTip, type Attempt } from './sharing.ts'
+import { ReadSharing, elapsed, sameTip, type Attempt } from './sharing.ts'
 import {
   ContractRefusedError,
   createLedger,
   heightIndependent,
   initCommitment,
   isHeightIndependent,
+  markDisplayRows,
   noteSelection,
   noteVerifiedQuote,
   refuseLensRows,
@@ -56,6 +58,7 @@ import {
   lifecycle,
   replyStores,
   moonlightEndpoint,
+  pageRenewalQuote,
   renewalInputs,
   sameBinding,
   type Bootstrap,
@@ -70,6 +73,7 @@ import {
   type LensReverse,
   type NamePage,
   type Pricing,
+  type RenewalInputs,
   type Resolved,
 } from './lens.ts'
 import { LENS_INTERFACE, type LensMethod } from './lens-schema.ts'
@@ -117,8 +121,8 @@ export interface LensFallback {
   reason: LensFallbackReason
   error: unknown
   /**
-   * This fallback turned the lens off: for the client (`deployment`), or for this method after its
-   * third decode or evidence failure without a lens answer in between. Later calls read directly.
+   * This fallback held the lens off: for 10 minutes for the client (`deployment`) or this method (its third
+   * decode or evidence failure in a row, across a cache's clients), or for good when its driver did not load.
    */
   disabled: boolean
 }
@@ -167,7 +171,11 @@ function copyNow<T>(value: T): T {
   return value
 }
 
-/** Key-value storage for `ClientOptions.verificationCache`; `sessionStorage` is one. */
+/**
+ * Key-value storage for `ClientOptions.verificationCache`; `sessionStorage` is one. Its operations must
+ * settle and never call back into the SDK: one that takes over a second ends the client's use of it for
+ * the lens's health.
+ */
 export interface VerificationCache {
   getItem(key: string): string | null | undefined | Promise<string | null | undefined>
   setItem(key: string, value: string): unknown
@@ -195,7 +203,8 @@ export interface ClientOptions extends ManifestOptions {
    * signable: before the Connect app signs for it, or a registration is quoted under it, the
    * client verifies it, and the directory, from the chain, once. Admissions, membership, configuration and other state
    * are never kept, nor anything for a contract the client refused or verified only in a snapshot
-   * it abandoned. Storage failures only mean verifying from the chain.
+   * it abandoned. Storage failures only mean verifying from the chain. For the release's lens it keeps
+   * the deployment check's reads and the lens's health. It is trusted for read correctness only.
    */
   verificationCache?: VerificationCache
   /**
@@ -220,7 +229,7 @@ export interface ClientOptions extends ManifestOptions {
    * reads again at the new height, and that first attempt is not one of its three. A transport
    * without `currentBlock` gives heights only, which cannot show a block replaced at the same
    * height: with one, an operation then shares another's answered read only within this window,
-   * and with 0 only one still in flight.
+   * and with 0 only one still in flight. A view the lens answers in one query reads no tip at all.
    */
   heightReuseMs?: number
   /** Called, never awaited, whenever a read falls back from the lens to direct reads. */
@@ -242,6 +251,83 @@ interface Observed {
 }
 /** How long a method reads directly after a lens refusal for lack of resources (`GasBudget`, `ReadFailed`). */
 const LENS_BACKOFF_MS = 30_000
+/** How long a tripped method, or a deployment that failed its check, is held off, also in later clients. */
+const LENS_OFF_MS = 600_000
+/** Rate-limit retries per lens call, the wait when the node names none, and the longest wait taken. */
+const LENS_RETRIES = 3
+const LENS_RETRY_MS = 1_000
+const LENS_RETRY_MAX_MS = 10_000
+/** How long a lens health read or write of the cache may take before the client stops using it for that. */
+const LENS_CACHE_MS = 1_000
+/** The reply checks' version: lens health is kept per version and release. Bump it when they change. */
+const LENS_EVIDENCE_VERSION = 1
+/** The wait before a rate-limited read (429, or 503 with a wait) is sent again; undefined for other failures. */
+function rateLimit(error: unknown): number | undefined {
+  const e = error as { status?: unknown; retryAfterMs?: unknown } | null
+  if (!e || typeof e !== 'object') return undefined
+  const wait = typeof e.retryAfterMs === 'number' && e.retryAfterMs >= 0 ? e.retryAfterMs : undefined
+  return e.status === 429 ? (wait ?? LENS_RETRY_MS) : e.status === 503 ? wait : undefined
+}
+/** The rate-limit retries one lens call has left, for every read it sends. */
+interface LensBudget {
+  retries: number
+}
+/** The lens's health as `verificationCache` keeps it: strikes by method, and when holdoffs end (epoch ms). */
+interface LensHealth {
+  strikes: Partial<Record<LensMethod, number>>
+  until: Partial<Record<LensMethod | 'deployment', number>>
+}
+const lensMethods: ReadonlySet<string> = new Set(['resolve', 'reverse', 'name_page', 'availability', 'bootstrap', 'pricing'])
+/** A kept health entry, only if all of it is what this SDK writes: no part of a malformed one is used. */
+function parseLensHealth(text: string): LensHealth | undefined {
+  try {
+    const entry = object(parseJson(text))
+    if (Object.keys(entry).sort().join() !== 'strikes,until,version' || entry.version !== 1) return undefined
+    const health: LensHealth = { strikes: {}, until: {} }
+    for (const [m, n] of Object.entries(object(entry.strikes))) {
+      if (!lensMethods.has(m) || !Number.isSafeInteger(n) || (n as number) < 1 || (n as number) > 2) return undefined
+      health.strikes[m as LensMethod] = n as number
+    }
+    for (const [m, t] of Object.entries(object(entry.until))) {
+      if ((m !== 'deployment' && !lensMethods.has(m)) || !Number.isSafeInteger(t)) return undefined
+      health.until[m as LensMethod | 'deployment'] = t as number
+    }
+    return health
+  } catch {
+    return undefined
+  }
+}
+/** Drop passed holdoffs, and end those past `LENS_OFF_MS` from `now` then: whether one was. */
+function currentHealth(health: LensHealth, now: number): boolean {
+  let cut = false
+  for (const [m, t] of Object.entries(health.until) as [LensMethod | 'deployment', number][]) {
+    if (t <= now) delete health.until[m]
+    else if (t > now + LENS_OFF_MS) {
+      health.until[m] = now + LENS_OFF_MS
+      cut = true
+    }
+  }
+  return cut
+}
+/** A deadline on the monotonic clock (`elapsed`) as wall-clock epoch milliseconds, at the wall clock's `now`. */
+function epoch(deadline: number, now: number): number {
+  return now + Math.max(0, Math.ceil(deadline - elapsed()))
+}
+/** Lens health reads and writes in progress, per cache and key: each starts once the one before settled. */
+const healthTurns = new WeakMap<object, Map<string, Promise<void>>>()
+function healthTurn(cache: object, key: string, run: () => Promise<void>): Promise<void> {
+  let turns = healthTurns.get(cache)
+  if (!turns) healthTurns.set(cache, (turns = new Map()))
+  const queue = turns,
+    next = (queue.get(key) ?? Promise.resolve()).then(run).catch(() => {
+      // Storage is full or unavailable: what this client holds itself is unchanged.
+    })
+  queue.set(key, next)
+  void next.then(() => {
+    if (queue.get(key) === next) queue.delete(key)
+  })
+  return next
+}
 export type ReadApi<R extends ContractRole> = {
   [M in ReadMethods[R] & Method<R>]: (
     ...args: Input<R, M> extends null ? [] : [args: Input<R, M>]
@@ -303,6 +389,19 @@ interface Facts {
   /** A policy's init commitment over its live binding and config. */
   init?: string
 }
+/** What a name page this client returned showed, copied as it returned it: what `previewRenewal` prices. */
+interface PageFacts {
+  height: bigint
+  key: NameKey
+  store: string
+  value: Located<NameView>
+  renewal: RenewalInputs | null
+}
+/** What the lens deployment check reads, which a deployed lens cannot change. */
+interface LensFacts {
+  binding: Binding
+  face: typeof LENS_INTERFACE
+}
 
 export class FrozenClient {
   readonly release: LoadedRelease
@@ -327,13 +426,21 @@ export class FrozenClient {
   private readonly cacheNamespace: string | undefined
   /** Contracts an attempt verified, whose facts the cache gets once the attempt commits. */
   private readonly unkept = new WeakMap<VerifiedContract, string>()
-  /** The lens deployment check, once per client; a failed read is checked again by the next call. */
+  /** The lens deployment check, once per client; after one that failed, again by the next call. */
   private lensCheck?: Promise<void>
-  /** The lens deployment failed a check: this client reads directly from now on. */
-  private lensOff = false
-  /** Decode and evidence failures per lens method since its last answer, and methods turned off. */
+  /** Until when, on this client's monotonic clock (`elapsed`), the lens is not used: its deployment failed a check. */
+  private lensCheckUntil = -Infinity
+  /** What `verificationCache` keeps of the lens's health, loaded once per client; and whether it stopped using that. */
+  private lensHealth?: Promise<void>
+  private lensCacheOff = false
+  /** The release lists a lens whose driver did not load: said once to `onLensFallback`. */
+  private lensErrorSaid = false
+  /** Decode and evidence failures per lens method since its last answer. */
   private readonly lensStrikes = new Map<LensMethod, number>()
-  private readonly lensBroken = new Set<LensMethod>()
+  /** Until when, on this client's monotonic clock (`elapsed`), a method whose breaker tripped reads directly. */
+  private readonly lensHeld = new Map<LensMethod, number>()
+  /** The release this client checks lens replies against, and those checks' version: its lens health's scope. */
+  private readonly lensScope: string
   /**
    * Store ordinals this client saw in a committed snapshot, a direct read or a lens reply, with the
    * height it saw each at: heights and ordinals rising. Admissions are never removed, so a lens reply
@@ -346,8 +453,14 @@ export class FrozenClient {
   private readonly observed = new WeakMap<Attempt, Observed>()
   /** Lens refusals by method, argument and height: the same request there reads directly. */
   private readonly lensRefusals = new Map<string, LensRefusal>()
-  /** Until when, on the client's clock, a method whose lens read ran short of resources reads directly. */
+  /** The highest height the lens refused each request (method and argument) at. */
+  private readonly lensRefusedAt = new Map<string, bigint>()
+  /** Until when, on this client's monotonic clock (`elapsed`), a method whose lens read ran short of resources reads directly. */
   private readonly lensBackoff = new Map<LensMethod, number>()
+  /** The highest height of a lens reply this client used: no later one-query view shows an older state. */
+  private lensTop?: bigint
+  /** Name pages this client returned, with what each showed then. */
+  private readonly pages = new WeakMap<object, PageFacts>()
   /**
    * The client trusts only what it verified itself. `client.release` is its own copy of
    * `release`: contracts it resolves are added there, not to `release` or another client's.
@@ -388,6 +501,16 @@ export class FrozenClient {
     if (typeof this.heightReuseMs !== 'number' || !(this.heightReuseMs >= 0))
       throw new Error('heightReuseMs must be zero or more')
     this.sharing = new ReadSharing(this.transport, this.heightReuseMs)
+    // The release's contracts as this client starts with them, and the checks' version.
+    this.lensScope = hex(hash('duskds:sdk:lens-health:v1', stringifyJson([
+      LENS_EVIDENCE_VERSION,
+      [...release.contracts.values()]
+        .map((c) => stringifyJson([
+          c.role, contractId(c.contractId), c.codeHash ?? null, c.initHash ?? null,
+          c.dataDriver.sha256 ?? null, c.dataDriver.blake2b256 ?? null, c.dataDriver.blake3 ?? null, c.dataDriver.bytes ?? null,
+        ]))
+        .sort(),
+    ])))
     this.directory = this.api('directory', this.directoryId)
     this.vault = this.api('vault', this.vaultId)
   }
@@ -505,7 +628,7 @@ export class FrozenClient {
   /**
    * Read a verified contract, or the candidate under verification, for attempt `at`. A state read
    * in an attempt is shared with other attempts at its height; a verification read (`shared`
-   * false, and every candidate read) never is.
+   * false, and every candidate read) never is. `onReply` gets the input and bytes of a read that decoded.
    */
   private async raw<R extends ContractRole, M extends Method<R>>(
     role: R,
@@ -515,6 +638,7 @@ export class FrozenClient {
     at?: Attempt,
     candidate?: { role: ContractRole; driver: DataDriver },
     shared = !candidate,
+    onReply?: (input: Uint8Array, bytes: Uint8Array) => void,
   ): Promise<Output<R, M>> {
     id = contractId(id)
     const contract = candidate ?? this.ledger.verified.get(id)
@@ -534,6 +658,7 @@ export class FrozenClient {
       spec.output,
       contract.driver.decodeOutput(method, bytes),
     ) as Output<R, M>
+    onReply?.(input, bytes)
     if (at && role === 'directory') this.observe(at, method, args, value)
     return value
   }
@@ -817,7 +942,8 @@ export class FrozenClient {
     }
     let initHash = record ? hex(record.init_hash) : c.initHash
     if (role === 'policy' && (c.initHash !== undefined || evidence)) {
-      if (!held) facts.init = await this.policyCommitment(id, candidate, binding, at)
+      const kept: { publish?: () => void } = {}
+      if (!held) facts.init = await this.policyCommitment(id, candidate, binding, at, kept)
       if (facts.init === undefined) return undefined
       if (c.initHash !== undefined && c.initHash !== facts.init)
         return fail('Policy initialization does not match its init commitment')
@@ -826,6 +952,8 @@ export class FrozenClient {
         if (held) return undefined
         throw policyAdmissionMismatch()
       }
+      // Decoded and the release's: the selection's read of its config at this height takes this reply.
+      kept.publish?.()
     }
     return { facts, initHash }
   }
@@ -876,13 +1004,21 @@ export class FrozenClient {
     contract: VerifiedContract,
     binding?: Binding,
     at?: Attempt,
+    kept?: { publish?: () => void },
   ): Promise<string> {
     binding ??= await this.raw('policy', id, 'binding', null, at, contract)
-    const config = await this.raw('policy', id, 'config', null, at, contract)
-    return initCommitment(contract.driver, wireValue('InitPolicy', { binding, config }))
+    let reply: [Uint8Array, Uint8Array] | undefined
+    const config = await this.raw('policy', id, 'config', null, at, contract, false, (input, bytes) => (reply = [input, bytes]))
+    const init = initCommitment(contract.driver, wireValue('InitPolicy', { binding, config }))
+    // The config is state too: once it is the release's, the quote or pricing read at this height takes it.
+    if (kept && at && reply) {
+      const [input, bytes] = reply
+      kept.publish = () => this.sharing.publish(at, id, 'config', input, bytes)
+    }
+    return init
   }
   /** What facts are about: a contract and its release descriptor's commitments and driver. */
-  private factsKey(role: ContractRole, id: string, c: ReleaseContract): string {
+  private factsKey(role: ContractRole | 'lens', id: string, c: ReleaseContract | LensContract): string {
     const a = c.dataDriver
     return stringifyJson([
       role, id, c.codeHash ?? null, c.initHash ?? null,
@@ -1453,10 +1589,13 @@ export class FrozenClient {
   }
   /**
    * Answer a read with one lens query, or return undefined so the caller reads directly: when the
-   * release lists no lens, the client does not use it, the arguments do not encode, the lens deployment
-   * fails its check, or the reply refuses, does not decode, is at another height or rests on anything
-   * that fails a release check (`check`). A reply is used whole or not at all, and never verifies a
-   * contract: nothing it shows becomes signable. Every fallback is reported to `onLensFallback`.
+   * release lists no lens, the client does not use it or holds it off, the arguments do not encode, the
+   * lens deployment fails its check, or the reply refuses, does not decode, is at another height or rests
+   * on anything that fails a release check (`check`). A rate-limited lens read is sent again after its
+   * wait, three times per call, then the call fails without reading directly: a view sends at most 8 lens
+   * queries (2 more for its client's deployment check) and 4 tip reads, and waits at most 30 s. A reply is
+   * used whole or not at all, and never enters verification state or signable quote provenance. Every
+   * fallback is reported to `onLensFallback`.
    */
   private async viaLens<R extends { height: bigint }, T>(
     method: string,
@@ -1465,19 +1604,23 @@ export class FrozenClient {
     check: (reply: R, context: EvidenceContext) => T,
   ): Promise<{ value: T } | undefined> {
     const lens = this.release.lens
-    if (
-      this.options.useLens === false || this.lensOff || this.lensBroken.has(lensMethod) ||
-      (this.lensBackoff.get(lensMethod) ?? -Infinity) > Date.now() || this.ledger.refused.has(this.directoryId)
-    )
-      return undefined
+    if (this.options.useLens === false || this.ledger.refused.has(this.directoryId)) return undefined
     if (!lens) {
       // A lens the release has but did not load: said once, then every read is direct.
-      if (this.release.lensError !== undefined && !this.lensOff) {
-        this.lensOff = true
+      if (this.release.lensError !== undefined && !this.lensErrorSaid) {
+        this.lensErrorSaid = true
         this.lensFell(method, 'deployment', this.release.lensError, true)
       }
       return undefined
     }
+    // What earlier clients of this verification cache saw of the lens: strikes and holdoffs.
+    await (this.lensHealth ??= this.loadLensHealth(lens.contract))
+    const now = elapsed()
+    if (
+      (this.lensHeld.get(lensMethod) ?? -Infinity) > now || (this.lensBackoff.get(lensMethod) ?? -Infinity) > now ||
+      this.lensCheckUntil > now
+    )
+      return undefined
     let input: Uint8Array
     try {
       input = lensInput(lens.driver, lensMethod, args)
@@ -1485,100 +1628,321 @@ export class FrozenClient {
       // Arguments the lens cannot take: the direct reads decide, with their own errors.
       return undefined
     }
+    // The call's rate-limit retries, its deployment check's included when it starts that.
+    const budget: LensBudget = { retries: LENS_RETRIES }
     try {
-      await (this.lensCheck ??= this.checkLens().catch((error: unknown) => {
+      await (this.lensCheck ??= this.checkLens(budget).catch((error: unknown) => {
         this.lensCheck = undefined
         throw error
       }))
     } catch (error) {
-      this.lensFell(method, 'deployment', error, this.lensOff)
+      if (rateLimit(error) !== undefined) throw error
+      // A deployment that failed a check is held off; one whose check could not be read is not.
+      const failed = error instanceof LensFailure && error.reason === 'deployment'
+      if (failed) {
+        const until = (this.lensCheckUntil = elapsed() + LENS_OFF_MS)
+        void this.noteLensHealth((h, now) => void (h.until.deployment = Math.max(h.until.deployment ?? -Infinity, epoch(until, now))))
+      }
+      this.lensFell(method, 'deployment', error, failed)
       return undefined
     }
-    const id = contractId(lens.contract.contractId)
+    const id = contractId(lens.contract.contractId),
+      request = `${lensMethod}/${hex(input)}`
     try {
-      const value = await this.attempts(async (at) => {
-        // A request the lens refused at this height is refused again: read directly.
-        const request = `${lensMethod}/${hex(input)}/${at.height}`,
-          refused = this.lensRefusals.get(request)
-        if (refused)
-          throw heightIndependent(new LensFailure('refused', `Lens ${lensMethod} refused this request at this height: ${refused.code}`, { refusal: refused }))
-        const bytes = await this.sharing.read(at, id, lensMethod, input)
-        try {
-          let reply: R
-          try {
-            reply = lensOutput<R>(lens.driver, lensMethod, bytes)
-          } catch (error) {
-            // A refusal from another tip says nothing about this attempt's: its close decides.
-            if (error instanceof LensFailure && error.refusal && error.refusal.height !== at.height)
-              throw new LensFailure('height', `Lens ${lensMethod} refused at height ${error.refusal.height}, not ${at.height}`)
-            throw heightIndependent(error)
-          }
-          // Read in one contract query, a reply is the state at its height: the attempt's, or no answer.
-          if (reply.height !== at.height)
-            throw new LensFailure('height', `Lens ${lensMethod} answered at height ${reply.height}, not ${at.height}`)
-          const checked = settle(() => check(reply, this.evidenceContext(reply.height)))
-          // The stores an accepted reply lists, from ordinal 0: kept if its snapshot commits.
-          const seen = this.observing(at)
-          seen.prefix = Math.max(seen.prefix, replyStores(reply).length - 1)
-          return checked
-        } catch (error) {
-          // A refusal at this height, of the reply or inside it (a page's primary), is kept for it.
-          if (error instanceof LensFailure && error.refusal && error.refusal.height === at.height)
-            this.lensRefused(request, lensMethod, error.refusal)
-          throw error
-        }
-      }, true)
-      this.lensStrikes.delete(lensMethod)
+      const once = await this.lensQuery(id, lens.driver, lensMethod, request, input, check, budget)
+      const value = once ? once.value : await this.lensSnapshot(id, lens.driver, lensMethod, request, input, check, budget)
+      if (this.lensStrikes.delete(lensMethod)) void this.noteLensHealth((h) => void delete h.strikes[lensMethod])
       return { value }
     } catch (error) {
+      if (rateLimit(error) !== undefined) throw error
       const reason = error instanceof LensFailure ? error.reason : 'read'
       // A reply that does not decode or check, three times without an answer in between, is not a
-      // passing fault: the lens is not asked for this method again.
-      const strikes = (this.lensStrikes.get(lensMethod) ?? 0) + (error instanceof LensFailure && error.strikes ? 1 : 0)
-      this.lensStrikes.set(lensMethod, strikes)
-      if (strikes >= 3) this.lensBroken.add(lensMethod)
-      this.lensFell(method, reason, error, strikes >= 3)
+      // passing fault: the method is held off. No other failure counts.
+      const strike = error instanceof LensFailure && error.strikes
+      let strikes = (this.lensStrikes.get(lensMethod) ?? 0) + (strike ? 1 : 0)
+      // A strike adds one to the count the cache keeps, as every client of it does: that count trips.
+      if (strike)
+        await this.noteLensHealth((h, now) => {
+          strikes = (h.strikes[lensMethod] ?? 0) + 1
+          if (strikes < 3) h.strikes[lensMethod] = strikes
+          else {
+            delete h.strikes[lensMethod]
+            h.until[lensMethod] = Math.max(h.until[lensMethod] ?? -Infinity, now + LENS_OFF_MS)
+          }
+        })
+      const tripped = strikes >= 3
+      if (tripped) {
+        this.lensHeld.set(lensMethod, elapsed() + LENS_OFF_MS)
+        this.lensStrikes.delete(lensMethod)
+      } else if (strike) this.lensStrikes.set(lensMethod, strikes)
+      this.lensFell(method, reason, error, tripped)
       return undefined
     }
   }
+  /** The key of the lens's health in the verification cache: bound as its deployment facts are, and to the release. */
+  private lensHealthKey(contract: LensContract): string | undefined {
+    const namespace = this.cacheNamespace
+    if (!this.options.verificationCache || namespace === undefined) return undefined
+    return this.cacheKey(
+      stringifyJson(['lens-health', this.lensScope, this.factsKey('lens', contractId(contract.contractId), contract)]),
+      namespace,
+    )
+  }
   /**
-   * The lens deployment, once per client: its entry commits to its code and to an initialization bound
-   * to the release's directory, and the deployed lens reports that directory's binding and lens v1's
-   * interface. A mismatch can never pass later, so it turns the lens off for this client.
+   * Load the lens health earlier clients of the cache kept: what is left of each holdoff on the wall clock,
+   * `LENS_OFF_MS` at most, is then timed on the monotonic one. A malformed entry is written again empty,
+   * and a holdoff past `LENS_OFF_MS` written back ending then.
    */
-  private async checkLens(): Promise<void> {
+  private loadLensHealth(contract: LensContract): Promise<void> {
+    const key = this.lensHealthKey(contract),
+      cache = this.options.verificationCache
+    if (!key || !cache) return Promise.resolve()
+    return healthTurn(cache, key, async () => {
+      if (this.lensCacheOff) return
+      const text = await this.settled(cache.getItem(key))
+      if (typeof text !== 'string') return
+      const now = Date.now(),
+        at = elapsed(),
+        kept = parseLensHealth(text),
+        health = kept ?? { strikes: {}, until: {} },
+        cut = currentHealth(health, now)
+      for (const [m, n] of Object.entries(health.strikes) as [LensMethod, number][])
+        this.lensStrikes.set(m, Math.max(this.lensStrikes.get(m) ?? 0, n))
+      for (const [m, t] of Object.entries(health.until) as [LensMethod | 'deployment', number][]) {
+        const until = at + (t - now)
+        if (m === 'deployment') this.lensCheckUntil = Math.max(this.lensCheckUntil, until)
+        else this.lensHeld.set(m, Math.max(this.lensHeld.get(m) ?? -Infinity, until))
+      }
+      if (!kept || cut) await this.settled(cache.setItem(key, stringifyJson({ version: 1, strikes: health.strikes, until: health.until })))
+    })
+  }
+  /**
+   * Apply `change` to the kept lens health in the cache's turn for its key, reading it again first: holdoffs
+   * only lengthen, to `LENS_OFF_MS` at most. Across realms nothing orders writes: there it is best effort.
+   */
+  private noteLensHealth(change: (health: LensHealth, now: number) => void): Promise<void> {
+    const lens = this.release.lens,
+      cache = this.options.verificationCache,
+      key = lens && this.lensHealthKey(lens.contract)
+    if (!lens || !cache || !key) return Promise.resolve()
+    return healthTurn(cache, key, async () => {
+      if (this.lensCacheOff) return
+      const text = await this.settled(cache.getItem(key)),
+        now = Date.now(),
+        health = (typeof text === 'string' ? parseLensHealth(text) : undefined) ?? { strikes: {}, until: {} }
+      change(health, now)
+      currentHealth(health, now)
+      await this.settled(cache.setItem(key, stringifyJson({ version: 1, strikes: health.strikes, until: health.until })))
+    })
+  }
+  /** A health read or write of the cache, settled within `LENS_CACHE_MS`, or not used again by this client. */
+  private settled<T>(op: T | PromiseLike<T>): Promise<T> {
+    let stop = (): void => {}
+    const late = new Promise<never>((_, reject) => {
+      const timer = setTimeout(() => {
+        this.lensCacheOff = true
+        reject(new Error('The verification cache did not settle'))
+      }, LENS_CACHE_MS)
+      stop = () => clearTimeout(timer)
+    })
+    return Promise.race([Promise.resolve(op), late]).finally(stop)
+  }
+  /** A lens read: one the node rate-limits is sent again after its wait while `budget` lasts, never after one over 10 s. */
+  private async lensRead(at: Attempt | undefined, id: string, method: LensMethod, input: Uint8Array, budget: LensBudget): Promise<Uint8Array> {
+    for (;;) {
+      try {
+        return await this.sharing.read(at, id, method, input)
+      } catch (error) {
+        const wait = rateLimit(error)
+        if (wait === undefined) throw error
+        // A rate limit says nothing about the height: no snapshot reads it again at another.
+        if (budget.retries <= 0 || wait > LENS_RETRY_MAX_MS) throw heightIndependent(error)
+        budget.retries--
+        await new Promise((resolve) => setTimeout(resolve, wait))
+      }
+    }
+  }
+  /** The highest height this client saw, from a tip read or a lens reply it used. */
+  private seenHeight(): bigint | undefined {
+    const tip = this.sharing.highest(),
+      lens = this.lensTop
+    return tip === undefined ? lens : lens === undefined || tip > lens ? tip : lens
+  }
+  /**
+   * One lens query and no tip read: its reply's height is the view's. Undefined, to read it between tip
+   * reads instead (`lensSnapshot`), for a reply or refusal below `seenHeight`, or a request refused there.
+   */
+  private async lensQuery<R extends { height: bigint }, T>(
+    id: string,
+    driver: DataDriver,
+    method: LensMethod,
+    request: string,
+    input: Uint8Array,
+    check: (reply: R, context: EvidenceContext) => T,
+    budget: LensBudget,
+  ): Promise<{ value: T } | undefined> {
+    const refused = this.lensRefusedAt.get(request),
+      sent = this.seenHeight()
+    if (refused !== undefined && (sent === undefined || refused >= sent)) return undefined
+    const bytes = await this.lensRead(undefined, id, method, input, budget)
+    // Below what this client saw by the time the reply arrived: an older state than it showed.
+    const stale = (height: bigint) => {
+      const seen = this.seenHeight()
+      return seen !== undefined && height < seen
+    }
+    let reply: R
+    try {
+      reply = lensOutput<R>(driver, method, bytes)
+    } catch (error) {
+      if (error instanceof LensFailure && error.refusal) {
+        if (stale(error.refusal.height)) return undefined
+        this.lensRefused(request, error.refusal.height, method, error.refusal)
+      }
+      throw error
+    }
+    if (stale(reply.height)) return undefined
+    let checked: T
+    try {
+      checked = settle(() => check(reply, this.evidenceContext(reply.height)))
+    } catch (error) {
+      // A refusal inside the reply, a page's primary, is kept as the reply's own.
+      if (error instanceof LensFailure && error.refusal && error.refusal.height === reply.height)
+        this.lensRefused(request, reply.height, method, error.refusal)
+      throw error
+    }
+    // As a committed snapshot at the reply's height would: the stores it lists, from ordinal 0, are seen.
+    const stores = replyStores(reply).length - 1
+    if (stores >= 0) this.sawStores(reply.height, stores)
+    if (this.lensTop === undefined || reply.height > this.lensTop) this.lensTop = reply.height
+    return { value: checked }
+  }
+  /** The lens query of a snapshot bracketed by tip reads, used only at the snapshot's height exactly. */
+  private lensSnapshot<R extends { height: bigint }, T>(
+    id: string,
+    driver: DataDriver,
+    method: LensMethod,
+    request: string,
+    input: Uint8Array,
+    check: (reply: R, context: EvidenceContext) => T,
+    budget: LensBudget,
+  ): Promise<T> {
+    return this.attempts(async (at) => {
+      // A request the lens refused at this height is refused again: read directly.
+      const refused = this.lensRefusals.get(`${request}/${at.height}`)
+      if (refused)
+        throw heightIndependent(new LensFailure('refused', `Lens ${method} refused this request at this height: ${refused.code}`, { refusal: refused }))
+      const bytes = await this.lensRead(at, id, method, input, budget)
+      try {
+        let reply: R
+        try {
+          reply = lensOutput<R>(driver, method, bytes)
+        } catch (error) {
+          // A refusal from another tip says nothing about this attempt's: its close decides.
+          if (error instanceof LensFailure && error.refusal && error.refusal.height !== at.height)
+            throw new LensFailure('height', `Lens ${method} refused at height ${error.refusal.height}, not ${at.height}`)
+          throw heightIndependent(error)
+        }
+        // Read in one contract query, a reply is the state at its height: the attempt's, or no answer.
+        if (reply.height !== at.height)
+          throw new LensFailure('height', `Lens ${method} answered at height ${reply.height}, not ${at.height}`)
+        const checked = settle(() => check(reply, this.evidenceContext(reply.height)))
+        // The stores an accepted reply lists, from ordinal 0: kept if its snapshot commits.
+        const seen = this.observing(at)
+        seen.prefix = Math.max(seen.prefix, replyStores(reply).length - 1)
+        return checked
+      } catch (error) {
+        // A refusal at this height, of the reply or inside it (a page's primary), is kept for it.
+        if (error instanceof LensFailure && error.refusal && error.refusal.height === at.height)
+          this.lensRefused(request, at.height, method, error.refusal)
+        throw error
+      }
+    }, true)
+  }
+  /**
+   * The lens deployment, once per client and, with `verificationCache`, once per cache: its entry commits
+   * to its code and to an initialization bound to the release's directory, and the deployed lens reports
+   * that directory's binding and lens v1's interface, read one after the other. What it reported is kept
+   * only once both checks passed on chain reads, and checked again on every load.
+   */
+  private async checkLens(budget: LensBudget): Promise<void> {
     const { contract, driver } = this.release.lens!,
       id = contractId(contract.contractId)
     // Its replies rest on the directory: they are used only through one this client verified.
     await this.verify('directory', this.directoryId, undefined, false)
     const off = (message: string): never => {
-      this.lensOff = true
       throw new LensFailure('deployment', message)
     }
     if (contract.codeHash === undefined || contract.initHash === undefined)
       off('The release lens has no code or init commitment')
     if (lensInitCommitment(driver, this.directoryId) !== contract.initHash)
       off("The release lens entry's init commitment is not bound to the release's directory")
+    const sound = (facts: LensFacts) =>
+      sameBinding(facts.binding, this.directoryBinding()) &&
+      Object.entries(LENS_INTERFACE).every(([k, v]) => facts.face[k as keyof LensFacts['face']] === v)
+    const key = this.factsKey('lens', id, contract),
+      kept = await this.cachedLensFacts(key)
+    if (kept && sound(kept)) return this.lensChecked()
     const read = async <T>(method: 'binding' | 'lens_interface'): Promise<T> =>
-      lensOutput<T>(driver, method, await this.sharing.read(undefined, id, method, lensInput(driver, method, null)))
-    const [binding, face] = await Promise.all([
-      read<Binding>('binding'),
-      read<typeof LENS_INTERFACE>('lens_interface'),
-    ])
+      lensOutput<T>(driver, method, await this.lensRead(undefined, id, method, lensInput(driver, method, null), budget))
+    const binding = await read<Binding>('binding')
     if (!sameBinding(binding, this.directoryBinding())) off('Lens deployment binding mismatch')
+    const face = await read<typeof LENS_INTERFACE>('lens_interface')
     if (Object.entries(LENS_INTERFACE).some(([k, v]) => face[k as keyof typeof face] !== v))
       off('Unsupported lens interface')
+    this.keepLensFacts(key, { binding, face })
+    this.lensChecked()
+  }
+  /** The deployment passed its check: nothing holds the lens off in this client. */
+  private lensChecked(): void {
+    this.lensCheckUntil = -Infinity
+  }
+  /** The lens facts the verification cache holds for `key`; a malformed or unreadable entry is none. */
+  private async cachedLensFacts(key: string): Promise<LensFacts | undefined> {
+    const cache = this.options.verificationCache,
+      namespace = this.cacheNamespace
+    if (!cache || namespace === undefined) return undefined
+    try {
+      const text = await cache.getItem(this.cacheKey(key, namespace))
+      if (typeof text !== 'string') return undefined
+      const entry = object(parseJson(text))
+      if (entry.version !== 1) return undefined
+      return {
+        binding: wireValue('Binding', entry.binding),
+        face: wireValue('LensInterface', entry.lens_interface) as typeof LENS_INTERFACE,
+      }
+    } catch {
+      return undefined
+    }
+  }
+  /** Give the verification cache what the lens deployment check read, once every check of it passed. */
+  private keepLensFacts(key: string, facts: LensFacts): void {
+    const cache = this.options.verificationCache,
+      namespace = this.cacheNamespace
+    if (!cache || namespace === undefined) return
+    try {
+      const done = cache.setItem(
+        this.cacheKey(key, namespace),
+        stringifyJson({ version: 1, binding: facts.binding, lens_interface: facts.face }),
+      ) as PromiseLike<unknown> | undefined
+      if (typeof done?.then === 'function') done.then(undefined, () => {})
+    } catch {
+      // Storage is full or unavailable: the next client checks the lens from the chain.
+    }
+  }
+  /**
+   * A refusal at `height`: kept for that request there, and for a refusal that ran short of resources,
+   * the method reads directly for a while. Other refusals turn nothing off.
+   */
+  private lensRefused(request: string, height: bigint, method: LensMethod, refusal: LensRefusal): void {
+    this.lensRefusals.set(`${request}/${height}`, refusal)
+    if (this.lensRefusals.size > 256) this.lensRefusals.delete(this.lensRefusals.keys().next().value!)
+    const before = this.lensRefusedAt.get(request)
+    this.lensRefusedAt.delete(request)
+    this.lensRefusedAt.set(request, before === undefined || height > before ? height : before)
+    if (this.lensRefusedAt.size > 256) this.lensRefusedAt.delete(this.lensRefusedAt.keys().next().value!)
+    if (refusal.code === 'GasBudget' || refusal.code === 'ReadFailed') this.lensBackoff.set(method, elapsed() + LENS_BACKOFF_MS)
   }
   /** What a lens reply is checked against: this client's release, refusals and verified commitments. */
-  /**
-   * A refusal at the attempt's height: kept for that request, and for a refusal that ran short of
-   * resources, the method reads directly for a while. Other refusals turn nothing off.
-   */
-  private lensRefused(request: string, method: LensMethod, refusal: LensRefusal): void {
-    this.lensRefusals.set(request, refusal)
-    if (this.lensRefusals.size > 256) this.lensRefusals.delete(this.lensRefusals.keys().next().value!)
-    if (refusal.code === 'GasBudget' || refusal.code === 'ReadFailed') this.lensBackoff.set(method, Date.now() + LENS_BACKOFF_MS)
-  }
   private evidenceContext(height: bigint): EvidenceContext {
     return {
       release: this.release,
@@ -1658,14 +2022,14 @@ export class FrozenClient {
    * What a name's page shows, at one height: the name at its home (as `getName`), its records, the
    * verified primary of its own `moonlight_address` endpoint (as `verifyPrimary`, looking at its home
    * first) and, for a root, what its renewal quote reads. A primary that cannot be verified leaves the
-   * rest of the page, with `primary.error`. For display: quote a renewal with `quoteRenewal`.
+   * rest of the page, with `primary.error`. For display: `previewRenewal` prices its renewals.
    */
   async namePage(spelling: string, homeHint?: string): Promise<NamePage> {
     const key = nameKey(spelling)
     const lens = await this.viaLens('namePage', 'name_page', { name: spelling, hint: lensHint(homeHint) },
       (r: LensNamePage, ctx) => checkNamePage(ctx, r, key))
-    if (lens) return lens.value
-    return this.attempts(async (at) => {
+    if (lens) return this.shown(lens.value)
+    return this.shown(await this.attempts(async (at) => {
       const name = await this.nameAt(at, key, homeHint),
         view = typeof name.value === 'object' && 'Local' in name.value ? name.value.Local : undefined
       const page: NamePage = {
@@ -1699,7 +2063,42 @@ export class FrozenClient {
           view, await this.raw('directory', this.directoryId, 'renewal_schedule', null, at), at.height,
         )
       return page
-    }, true)
+    }, true))
+  }
+  /** Keep what `page` shows as this client returns it, for `previewRenewal`. */
+  private shown(page: NamePage): NamePage {
+    this.pages.set(page, copyNow({ height: page.height, key: page.key, store: page.store, value: page.value, renewal: page.renewal }))
+    return page
+  }
+  /**
+   * A renewal quote to show on a page `namePage` returned: what `quoteRenewal(page.store, ...)` answers at
+   * the page's height. It is computed from the page without a read for a root with no move pending, years
+   * within its horizon and a home of the published v1 store's code (`PRICED_STORES`), and quoted directly
+   * anywhere else. For display: builders refuse what it returns.
+   */
+  async previewRenewal(page: NamePage, years: number): Promise<Routed<RenewalQuote>> {
+    const facts = this.pages.get(page),
+      computed = facts && this.renewalAt(facts, years)
+    if (computed) {
+      markDisplayRows([computed])
+      return computed
+    }
+    const value = facts?.value ?? page.value,
+      view = typeof value === 'object' && value !== null && 'Local' in value ? value.Local : undefined
+    const quote = await this.quoteRenewal(facts?.store ?? page.store, {
+      name: view
+        ? { key: view.name.key, incarnation: view.name.incarnation }
+        : { key: facts?.key ?? page.key, incarnation: { generation: 0n, serial: 0n } },
+      years,
+    })
+    markDisplayRows([quote])
+    return quote
+  }
+  /** The home's `quote_renewal` at the page's height, from what the page showed; none for a refused home. */
+  private renewalAt(f: PageFacts, years: number): Routed<RenewalQuote> | undefined {
+    if (this.ledger.refused.has(f.store) || this.ledger.refused.has(this.directoryId)) return undefined
+    const quote = pageRenewalQuote(f, years, this.release.contracts.get(f.store)?.codeHash)
+    return quote && { store: f.store, value: { Local: quote }, forwards: [], height: f.height }
   }
   /**
    * The directory's registration context and the policy it selects, with that policy's whole config,

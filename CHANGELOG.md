@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.4.1 (2026-10-18)
+
+- Read no tip for a view the lens answers in one query.
+- Keep the lens deployment check and the lens's health, with 10-minute holdoffs, in `verificationCache`.
+- Send a rate-limited lens read again after its `Retry-After`, three times a call; add `NodeReadError`.
+- Add `previewRenewal`, a name page's renewal price without a read, which builders refuse.
+- Read a policy's config once where a quote or price verifies it.
+
 ## 0.4.0 (2026-10-13)
 
 Breaking: pass `client.release`, not the loaded release, to the Connect app. It signs

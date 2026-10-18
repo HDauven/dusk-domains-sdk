@@ -292,8 +292,8 @@ it('registrationPlacement and prepareRegistration read each home and the selecti
   w.chain.height++
   expect(await w.calls(() => client.prepareRegistration(registration('fresh')))).toEqual([
     ...placement, c(1, 'registration_context'),
-    // The policy is verified once; its config is read again as the selection's.
-    c(3, 'interface_version'), c(3, 'binding'), c(3, 'config'), c(3, 'config'),
+    // The policy is verified once, and the config its init commitment read is the selection's.
+    c(3, 'interface_version'), c(3, 'binding'), c(3, 'config'),
     c(9, 'quote_registration'), H,
   ])
   const again = await client.prepareRegistration(registration('fresh'))
@@ -309,12 +309,61 @@ it('prepareRegistration reads a released root\'s name once', async () => {
   released(w, 'gone')
   expect(await w.calls(() => client.prepareRegistration(registration('gone')))).toEqual([
     H, c(1, 'members'), c(4, 'home'), c(8, 'home'), c(9, 'home'), c(9, 'get_name'),
-    c(1, 'registration_context'), c(3, 'interface_version'), c(3, 'binding'), c(3, 'config'), c(3, 'config'),
+    c(1, 'registration_context'), c(3, 'interface_version'), c(3, 'binding'), c(3, 'config'),
     c(9, 'quote_registration'), H,
   ])
   const prepared = await client.prepareRegistration(registration('gone'))
   expect(prepared).toMatchObject({ store: id(9), canonicalStore: id(9), releasedRoot: null })
   expect(prepared.quoteRequest).toMatchObject({ previous_generation: 7n, previous_grace_end: 50n, height: 101n })
+})
+
+it('reads a policy\'s config once where it verifies it: its init commitment\'s reply is the selection\'s', async () => {
+  const w = await world()
+  const client = await w.bootstrapped()
+  const args = {
+    node: nameKey('fresh.dusk').node, label: 'fresh', years: 1, actor: bytes(10),
+    expected_policy_version: 1n, expected_policy_config_version: 1n,
+  }
+  for (const [name, run] of [
+    ['previewRegistration', () => client.previewRegistration({ label: 'fresh', years: 1, actor: bytes(10) })],
+    ['quoteRegistration', () => w.client().quoteRegistration(id(9), args)],
+    ['pricing', () => w.client().pricing()],
+  ] as const) {
+    w.chain.height++
+    const log = await w.calls(run)
+    expect(log.filter((call) => call === c(3, 'config')), name).toHaveLength(1)
+    expect(log, name).toEqual(expect.arrayContaining([c(3, 'interface_version'), c(3, 'binding')]))
+  }
+  // The policy verified, a block later: the selection's config is read again, at the new height.
+  w.chain.height++
+  expect((await w.calls(() => client.previewRegistration({ label: 'fresh', years: 1, actor: bytes(10) }))).filter((call) => call === c(3, 'config'))).toHaveLength(1)
+})
+
+it('shares a policy config reply with the state read only once it decoded and is the release\'s, and only at its tip', async () => {
+  // The verification's config read fails, or does not decode: nothing is kept, and the next read asks again.
+  for (const reply of [new Error('Contract read failed (policy.config): unavailable'), new Uint8Array([0xff, 0x00])]) {
+    const w = await world()
+    const client = await w.bootstrapped()
+    w.chain.replies.set(c(3, 'config'), reply)
+    await expect(client.pricing()).rejects.toThrow()
+    w.chain.replies.delete(c(3, 'config'))
+    expect((await w.calls(() => client.pricing())).filter((call) => call === c(3, 'config'))).toHaveLength(1)
+    expect((await client.pricing()).config).toMatchObject({ config_version: 1n })
+  }
+  // A config that decodes but is not the release's refuses the policy, and is kept for nothing.
+  const w = await world()
+  const other = w.client()
+  await other.verifyContract('directory', id(1))
+  w.chain.height++
+  w.chain.replies.set(c(3, 'config'), { ...launchPolicyConfig(), annual_lux: ['1', '1', '1', '1', '1'] })
+  await expect(other.pricing()).rejects.toThrow('Policy initialization does not match its init commitment')
+  w.chain.replies.delete(c(3, 'config'))
+  const fresh = w.client()
+  await fresh.verifyContract('directory', id(1))
+  expect((await fresh.pricing()).config.annual_lux).toEqual(launchPolicyConfig().annual_lux)
+  // A reply kept at one tip answers nothing at the next.
+  w.chain.height++
+  expect((await w.calls(() => fresh.pricing())).filter((call) => call === c(3, 'config'))).toHaveLength(1)
 })
 
 it('quoteRegistration reads the selection, config and quote once per height', async () => {

@@ -1,5 +1,5 @@
-import { it, expect, vi } from 'vitest'
-import { ContractRefusedError, FrozenClient, UnverifiedContractError, type ClientOptions } from '../src/frozen/client.ts'
+import { describe, it, expect, vi } from 'vitest'
+import { ContractRefusedError, FrozenClient, UnverifiedContractError, type ClientOptions, type VerificationCache } from '../src/frozen/client.ts'
 import { registrationCalls } from '../src/frozen/actions.ts'
 import { parseJson, stringifyJson } from '../src/frozen/json.ts'
 import { fromHex, nameKey } from '../src/frozen/bytes.ts'
@@ -10,6 +10,8 @@ import { bytes, id, jsonRelease, sample } from './helpers.ts'
 import type { ReadTransport } from '../src/frozen/transport.ts'
 import type { LoadedRelease, ReleaseContract } from '../src/frozen/manifest.ts'
 import type { Forward } from '../src/frozen/types.ts'
+import { clocks, lensEntry, lensWorld, store, type LensWorld } from './lens-world.ts'
+import { verifiedContract } from '../src/frozen/trust.ts'
 
 const encode = (v: unknown) => new TextEncoder().encode(stringifyJson(v))
 const decode = (b: Uint8Array) => parseJson(new TextDecoder().decode(b)) as Record<string, any>
@@ -153,9 +155,10 @@ it('reads through what an earlier client verified, and verifies from the chain w
     '01.interface_version', '01.binding', '03.interface_version', '03.binding',
   ])
   // The policy's config is read as the directory's selection once per attempt (the first may open at
-  // the height discovery closed with, which the block left), and once for its init commitment.
+  // the height discovery closed with, which the block left): the first attempt's is the one its init
+  // commitment read.
   expect(w.log.filter((call) => call === '03.config')).toHaveLength(
-    w.log.filter((call) => call === '04.quote_registration').length + 1,
+    w.log.filter((call) => call === '04.quote_registration').length,
   )
   // Signing for a contract only the cache vouched for verifies it from the chain first, once.
   const app = createDuskDomainsConnectApp(wallet, second.release)
@@ -492,4 +495,277 @@ it('stops a read whose route passed a store that a concurrent verification refus
   resume()
   await expect(reading).rejects.toThrow(ContractRefusedError)
   await expect(reading).rejects.toThrow('Contract deployment binding mismatch')
+})
+
+describe('the lens, with a verification cache', () => {
+  const check = ['08.binding', '08.lens_interface']
+  const lensReads = (log: string[]) => log.filter((call) => call.startsWith('08.'))
+  /** A client as a page load makes one, with the session's cache. */
+  async function load(w: LensWorld, options: ClientOptions = {}, make = (o: ClientOptions) => new FrozenClient(w.release, o)) {
+    const c = make({ transport: w.transport, heightReuseMs: 0, onLensFallback: (f) => void w.fallbacks.push(f), ...options })
+    await c.verifyContract('directory', id(1))
+    return c
+  }
+  const page = (c: FrozenClient, w: LensWorld) => c.namePage('child.example.dusk', w.newest)
+  /** Every reply of `fn` fails its evidence check: a strike each. */
+  const corrupt = (w: LensWorld, fn = 'name_page') => {
+    w.chain.lensReply = (f, reply) => {
+      if (f === fn && reply.Ok) reply.Ok.consulted.stores[0].code_hash = bytes(8)
+      return reply
+    }
+  }
+  const health = (cache: { items: Map<string, string> }) => [...cache.items].find(([, v]) => v.includes('strikes'))!
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0))
+
+  it('checks the lens deployment once a session, keeps only checks that passed, and checks again what it keeps', async () => {
+    const w = await lensWorld(4)
+    const cache = storage()
+    for (let i = 0; i < 3; i++) {
+      w.log.length = 0
+      await page(await load(w, { verificationCache: cache }), w)
+      expect(lensReads(w.log), `client ${i}`).toEqual(i ? ['08.name_page'] : [...check, '08.name_page'])
+    }
+    w.log.length = 0
+    await page(await load(w), w)
+    expect(lensReads(w.log)).toEqual([...check, '08.name_page'])
+    // A kept entry that fails a check, or does not parse, is read from the chain again and replaced.
+    const [key, kept] = [...cache.items].find(([, v]) => v.includes('lens_interface'))!
+    for (const text of [kept.replace('"max_stores":64', '"max_stores":65'), kept.replace('"network":1', '"network":2'), '{not json']) {
+      cache.items.set(key, text)
+      w.log.length = 0
+      await page(await load(w, { verificationCache: cache }), w)
+      expect(lensReads(w.log)).toEqual([...check, '08.name_page'])
+      expect(cache.items.get(key)).toBe(kept)
+    }
+    // A check that fails is kept as nothing good.
+    const v = await lensWorld(4),
+      failed = storage()
+    v.chain.replies.set('08.lens_interface', { version: 2, max_stores: 64, max_hops: 63, max_record_keys: 16 })
+    await page(await load(v, { verificationCache: failed }), v)
+    expect([...failed.items.values()].filter((e) => e.includes('lens_interface'))).toEqual([])
+  })
+
+  it('binds what it keeps to the node, chain and lens entry, and keeps nothing without a namespace or working storage', async () => {
+    const w = await lensWorld(4)
+    const cache = storage()
+    await page(await load(w, { verificationCache: cache }), w)
+    const checks = async (options: ClientOptions, change?: () => void) => {
+      const saved = { lens: w.release.lens, manifest: w.release.manifest }
+      change?.()
+      try {
+        w.log.length = 0
+        await page(await load(w, { verificationCache: cache, ...options }), w)
+        return lensReads(w.log).filter((call) => check.includes(call))
+      } finally {
+        w.release.lens = saved.lens
+        w.release.manifest = saved.manifest
+      }
+    }
+    const other = (change: Partial<ReturnType<typeof lensEntry>>) => () => void (w.release.lens = { contract: lensEntry(change), driver: w.release.lens!.driver })
+    expect(await checks({})).toEqual([])
+    expect(await checks({ transportNamespace: 'another node' })).toEqual(check)
+    expect(await checks({}, other({ codeHash: 'ee'.repeat(32) }))).toEqual(check)
+    expect(await checks({}, other({ dataDriver: { path: 'lens.wasm', sha256: 'cd'.repeat(32) } }))).toEqual(check)
+    expect(await checks({}, () => void (w.release.manifest = { ...w.release.manifest, chainId: 'dusk:9' }))).toEqual(check)
+    const { namespace: _, ...nameless } = w.transport
+    const failing: VerificationCache = {
+      getItem: () => {
+        throw new Error('denied')
+      },
+      setItem: () => {
+        throw new Error('full')
+      },
+    }
+    for (const options of [{ transport: nameless, verificationCache: storage() }, { verificationCache: failing }] as ClientOptions[])
+      for (let i = 0; i < 2; i++) {
+        w.log.length = 0
+        await page(await load(w, options), w)
+        expect(lensReads(w.log)).toEqual([...check, '08.name_page'])
+      }
+  })
+
+  it('trusts what it keeps for read correctness: a matching entry stands in for the check (documented residual)', async () => {
+    const w = await lensWorld(4)
+    const cache = storage()
+    await page(await load(w, { verificationCache: cache }), w)
+    // Misbound on chain now, while the kept entry still says the release's directory.
+    w.chain.replies.set('08.binding', { directory: bytes(11), vault: bytes(2), network: 1 })
+    w.log.length = 0
+    await page(await load(w, { verificationCache: cache }), w)
+    expect(lensReads(w.log)).toEqual(['08.name_page'])
+    await page(await load(w), w)
+    expect(w.fallbacks.map((f) => [f.reason, f.disabled])).toEqual([['deployment', true]])
+  })
+
+  it('counts strikes across a session, clears them on an answer, and holds a tripped method off in later clients for 10 minutes', async () => {
+    const w = await lensWorld(4)
+    const cache = storage()
+    const clock = clocks()
+    try {
+      corrupt(w)
+      await page(await load(w, { verificationCache: cache }), w)
+      await page(await load(w, { verificationCache: cache }), w)
+      w.chain.lensReply = undefined
+      await page(await load(w, { verificationCache: cache }), w)
+      corrupt(w)
+      for (let i = 0; i < 3; i++) await page(await load(w, { verificationCache: cache }), w)
+      expect(w.fallbacks.map((f) => f.disabled)).toEqual([false, false, false, false, true])
+      w.chain.lensReply = undefined
+      const views = async () => {
+        const c = await load(w, { verificationCache: cache })
+        w.log.length = 0
+        await page(c, w)
+        await c.bootstrap()
+        return lensReads(w.log)
+      }
+      clock.advance(599_999)
+      expect(await views()).toEqual(['08.bootstrap'])
+      clock.advance(1)
+      expect(await views()).toEqual(['08.name_page', '08.bootstrap'])
+    } finally {
+      clock.restore()
+    }
+  })
+
+  it('uses a kept health entry only whole: a malformed one is ignored, and written again', async () => {
+    const w = await lensWorld(4)
+    const cache = storage()
+    corrupt(w)
+    await page(await load(w, { verificationCache: cache }), w)
+    const [key] = health(cache)
+    const soon = Date.now() + 60_000
+    for (const text of ['{', 'null', '{"version":2,"strikes":{},"until":{"deployment":9e15}}', '{"version":1,"strikes":{"name_page":3},"until":{}}',
+      '{"version":1,"strikes":{"name_page":2},"until":null}', `{"version":1,"strikes":{"name_page":2},"until":{"name_page":${soon}.5}}`,
+      '{"version":1,"strikes":{"name_page":2},"until":{"unknown":1}}', '{"version":1,"strikes":{"name_page":2},"until":{},"more":1}',
+      `{"version":1,"strikes":{},"until":{"name_page":${soon}.5}}`, '{"version":1,"strikes":{},"until":{"name_page":9007199254740993}}']) {
+      cache.items.set(key, text)
+      w.fallbacks.length = 0
+      w.log.length = 0
+      await page(await load(w, { verificationCache: cache }), w)
+      // Neither held off nor a strike from tripping: this page's strike is the entry's first.
+      expect(lensReads(w.log), text).toContain('08.name_page')
+      expect(w.fallbacks.map((f) => f.disabled), text).toEqual([false])
+      await settle()
+      expect(JSON.parse(cache.items.get(key)!), text).toEqual({ version: 1, strikes: { name_page: 1 }, until: {} })
+    }
+  })
+
+  it('holds a client off at most 10 minutes for a kept holdoff ending later, and writes it back ending then', async () => {
+    const w = await lensWorld(4)
+    const cache = storage()
+    const clock = clocks()
+    try {
+      corrupt(w)
+      await page(await load(w, { verificationCache: cache }), w)
+      w.chain.lensReply = undefined
+      const [key] = health(cache)
+      // As after the wall clock was set back an hour, and as no client of this SDK writes.
+      for (const ends of [() => clock.wall() + 4_200_000, () => Number.MAX_SAFE_INTEGER]) {
+        cache.items.set(key, JSON.stringify({ version: 1, strikes: {}, until: { deployment: ends(), name_page: ends() } }))
+        const loaded = clock.wall()
+        w.log.length = 0
+        await page(await load(w, { verificationCache: cache }), w)
+        expect(lensReads(w.log)).toEqual([])
+        await settle()
+        expect(JSON.parse(cache.items.get(key)!).until).toEqual({ deployment: loaded + 600_000, name_page: loaded + 600_000 })
+        clock.advance(600_000)
+        w.log.length = 0
+        await page(await load(w, { verificationCache: cache }), w)
+        expect(lensReads(w.log)).toContain('08.name_page')
+      }
+    } finally {
+      clock.restore()
+    }
+  })
+
+  it('adds each client\'s strike to the count kept: two clients failing once on one old count make 2, and a third trips', async () => {
+    const w = await lensWorld(4)
+    const cache = storage()
+    const a = await load(w, { verificationCache: cache }),
+      b = await load(w, { verificationCache: cache })
+    await page(a, w)
+    await page(b, w)
+    corrupt(w)
+    await page(a, w)
+    await page(b, w)
+    await settle()
+    expect(JSON.parse(health(cache)[1]).strikes).toEqual({ name_page: 2 })
+    await page(await load(w, { verificationCache: cache }), w)
+    expect(w.fallbacks.map((f) => f.disabled)).toEqual([false, false, true])
+  })
+
+  it('stops using a cache whose operation does not settle within a second: later views read on', async () => {
+    const w = await lensWorld(4)
+    const items = new Map<string, string>()
+    // Health writes that never settle.
+    const stuck: VerificationCache = {
+      getItem: (k) => items.get(k) ?? null,
+      setItem: (k, v) => (v.includes('strikes') ? new Promise<void>(() => {}) : void items.set(k, v)),
+    }
+    corrupt(w)
+    await page(await load(w, { verificationCache: stuck }), w)
+    w.chain.lensReply = undefined
+    const started = Date.now()
+    const later = page(await load(w, { verificationCache: stuck }), w).then(() => 'read')
+    expect(await Promise.race([later, new Promise((resolve) => setTimeout(() => resolve('stuck'), 3_000))])).toBe('read')
+    expect(Date.now() - started).toBeLessThan(2_500)
+  })
+
+  it('merges health updates across clients, one at a time and each over the entry as it is: none undoes another', async () => {
+    const w = await lensWorld(4)
+    const cache = storage()
+    const a = await load(w, { verificationCache: cache }),
+      b = await load(w, { verificationCache: cache })
+    await page(a, w)
+    await page(b, w)
+    // A trips name_page; then B, which loaded the entry before that, counts a strike of resolve.
+    corrupt(w)
+    for (let i = 0; i < 3; i++) await page(a, w)
+    corrupt(w, 'resolve')
+    await b.getName('child.example.dusk', w.newest)
+    await settle()
+    expect(JSON.parse(health(cache)[1])).toEqual({ version: 1, strikes: { resolve: 1 }, until: { name_page: expect.any(Number) } })
+    // Storage that lands a write late: the next one waits for it, and reads it first.
+    const items = new Map<string, string>(),
+      late = [40]
+    const slow: VerificationCache = {
+      getItem: async (k) => items.get(k) ?? null,
+      setItem: (k, v) =>
+        new Promise<void>((resolve) =>
+          setTimeout(() => {
+            items.set(k, v)
+            resolve()
+          }, v.includes('strikes') ? (late.shift() ?? 0) : 0)),
+    }
+    const c = await load(w, { verificationCache: slow })
+    corrupt(w)
+    await page(c, w)
+    await page(c, w)
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect([...items.values()].filter((v) => v.includes('strikes')).map((v) => JSON.parse(v))).toEqual([{ version: 1, strikes: { name_page: 2 }, until: {} }])
+  })
+
+  it('keeps each release\'s lens health apart', async () => {
+    const w = await lensWorld(4)
+    const cache = storage()
+    // A release without store 0, where every reply, listing every store, fails its evidence check.
+    const older = { ...w.release, manifest: { ...w.release.manifest, contracts: w.release.manifest.contracts.filter((c) => c.contractId !== store(0)) }, contracts: new Map(w.release.contracts) }
+    older.contracts.delete(store(0))
+    for (let i = 0; i < 3; i++) await page(await load(w, { verificationCache: cache }, (o) => new FrozenClient(older, o)), w)
+    expect(w.fallbacks.map((f) => [f.reason, f.disabled])).toEqual([['evidence', false], ['evidence', false], ['evidence', true]])
+    w.log.length = 0
+    await page(await load(w, { verificationCache: cache }), w)
+    expect(lensReads(w.log)).toEqual(['08.name_page'])
+  })
+
+  it('makes nothing signable, and is never read or written with useLens false', async () => {
+    const w = await lensWorld(4)
+    const cache = storage()
+    const c = await load(w, { verificationCache: cache })
+    const shown = await page(c, w)
+    for (const contract of [shown.store, store(0)]) expect(verifiedContract(c.release, contract)).toBeUndefined()
+    const off = storage()
+    await page(await load(w, { verificationCache: off, useLens: false }), w)
+    expect([...off.items.values()].filter((v) => /strikes|lens_interface/u.test(v))).toEqual([])
+  })
 })

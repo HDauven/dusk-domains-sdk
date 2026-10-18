@@ -1,7 +1,8 @@
 /**
- * Without a lens, the client answers, fails and reads exactly as the last SDK before the lens. Point
- * SDK_BASELINE at a checkout of that SDK (fedc2d24, with its dependencies installed) to compare; the
- * comparison is skipped without one.
+ * Without a lens, the client answers, fails and reads exactly as the last SDK before the lens, but for
+ * one read: where that SDK read a policy's config twice at one height, for its init commitment and as
+ * the selection's, this one reads it once. Point SDK_BASELINE at a checkout of that SDK (fedc2d24, with
+ * its dependencies installed) to compare; the comparison is skipped without one.
  */
 import { describe, it, expect } from 'vitest'
 import { execFileSync } from 'node:child_process'
@@ -47,6 +48,13 @@ describe.skipIf(!baseline)('without a lens, as the SDK before it', () => {
       'fedc2d2421f5beaa77d7806551fc3c45b5c7faaa',
     )
     let compared = 0
+    const once: string[] = []
+    // The baseline's second read of a policy's config, right after its first at one height.
+    const single = (log: string[], name: string) => {
+      const kept = log.filter((call, i) => !(call === '03.config' && log[i - 1] === '03.config'))
+      if (kept.length !== log.length) once.push(name)
+      return kept
+    }
     for (const refusedStore of [false, true]) {
       const w = await lensWorld(n, n, { lens: false })
       released(w, 'gone', 0)
@@ -61,11 +69,16 @@ describe.skipIf(!baseline)('without a lens, as the SDK before it', () => {
       for (const [name, read] of Object.entries(reads(w))) {
         const ours = await run(() => new FrozenClient(w.release, { transport: w.transport, heightReuseMs: 0 }), read)
         const theirs = await run(() => new Base(w.release, { transport: w.transport, heightReuseMs: 0 }), read)
-        expect(ours, `${name}${refusedStore ? ' (refused store)' : ''}`).toEqual(theirs)
+        const label = `${name}${refusedStore ? ' (refused store)' : ''}`
+        expect(ours, label).toEqual({ ...theirs, log: single(theirs.log, label) })
         expect(ours.log.length).toBeGreaterThanOrEqual(2)
         compared += ours.log.length
       }
     }
     expect(compared).toBeGreaterThan(200)
+    // Where a new client verifies the policy for a quote it then reads: every preview and preparation,
+    // but the preparation through a refused store, whose placement stops at it first.
+    const previews = ['previewRegistration unseen', 'previewRegistration released', 'previewRegistration registered']
+    expect(once).toEqual([...previews, 'prepareRegistration', ...previews.map((p) => `${p} (refused store)`)])
   })
 })

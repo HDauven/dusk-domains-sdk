@@ -61,15 +61,15 @@ for (const n of sizes)
   for (const hint of [true, false]) {
     const scan = !hint && n > 1
     // Without a hint, the direct reads ask every store for the name and the primary.
-    const direct = (reuse: boolean) => [2, n === 64 ? 28 : 22, (scan ? (n === 64 ? 70 : 10) : 7) - (reuse ? 1 : 0),
+    const direct = (reuse: boolean) => [2, n === 64 ? 27 : 21, (scan ? (n === 64 ? 70 : 10) : 7) - (reuse ? 1 : 0),
       (scan ? (n === 64 ? 65 : 5) : 1) - (reuse && scan ? 1 : 0), reuse ? 2 : 3]
     for (const reuse of [false, true]) {
-      visits.push([n, hint, reuse, 'lens', reuse ? [2, 6, 2, 2, 2] : [2, 6, 3, 3, 3]])
+      // One lens query a view and no height read, with the deployment check once, at home.
+      visits.push([n, hint, reuse, 'lens', [2, 4, 1, 1, 1]])
       visits.push([n, hint, reuse, 'none', direct(reuse)])
-      // Every fallback costs its lens query, and without height reuse a height read; the deployment
-      // check is read once.
+      // Every fallback costs its lens query alone; the deployment check is read once.
       const d = direct(reuse)
-      visits.push([n, hint, reuse, 'refusing', reuse ? [2, d[1] + 4, d[2] + 1, d[3] + 1, d[4] + 1] : [2, d[1] + 5, d[2] + 2, d[3] + 2, d[4] + 2]])
+      visits.push([n, hint, reuse, 'refusing', [2, d[1] + 4, d[2] + 1, d[3] + 1, d[4] + 1]])
     }
   }
 it.each(visits)('a first visit at %i stores (hint %s, height reuse %s, lens %s) makes these reads', async (n, hint, reuse, mode, expected) => {
@@ -82,9 +82,9 @@ it.each(sizes)('creates a client and loads a name page with one lens query at an
     // As 0.4.0 measured its page: a client as createClientFromManifest makes one, then the page, with
     // every snapshot opening at a height read that already arrived.
     const lens = await visit(await world(n, 'lens'), hint, true, { 'name page': visitor['name page'] })
-    // The directory's interface and binding, the lens's binding and interface once, then the page:
-    // a height read, the lens query and the closing height read.
-    expect(lens).toEqual({ 'client creation': 2, 'name page': 5, total: 7 })
+    // The directory's interface and binding, the lens's binding and interface once, then the page: the
+    // lens query alone, at the height its reply reports.
+    expect(lens).toEqual({ 'client creation': 2, 'name page': 3, total: 5 })
     const before = await visit(await world(n, 'none'), hint, true, composedPage)
     // 0.4.0's page, as store-scaling.test.ts pins it.
     const pages = Math.ceil(n / 16)
@@ -99,9 +99,9 @@ it('reads the lens deployment once per client, never at client creation', async 
   expect(w.log).toEqual(['01.interface_version', '01.binding'])
   w.log.length = 0
   await c.namePage('child.example.dusk', w.newest)
-  expect(w.log).toEqual(['08.binding', '08.lens_interface', 'height', '08.name_page', 'height'])
+  expect(w.log).toEqual(['08.binding', '08.lens_interface', '08.name_page'])
   w.chain.height++
   w.log.length = 0
   await c.verifyPrimary(endpoint, w.newest)
-  expect(w.log).toEqual(['height', '08.reverse', 'height'])
+  expect(w.log).toEqual(['08.reverse'])
 })

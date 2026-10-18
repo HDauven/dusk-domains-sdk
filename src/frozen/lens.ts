@@ -5,12 +5,12 @@
  */
 import { contractId, equalBytes, fromHex, hash, hex, nameKey as nameKeyOf } from './bytes.ts'
 import { canonicalBytes } from './digests.ts'
-import { stringifyJson } from './json.ts'
+import { stringifyJson, U64_MAX } from './json.ts'
 import { initCommitment, markLensRows } from './trust.ts'
 import { wireValue } from './wire.ts'
 import { lensCatalog, type LensMethod } from './lens-schema.ts'
 import { MAX_REGISTRATION_AHEAD_BLOCKS, REGISTRATION_YEAR_BLOCKS } from '../core/lifecycle.ts'
-import { estimateRegistrationQuote } from '../core/pricing.ts'
+import { estimateRegistrationQuote, estimateRenewalQuote } from '../core/pricing.ts'
 import { primaryNameStatus } from '../core/primary.ts'
 import type { DataDriver } from './driver.ts'
 import type { ContractRole, LoadedRelease } from './manifest.ts'
@@ -34,6 +34,7 @@ import type {
   RegistrationContext,
   RegistrationQuote,
   ReleasedRoot,
+  RenewalQuote,
   RenewalSchedule,
 } from './types.ts'
 
@@ -147,6 +148,8 @@ export class LensFailure extends Error {
  * v1 policy. A reply priced by another reads directly.
  */
 export const PRICED_POLICIES: ReadonlySet<string> = new Set(['c6a9d9013d8dc2c0e3415b8aafbcc1d5c91d275531d7e677ab3cff57b22de678'])
+/** Stores whose `quote_renewal` this SDK computes, by code hash: the published v1 store, which prices from the schedule alone. */
+export const PRICED_STORES: ReadonlySet<string> = new Set(['ab7c6e22b4bda3707cee67e584b0070b158821bf404d0da37c1b6c69f84094b2'])
 const evidence = (message: string): never => {
   throw new LensFailure('evidence', message)
 }
@@ -278,15 +281,47 @@ export function lifecycle(name: Located<NameView>, key: NameKey): NameLifecycle 
 /** Everything `quote_renewal` reads for a root at `height` (the lens's `renewal_inputs`). */
 export function renewalInputs(view: NameView, schedule: RenewalSchedule, height: bigint): RenewalInputs {
   const n = view.name,
-    tier = Math.min(Math.max(new TextEncoder().encode(n.label).length, 1), 5) - 1
+    tier = Math.min(Math.max(new TextEncoder().encode(n.label).length, 1), 5) - 1,
+    // As the lens's checked u64 arithmetic: a horizon or an expiry past u64 allows no year.
+    limit = height + MAX_REGISTRATION_AHEAD_BLOCKS
   let max = 0
-  if (height < n.grace_end)
+  if (height < n.grace_end && limit <= U64_MAX)
     for (let years = 10; years >= 1; years--)
-      if (n.expires_at + BigInt(years) * REGISTRATION_YEAR_BLOCKS <= height + MAX_REGISTRATION_AHEAD_BLOCKS) {
+      if (n.expires_at + BigInt(years) * REGISTRATION_YEAR_BLOCKS <= limit) {
         max = years
         break
       }
   return { schedule, annual_lux: schedule.annual_lux[tier], referral: n.referrer !== null, max_years: max }
+}
+/**
+ * What the home's `quote_renewal` answers at a page's height, computed with `estimateRenewalQuote`, or
+ * undefined where the page does not show all it rests on: a root at a home of `PRICED_STORES` code with no
+ * move pending (which may be finalizing), and years within its horizon. `estimateRenewalQuote` checks the
+ * grace end and schedule as the store does, and refuses a grace end off the grace period, which the store
+ * renews: that is quoted directly.
+ */
+export function pageRenewalQuote(
+  page: { height: bigint; key: NameKey; value: Located<NameView>; renewal: RenewalInputs | null },
+  years: number,
+  storeCode: string | undefined,
+): RenewalQuote | undefined {
+  const view = local(page.value),
+    inputs = page.renewal
+  if (
+    !view || !inputs || !equalBytes(page.key.root, page.key.node) || !sameKey(view.name.key, page.key) ||
+    view.name.subname !== null || view.move_pending !== null ||
+    storeCode === undefined || !PRICED_STORES.has(storeCode) ||
+    !Number.isInteger(years) || years < 1 || years > inputs.max_years
+  )
+    return undefined
+  let quote: RenewalQuote
+  try {
+    quote = estimateRenewalQuote(inputs.schedule, view.name, years, page.height)
+  } catch {
+    return undefined
+  }
+  // The tier price the page reports for its label, priced again: one more check of what it rests on.
+  return BigInt(quote.total_lux) === BigInt(inputs.annual_lux) * BigInt(years) ? quote : undefined
 }
 /** The quote request hash a registration quote must carry (spec `quote_hash`). */
 export function quoteHash(request: QuoteRequest): number[] {

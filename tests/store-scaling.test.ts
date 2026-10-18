@@ -293,13 +293,13 @@ it.each(sizes)('bootstraps and previews a registration with the same calls at an
   const c = await w.client()
   expect(w.log).toEqual(['01.interface_version', '01.binding'])
   // An unseen root: the newest store's own placement check proves no store holds it. The first preview
-  // also verifies the init's policy, and the newest store when it is the init's.
-  expect(await w.count(() => c.previewRegistration(preview('fresh')))).toBe(n === 1 ? 11 : 9)
+  // also verifies the init's policy, whose config it reads once, and the newest store when it is the init's.
+  expect(await w.count(() => c.previewRegistration(preview('fresh')))).toBe(n === 1 ? 10 : 8)
   expect(await w.count(() => c.previewRegistration(preview('fresh')))).toBe(6)
-  // A released root at store 0, hinted: quoted at its home.
+  // A released root at store 0, hinted: quoted at its home, by a new client that verifies the policy too.
   released(w, 'gone', 0)
   const h = await w.client()
-  expect(await w.count(() => h.previewRegistration(preview('gone'), store(0)))).toBe(12)
+  expect(await w.count(() => h.previewRegistration(preview('gone'), store(0)))).toBe(11)
   expect(await w.count(() => h.previewRegistration(preview('gone'), store(0)))).toBe(7)
 })
 
@@ -328,8 +328,8 @@ it.each(sizes)('scans every store where only every store can answer, as before (
     'verifyPrimary without a hint': [7 + p + n, 5 + p + n],
     // Signing needs every home to place a root and prove an unseen one is held nowhere.
     registrationPlacement: [5 + p + n, 3 + p + n],
-    // Also the init's policy, verified once.
-    prepareRegistration: [11 + p + n, 6 + p + n],
+    // Also the init's policy, verified once: its config read for the init commitment is the selection's.
+    prepareRegistration: [10 + p + n, 6 + p + n],
     // Membership pages, then the interface and binding of the init's store, resolver and the vault,
     // and the init's marketplace with its order API: whatever the number of stores.
     discover: [14 + p, 5 + p],
@@ -588,7 +588,8 @@ it('takes what the directory probed at admission from its record, and checks the
   w.chain.policyVersion = 2n
   const selected = await reads((c) => c.previewRegistration(preview('fresh')))
   expect(probes(selected)).toEqual([])
-  expect(selected.filter((call) => call === '03.config')).toHaveLength(2)
+  // Read once: the reply its init commitment read is the selection's config at that height.
+  expect(selected.filter((call) => call === '03.config')).toHaveLength(1)
   // The record is the proof: a probed store's live interface and binding are never read, even when
   // the node would answer them wrongly.
   w.chain.replies.set('43.binding', { directory: bytes(11), vault: bytes(2), network: 1 })

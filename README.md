@@ -2,7 +2,7 @@
 
 TypeScript SDK for the ADR 0004 frozen layer: directory, store shards,
 registry-qualified resolvers, vault, replaceable policy and marketplace v1.
-Version **0.4.0** targets a fresh frozen deployment. The 0.2 router/core/treasury
+Version **0.4.1** targets a fresh frozen deployment. The 0.2 router/core/treasury
 clients and legacy events have been removed.
 
 ## Quickstart
@@ -58,7 +58,8 @@ one request, so a block that replaces the tip at the same height counts as a new
 Operations share identical reads made at one tip, in flight or answered, open at a
 height read that arrived in the last `heightReuseMs` (1 s by default), and close with a
 height read sent after every reply they used, so a page reads each fact about once per
-block. A custom transport without `currentBlock` gives heights only: operations then
+block. A view the release's lens answers in one query reads no tip: its reply reports its
+height. A custom transport without `currentBlock` gives heights only: operations then
 share an answered read only within `heightReuseMs`, as such a transport cannot show a
 same-height replacement. Use a consistent node endpoint; height bracketing is not a
 historical-state proof. The node is a
@@ -113,7 +114,9 @@ an implementation absent from the initial manifest. It is subjected to the same
 artifact, admission, interface, binding and init checks, and enters `client.release`
 only once all of them pass. `verificationCache` (for example `sessionStorage`) keeps
 what verification read about each contract, which a deployed contract cannot change,
-for clients created later; every check runs again on it, and state is never kept. A
+for clients created later; every check runs again on it, and state is never kept. It
+also keeps the lens deployment check and the lens's health, and is trusted for read
+correctness ([trust model](docs/integration-trust-model.md#contract-verification)). A
 contract verified from it serves reads only: before Connect signs for it, or a
 registration is quoted under it, the client verifies it from the chain, once, and the
 directory with it. Entries are keyed by the chain state the client's reads reach:
@@ -155,15 +158,20 @@ store's home, builds the registration to sign.
 records, the verified primary of its `moonlight_address` endpoint and, for a root, its
 renewal inputs. `pricing()` and `bootstrap()` read the selected policy's config and the
 directory's state for a home page. When the release lists a `lens`, these, `getName`,
-`verifyPrimary` and `previewRegistration` take one contract query each, however many
-stores the directory admits; the client checks the lens once and every reply's evidence
-against the release, and reads directly instead when a check fails or the lens refuses
-(`onLensFallback` reports why; `useLens: false` always reads directly). Lens replies
+`verifyPrimary` and `previewRegistration` take one contract query each and no tip read,
+however many stores the directory admits; the client checks the lens once, or once a
+session with `verificationCache`, and every reply's evidence against the release, and reads
+directly instead when a check fails or the lens refuses (`onLensFallback` reports why;
+`useLens: false` always reads directly).
+A rate-limited lens read is sent again after its `Retry-After`, three times a call, never
+read directly instead. `previewRenewal(page, years)` shows a
+page's renewal price without a read where it is the store's own quote, and quotes directly
+elsewhere; builders refuse it, so a renewal is signed from `quoteRenewal`. Lens replies
 never enter the client's verification or quote provenance, so the Connect app signs only
 for contracts verified directly (`verifyContract`, or a direct read through it), and a
-registration only from a direct quote. Builders refuse objects a lens `bootstrap()`
-returned; any other value passed to a builder is the caller's responsibility, as from a
-direct read. To re-read a name directly before signing:
+registration only from a direct quote. Builders refuse objects a lens `bootstrap()` or
+`previewRenewal` returned; any other value passed to a builder is the caller's
+responsibility, as from a direct read. To re-read a name directly before signing:
 `client.store(page.store).get_name(page.key)`
 ([trust model](docs/integration-trust-model.md#the-read-lens)).
 

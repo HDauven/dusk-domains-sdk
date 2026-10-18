@@ -1,4 +1,4 @@
-# Public surface in 0.4.0
+# Public surface in 0.4.1
 
 The npm and JSR export maps contain the same eight entrypoints. npm resolves
 runtime imports to compiled JavaScript and types to declarations in `dist`; its
@@ -48,10 +48,11 @@ looks first; it asks every admitted store when they do not lead to the answer.
 height }` for display; only quotes from `quoteRegistration` and `prepareRegistration`
 build calls. `resolve(spelling, recordKeys, homeHint?)` returns `getName`'s result
 with `status` and one record (or null) per key. `namePage(spelling, homeHint?)` returns
-`{ height, key, store, forwards, value, status, records, primary, renewal }`,
-`pricing()` returns `{ height, context, policy, config }` and `bootstrap()` returns
-`discover()`'s state with `allocation` and `market`. With a release `lens` (top-level),
-these and `getName`, `verifyPrimary` and `previewRegistration` read through it, falling
+`{ height, key, store, forwards, value, status, records, primary, renewal }`, whose renewal
+price `previewRenewal(page, years)` returns for display, `pricing()` returns
+`{ height, context, policy, config }` and `bootstrap()` returns `discover()`'s state with
+`allocation` and `market`. With a release `lens` (top-level), these and `getName`,
+`verifyPrimary` and `previewRegistration` read through it, one query each, falling
 back to direct reads (`useLens`, `onLensFallback`). Low-level `read(role, id, method, args)`
 also obtains its height automatically. A `ReadTransport` may implement `currentBlock()`, the tip's height and
 block hash in one read, and `namespace`, the chain state it reads; the HTTP transport
