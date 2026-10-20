@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0 (2026-10-20)
+
+- Send the contract reads of one tick as one Multicall for Dusk query (`MULTICALL_CONTRACT_ID`), on by default for mainnet and testnet releases through the transport the client builds; add the `multicall` and `onMulticallFallback` options.
+- Read no tip for a read that alone makes up an operation, when a multicall answered it; add `readAt`.
+- Read a snapshot again as soon as a batched reply reports another height.
+- Keep the multicall's holdoff for the tab in `sessionStorage`.
+- Accept a `maxBytes` bound in `ReadTransport.read`.
+
 ## 0.4.1 (2026-10-18)
 
 - Read no tip for a view the lens answers in one query.

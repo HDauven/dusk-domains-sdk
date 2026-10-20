@@ -312,6 +312,70 @@ it('HTTP transport reads the latest height and block hash in one request, lossle
     ).currentBlock!(),
   ).rejects.toThrow('Block hash query failed')
 })
+it('HTTP transport stops reading a reply at its bound: it cancels the stream there, and refuses a longer declared length unread', async () => {
+  const id = '01'.repeat(32)
+  /** A reply streamed in 16 KiB chunks, eight of them, pulled one at a time; and what the reader took. */
+  const streamed = (headers: Record<string, string> = {}) => {
+    const seen = { pulled: 0, cancelled: false }
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (seen.pulled === 8) return controller.close()
+        seen.pulled++
+        controller.enqueue(new Uint8Array(16 * 1024).fill(seen.pulled))
+      },
+      cancel() {
+        seen.cancelled = true
+      },
+    }, { highWaterMark: 0 })
+    return { seen, transport: createHttpTransport('https://node.invalid', async () => new Response(body, { headers })) }
+  }
+  // A direct read's 32 KiB and a multicall reply's 64 KiB: the read stops at the chunk that passes either.
+  for (const [max, chunks] of [[undefined, 3], [65_536, 5]] as const) {
+    const { seen, transport } = streamed()
+    await expect(transport.read(id, 'aggregate', new Uint8Array(), max)).rejects.toThrow('Contract reply exceeds wire envelope')
+    expect(seen).toEqual({ pulled: chunks, cancelled: true })
+  }
+  // A declared length over the bound is refused before any of it is read.
+  const declared = streamed({ 'content-length': String(8 * 16 * 1024) })
+  await expect(declared.transport.read(id, 'config', new Uint8Array())).rejects.toThrow('Contract reply exceeds wire envelope')
+  expect(declared.seen).toEqual({ pulled: 0, cancelled: true })
+  // At the bound, every chunk is read and joined.
+  const exact = createHttpTransport('https://node.invalid', async () => new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new Uint8Array(16 * 1024).fill(1))
+      controller.enqueue(new Uint8Array(16 * 1024).fill(2))
+      controller.close()
+    },
+  })))
+  const bytes = await exact.read(id, 'config', new Uint8Array())
+  expect([bytes.length, bytes[0], bytes[16 * 1024]]).toEqual([32_768, 1, 2])
+})
+it('HTTP transport reads no body from a response without one, as Fetch has it empty, whatever arrayBuffer would give', async () => {
+  const id = '01'.repeat(32)
+  const arrayBuffer = vi.fn(async () => new ArrayBuffer(1 << 20))
+  const bodyless = (headers: Record<string, string> = {}) =>
+    createHttpTransport('https://node.invalid', async () => ({ ok: true, status: 200, headers: new Headers(headers), body: null, arrayBuffer }) as unknown as Response)
+  expect(await bodyless().read(id, 'config', new Uint8Array())).toEqual(new Uint8Array())
+  await expect(bodyless({ 'content-length': '40000' }).read(id, 'config', new Uint8Array())).rejects.toThrow('Contract reply exceeds wire envelope')
+  expect(arrayBuffer).not.toHaveBeenCalled()
+})
+it('HTTP transport keeps no empty chunk of a streamed reply, nor counts one: 100,000 of them, then a byte, under a bound of one', async () => {
+  let sent = 0
+  const sparse = createHttpTransport('https://node.invalid', async () => new Response(new ReadableStream<Uint8Array>({
+    pull(controller) {
+      if (sent === 100_001) return controller.close()
+      controller.enqueue(++sent === 100_001 ? Uint8Array.from([7]) : new Uint8Array())
+    },
+  }, { highWaterMark: 0 })))
+  // Every chunk kept is copied into the reply once: one copy, the byte's.
+  const set = vi.spyOn(Uint8Array.prototype, 'set')
+  try {
+    expect(await sparse.read('01'.repeat(32), 'config', new Uint8Array(), 1)).toEqual(Uint8Array.from([7]))
+    expect(set.mock.calls.length).toBeLessThan(10)
+  } finally {
+    set.mockRestore()
+  }
+})
 it('HTTP transport reports a refused read\'s status, and the wait its Retry-After names, counted by the reply\'s own Date', async () => {
   type Refusal = Error & { status?: number; retryAfterMs?: number }
   const sent = Date.UTC(2026, 9, 18, 12, 0, 0),

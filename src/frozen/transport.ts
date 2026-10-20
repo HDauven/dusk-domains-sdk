@@ -90,11 +90,16 @@ export interface ReadTransport {
    * without one unless `ClientOptions.transportNamespace` names it.
    */
   readonly namespace?: string
-  /** A contract read; one the node rate-limits should throw with `status` 429 and `retryAfterMs`, as `NodeReadError` does. */
+  /**
+   * A contract read; one the node rate-limits should throw with `status` 429 and `retryAfterMs`, as
+   * `NodeReadError` does. `maxBytes`, the largest reply to accept, is 32,768 when not given; a
+   * multicall's reply takes up to 65,536.
+   */
   read(
     contractId: string,
     functionName: string,
     bytes: Uint8Array,
+    maxBytes?: number,
   ): Promise<Uint8Array>
 }
 export function createHttpTransport(
@@ -127,7 +132,7 @@ export function createHttpTransport(
     async currentBlockHeight() {
       return u64((await tip()).height)
     },
-    async read(id, name, bytes) {
+    async read(id, name, bytes, maxBytes = 32768) {
       const response = await fetcher(`${base}/on/contracts:${id}/${name}`, {
         method: 'POST',
         headers: {
@@ -142,10 +147,38 @@ export function createHttpTransport(
           wait = retryAfter(response.headers)
         throw new NodeReadError(`Contract read failed (${id}.${name}): ${(await detail(response)) || `HTTP ${status}`}`, status, wait)
       }
-      const result = new Uint8Array(await response.arrayBuffer())
-      if (result.length > 32768)
-        throw new Error('Contract reply exceeds wire envelope')
-      return result
+      return bounded(response, maxBytes)
     },
   }
+}
+/**
+ * A reply's body, read no further than `maxBytes`: a declared length over it is refused unread, and a
+ * stream is cancelled at the chunk that passes it. Without a stream the body is empty, as Fetch has it.
+ */
+async function bounded(response: Response, maxBytes: number): Promise<Uint8Array> {
+  const over = () => new Error('Contract reply exceeds wire envelope')
+  if (Number(response.headers.get('content-length') ?? undefined) > maxBytes) {
+    await response.body?.cancel().catch(() => {})
+    throw over()
+  }
+  if (!response.body) return new Uint8Array()
+  const reader = response.body.getReader(),
+    chunks: Uint8Array[] = []
+  let length = 0
+  for (let chunk = await reader.read(); !chunk.done; chunk = await reader.read()) {
+    if (!chunk.value.length) continue
+    length += chunk.value.length
+    if (length > maxBytes) {
+      await reader.cancel().catch(() => {})
+      throw over()
+    }
+    chunks.push(chunk.value)
+  }
+  const result = new Uint8Array(length)
+  let at = 0
+  for (const chunk of chunks) {
+    result.set(chunk, at)
+    at += chunk.length
+  }
+  return result
 }

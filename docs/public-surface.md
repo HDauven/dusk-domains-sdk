@@ -1,4 +1,4 @@
-# Public surface in 0.4.1
+# Public surface in 0.5.0
 
 The npm and JSR export maps contain the same eight entrypoints. npm resolves
 runtime imports to compiled JavaScript and types to declarations in `dist`; its
@@ -54,7 +54,9 @@ price `previewRenewal(page, years)` returns for display, `pricing()` returns
 `allocation` and `market`. With a release `lens` (top-level), these and `getName`,
 `verifyPrimary` and `previewRegistration` read through it, one query each, falling
 back to direct reads (`useLens`, `onLensFallback`). Low-level `read(role, id, method, args)`
-also obtains its height automatically. A `ReadTransport` may implement `currentBlock()`, the tip's height and
+also obtains its height automatically, and `readAt` returns `{ value, height }`. The reads a
+client makes in one tick go to the node as one Multicall for Dusk query
+(`MULTICALL_CONTRACT_ID`; the `multicall` and `onMulticallFallback` options). A `ReadTransport` may implement `currentBlock()`, the tip's height and
 block hash in one read, and `namespace`, the chain state it reads; the HTTP transport
 does both.
 
