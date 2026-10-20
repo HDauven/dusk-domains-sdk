@@ -3,7 +3,7 @@
  * limits, and how each read settles, from its own result or, when the query fails, as a direct read.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { Batcher, Unbatched, tabHoldoff, type MulticallFallback, type TabHoldoffStore } from '../src/frozen/batching.ts'
+import { Batcher, Unbatched, type MulticallFallback } from '../src/frozen/batching.ts'
 import { MULTICALL_CONTRACT_ID as MC } from '../src/frozen/multicall.ts'
 import { NodeReadError, type ReadTransport } from '../src/frozen/transport.ts'
 import { hex } from '../src/frozen/bytes.ts'
@@ -28,7 +28,7 @@ function chain(fail: (id: string, fn: string) => string | undefined = () => unde
   }
   return { state, inner }
 }
-function setup(options: MulticallOptions & { fail?: (id: string, fn: string) => string | undefined; gas?: (id: string, fn: string) => bigint; tab?: TabHoldoffStore } = {}) {
+function setup(options: MulticallOptions & { fail?: (id: string, fn: string) => string | undefined; gas?: (id: string, fn: string) => bigint } = {}) {
   const c = chain(options.fail)
   const m = withMulticall(c.inner, { height: () => c.state.height, ...options })
   const fallbacks: MulticallFallback[] = []
@@ -40,7 +40,7 @@ function setup(options: MulticallOptions & { fail?: (id: string, fn: string) => 
       return m.transport.read(id, fn, input, max)
     },
   }
-  const batcher = new Batcher(transport, MC, options.gas ?? (() => 0n), (f) => void fallbacks.push(f), options.tab)
+  const batcher = new Batcher(transport, MC, options.gas ?? (() => 0n), (f) => void fallbacks.push(f))
   const read = (id: string, fn: string, input = '', height = false) => batcher.read(id, fn, enc(input), height)
   return { ...c, batcher, read, queries: m.queries, fallbacks, aggregates: () => queried.length }
 }
@@ -49,7 +49,6 @@ const realTimeout = globalThis.setTimeout
 const outcome = (p: Promise<unknown>) => p.then((v) => ({ v }), (e: Error) => ({ e: { name: e.constructor.name, message: e.message, status: (e as NodeReadError).status, wait: (e as NodeReadError).retryAfterMs } }))
 afterEach(() => {
   vi.restoreAllMocks()
-  vi.unstubAllGlobals()
 })
 
 describe('which reads share a query', () => {
@@ -328,42 +327,5 @@ describe('how each read settles', () => {
     await b.alone(A, 'config', enc(''))
     expect(bounds).toEqual([65_536, undefined])
     expect(hex(encodeReply(1n, []))).toHaveLength(32)
-  })
-})
-
-describe('the tab\'s holdoff', () => {
-  it('holds batching off on a record that holds, and on nothing past its end, further off than a holdoff lasts, or malformed', () => {
-    const items = new Map<string, string>()
-    vi.stubGlobal('sessionStorage', { getItem: (k: string) => items.get(k) ?? null, setItem: (k: string, v: string) => void items.set(k, v), removeItem: (k: string) => void items.delete(k) })
-    const now = Date.now()
-    for (const [record, held] of [
-      [{ until: now + 60_000, reason: 'holdoff' }, true],
-      [{ until: now + 60_000, reason: 'strike' }, false],
-      [{ until: now - 1, reason: 'holdoff' }, false],
-      // Set when the clock read later than it does now: more than a holdoff lasts, so not one this tab made.
-      [{ until: now + 300_000 + 60_000, reason: 'holdoff' }, false],
-      ['{"until":', false],
-      [{ until: String(now + 60_000), reason: 'holdoff' }, false],
-      [{ until: now + 60_000, reason: 'paused' }, false],
-    ] as const) {
-      items.set('k', typeof record === 'string' ? record : JSON.stringify(record))
-      expect(setup({ tab: tabHoldoff('k') }).batcher.active, JSON.stringify(record)).toBe(!held)
-    }
-  })
-  it('counts a strike the tab kept as one failed query, and forgets it once a query is answered', async () => {
-    const items = new Map<string, string>()
-    vi.stubGlobal('sessionStorage', { getItem: (k: string) => items.get(k) ?? null, setItem: (k: string, v: string) => void items.set(k, v), removeItem: (k: string) => void items.delete(k) })
-    items.set('k', JSON.stringify({ until: Date.now() + 60_000, reason: 'strike' }))
-    // Answered: the strike is forgotten, and one failure later batching still runs.
-    const ok = setup({ tab: tabHoldoff('k') })
-    await ok.read(A, 'config')
-    expect(items.has('k')).toBe(false)
-    // Kept: the next query that fails whole is the second in a row.
-    items.set('k', JSON.stringify({ until: Date.now() + 60_000, reason: 'strike' }))
-    const t = setup({ fail: () => undefined, tab: tabHoldoff('k'), before: () => { throw new Error('error page') } })
-    await t.read(A, 'config')
-    expect(t.batcher.active).toBe(false)
-    expect(JSON.parse(items.get('k')!).reason).toBe('holdoff')
-    expect(t.fallbacks.map((f) => f.disabled)).toEqual([true])
   })
 })

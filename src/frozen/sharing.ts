@@ -53,18 +53,6 @@ interface Shared {
   /** Whether a multicall answered it. */
   batched?: boolean
 }
-/**
- * A one-query reply: the state of one block at `height`, which block not known. Only a read that alone makes
- * up its operation takes it again, at that height and within the window, so it is never read beside another.
- */
-interface Lone {
-  readonly bytes: Uint8Array
-  readonly height: bigint
-  /** When it arrived, on the client's clock. */
-  readonly settled: number
-  /** When it arrived, in milliseconds (`elapsed`). */
-  readonly arrived: number
-}
 /** Whether two tips are one block: the same height and, where the transport reads one, hash. */
 export function sameTip(a: ChainTip | undefined, b: ChainTip | undefined): boolean {
   return a !== undefined && b !== undefined && a.height === b.height && a.hash === b.hash
@@ -103,7 +91,6 @@ export class ReadSharing {
   /** The highest height any height read that arrived reported. */
   private top?: bigint
   private readonly shared = new Map<string, Shared>()
-  private readonly lone = new Map<string, Lone>()
   /**
    * `windowMs`: by height alone, how long after a reply arrived another operation may share it.
    * With a block hash, a reply is shared for as long as the client sees its tip. `batcher`: reads go
@@ -132,10 +119,6 @@ export class ReadSharing {
         if (this.top === undefined || tip.height > this.top) this.top = tip.height
         if (!sameTip(tip, this.seen)) {
           this.shared.clear()
-          // Another block at the height of a one-query reply may have replaced the one it read: forget
-          // every one at that height. One at the new tip's height is kept, as a reply by height alone is.
-          const replaced = this.seen?.height === tip.height
-          for (const [key, entry] of this.lone) if (replaced || entry.height !== tip.height) this.lone.delete(key)
           this.seen = tip
         }
         this.seenAt = elapsed()
@@ -179,7 +162,7 @@ export class ReadSharing {
    * The read another attempt made that attempt `at` may share: at the tip last seen, in flight, or
    * answered. By height alone, an answered one only while it is younger than the window.
    */
-  private kept(at: ChainTip, key: string): Shared | undefined {
+  private kept(at: Attempt, key: string): Shared | undefined {
     if (!sameTip(at, this.seen)) return undefined
     const entry = this.shared.get(key)
     if (entry?.arrived !== undefined && at.hash === undefined && elapsed() - entry.arrived >= this.windowMs) {
@@ -191,7 +174,7 @@ export class ReadSharing {
   /**
    * Read `fn` at contract `id` for attempt `at`. At the height last seen, an identical read another
    * attempt made at that height, in flight or answered, is shared, and a failed one is forgotten.
-   * Without an attempt, or unshared (`share` false), it is read alone. Each caller gets its own copy.
+   * Without an attempt, or unshared (`share` false), it is shared with no other. Each caller gets its own copy.
    */
   async read(
     at: Attempt | undefined,
@@ -199,7 +182,7 @@ export class ReadSharing {
     fn: string,
     input: Uint8Array,
     share = true,
-    info?: { batched?: boolean; alone?: boolean; lone?: boolean; ownHeight?: boolean },
+    info?: { batched?: boolean; alone?: boolean; ownHeight?: boolean },
   ): Promise<Uint8Array> {
     // `alone`: one query of its own, not batched, and shared with no other attempt.
     const batcher = info?.alone ? undefined : this.batcher
@@ -226,11 +209,6 @@ export class ReadSharing {
     }
     const key = share && sameTip(at, this.seen) ? `${id}/${fn}/${hex(input)}` : undefined
     let read = key === undefined ? undefined : this.kept(at, key)
-    // A read that alone makes up its operation (`lone`) takes a one-query reply at its height, as it would a
-    // shared one: the attempt still closes with a height read sent after that reply arrived.
-    const prior = !read && info?.lone ? this.loneReply(`${id}/${fn}/${hex(input)}`) : undefined
-    if (prior && prior.height === at.height)
-      read = { bytes: Promise.resolve(prior.bytes), settled: prior.settled, arrived: prior.arrived, batched: true }
     if (!read) {
       const entry: Shared & { bytes: Promise<Uint8Array> } = { bytes: undefined as never }
       entry.bytes = (async () => (batcher ? this.fetch(at, entry, batcher, id, fn, input) : this.transport.read(id, fn, input)))().then(
@@ -289,43 +267,8 @@ export class ReadSharing {
   holds(at: Attempt, id: string, fn: string, input: Uint8Array): boolean {
     return this.kept(at, `${id}/${fn}/${hex(input)}`) !== undefined
   }
-  /** Keep a one-query reply at `height` for the same read, alone, within the window. */
-  keepLone(id: string, fn: string, input: Uint8Array, height: bigint, bytes: Uint8Array): void {
-    if (!(this.windowMs > 0)) return
-    const key = `${id}/${fn}/${hex(input)}`
-    this.lone.delete(key)
-    this.lone.set(key, { bytes: new Uint8Array(bytes), height, settled: this.now(), arrived: elapsed() })
-    if (this.lone.size > LIMIT) this.lone.delete(this.lone.keys().next().value!)
-  }
-  /** The one-query reply kept for a read, while it is younger than the window. */
-  private loneReply(key: string): Lone | undefined {
-    const entry = this.lone.get(key)
-    if (entry && elapsed() - entry.arrived >= this.windowMs) {
-      this.lone.delete(key)
-      return undefined
-    }
-    return entry
-  }
-  /**
-   * The tip a read that alone makes up its operation opens at to be answered without a contract query, as
-   * 0.4.1 answers it, at a height of `min` or more: the tip seen within the window, where a reply is kept for
-   * it or a one-query reply that arrived within it is at its height; with no tip seen within it, the height
-   * alone of such a one-query reply. A tip read then closes the attempt, as any. Undefined: a query answers it.
-   */
-  opening(id: string, fn: string, input: Uint8Array, min?: bigint): ChainTip | undefined {
-    const key = `${id}/${fn}/${hex(input)}`,
-      tip = this.recent(this.windowMs),
-      lone = this.loneReply(key)
-    if (tip) {
-      if (min !== undefined && tip.height < min) return undefined
-      return this.kept(tip, key) !== undefined || lone?.height === tip.height ? tip : undefined
-    }
-    if (!lone || (min !== undefined && lone.height < min)) return undefined
-    return { height: lone.height }
-  }
   /** Forget every reply kept. */
   clear(): void {
     this.shared.clear()
-    this.lone.clear()
   }
 }

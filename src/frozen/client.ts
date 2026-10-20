@@ -29,7 +29,7 @@ import { wireValue } from './wire.ts'
 import { primaryNameStatus } from '../core/primary.ts'
 import { createHttpTransport, type ChainTip, type ReadTransport } from './transport.ts'
 import { ReadSharing, TipMoved, elapsed, failureHeight, sameTip, type Attempt } from './sharing.ts'
-import { Batcher, Unbatched, rateLimit, tabHoldoff, type MulticallFallback } from './batching.ts'
+import { Batcher, Unbatched, rateLimit, type MulticallFallback } from './batching.ts'
 import { MULTICALL_CONTRACT_ID } from './multicall.ts'
 import {
   ContractRefusedError,
@@ -417,12 +417,6 @@ interface PageFacts {
   value: Located<NameView>
   renewal: RenewalInputs | null
 }
-/** A read of a contract encoded: the ID it reads, its input, and its reply's decoder. */
-interface EncodedRead<R extends ContractRole, M extends Method<R>> {
-  id: string
-  input: Uint8Array
-  decode: (bytes: Uint8Array) => Output<R, M>
-}
 /** The lens deployment check's two replies, read ahead: undefined where no multicall answered one. */
 interface LensAhead {
   binding: Promise<Uint8Array | undefined>
@@ -543,12 +537,7 @@ export class FrozenClient {
     const multicall = options.multicall ?? (!options.transport && (network === 1 || network === 2))
     if (multicall !== false) {
       this.multicall = contractId(multicall === true ? MULTICALL_CONTRACT_ID : multicall)
-      // The tab remembers this node's multicall failing across page loads, under a key of its URL and the
-      // multicall's ID; a transport that names no node keeps them in this client alone.
-      const node = options.transportNamespace ?? this.transport.namespace
-      const tab = node === undefined ? undefined
-        : tabHoldoff(`duskds:sdk:multicall-holdoff:v1:${hex(hash('duskds:sdk:multicall-holdoff:v1', stringifyJson([node, this.multicall])))}`)
-      this.batcher = new Batcher(this.transport, this.multicall, (id, fn) => this.batchGas(id, fn), options.onMulticallFallback, tab)
+      this.batcher = new Batcher(this.transport, this.multicall, (id, fn) => this.batchGas(id, fn), options.onMulticallFallback)
     }
     this.sharing = new ReadSharing(this.transport, this.heightReuseMs, this.batcher, () => this.seenHeight())
     // The release's contracts as this client starts with them, and the checks' version.
@@ -601,17 +590,15 @@ export class FrozenClient {
    * a new one would; how old it is decides only how likely the attempt is to cross a block. If such
    * an attempt crosses one, it is not one of the three, and a failure it met is not one of three that
    * must repeat; it commits, or fails for good, like any other. Only the first attempt can open this
-   * way, so a snapshot makes four attempts at most. `opening`: the tip it opens at instead, for a read
-   * made again (`ReadSharing.opening`). One known by height alone matches no tip read with a hash: the
-   * attempt after it opens at the height read that closed it, and closes with it too if no block landed.
+   * way, so a snapshot makes four attempts at most.
    */
-  private async attempts<T>(operation: (at: Attempt) => Promise<T>, tracked: boolean, opening?: ChainTip): Promise<T> {
+  private async attempts<T>(operation: (at: Attempt) => Promise<T>, tracked: boolean): Promise<T> {
     let crossed: unknown
     // Messages of attempts that failed across a block; the same one every time is not chance.
     const failures: string[] = []
     const began = this.sharing.now()
     let since = began,
-      reused = opening ?? this.sharing.recent(this.heightReuseMs),
+      reused = this.sharing.recent(this.heightReuseMs),
       first = true
     for (let counted = 0; counted < 3; ) {
       const free = reused !== undefined,
@@ -718,7 +705,7 @@ export class FrozenClient {
     method: M,
     args: Input<R, M>,
     candidate?: { role: ContractRole; driver: DataDriver },
-  ): EncodedRead<R, M> {
+  ) {
     id = contractId(id)
     const contract = candidate ?? this.ledger.verified.get(id)
     if (!contract || contract.role !== role || this.ledger.refused.has(id))
@@ -735,7 +722,7 @@ export class FrozenClient {
     return {
       id,
       input,
-      decode: (bytes) => wireValue(spec.output, contract.driver.decodeOutput(method, bytes)) as Output<R, M>,
+      decode: (bytes: Uint8Array) => wireValue(spec.output, contract.driver.decodeOutput(method, bytes)) as Output<R, M>,
     }
   }
   /**
@@ -745,11 +732,12 @@ export class FrozenClient {
    * A failure is final: it is the read's answer at that height.
    */
   private async once<R extends ContractRole, M extends Method<R>>(
-    read: EncodedRead<R, M>,
     role: R,
+    id: string,
     method: M,
     args: Input<R, M>,
   ): Promise<{ value: Output<R, M>; height: bigint } | undefined> {
+    const read = this.encodeRead(role, id, method, args)
     let reply
     try {
       reply = await this.batcher!.read(read.id, method, read.input, true)
@@ -772,7 +760,6 @@ export class FrozenClient {
       this.commitObserved(at)
     }
     if (this.batchTop === undefined || height > this.batchTop) this.batchTop = height
-    this.sharing.keepLone(read.id, method, read.input, height, reply.bytes)
     return { value, height }
   }
   /** The exact ABI read surface, with lossless typed output and automatic height acquisition. */
@@ -800,54 +787,17 @@ export class FrozenClient {
       role === 'store' && methodDefinition(role, method).output.startsWith('Located<')
     if (!located) await this.verifyContract(role, id)
     if (this.batcher && !located && !(role === 'store' && method === 'home')) {
-      const read = this.encodeRead(role, id, method, args)
-      // What 0.4.1 answers from a reply it shared at a tip seen within `heightReuseMs`, or a one-query reply
-      // within it, is answered so: between tip reads, without a contract query.
-      const opening = this.sharing.opening(read.id, method, read.input, this.seenHeight())
-      if (opening)
-        return this.attempts(async (at) => ({ height: at.height, value: await this.loneIn(at, read, role, method, args) }), true, opening)
-      const once = await this.once(read, role, method, args)
+      const once = await this.once(role, id, method, args)
       if (once) return once
     }
-    return this.attempts(async (at) => ({ height: at.height, value: await this.readIn(at, role, id, method, args, located) }), true)
-  }
-  /** A read that alone makes up an operation, in attempt `at`: a one-query reply at its height may answer it. */
-  private async loneIn<R extends ContractRole, M extends Method<R>>(
-    at: Attempt,
-    read: EncodedRead<R, M>,
-    role: R,
-    method: M,
-    args: Input<R, M>,
-  ): Promise<Output<R, M>> {
-    const value = read.decode(await this.sharing.read(at, read.id, method, read.input, true, { lone: true }))
-    if (role === 'directory') this.observe(at, method, args, value)
-    return value
-  }
-  /** `read` inside the caller's attempt. */
-  private async readIn<R extends ContractRole, M extends ReadMethods[R] & Method<R>>(
-    at: Attempt,
-    role: R,
-    id: string,
-    method: M,
-    args: Input<R, M>,
-    located: boolean,
-  ): Promise<Output<R, M>> {
-    if (located) {
-      const root = this.argumentRoot(args)
-      return (
-        await this.routed(
-          at,
-          id,
-          root,
-          method as Method<'store'>,
-          args as never,
-        )
-      ).value as Output<R, M>
-    }
-    if (role === 'store' && method === 'home')
-      return (await this.followHomeRaw(at, id, (args as { root: Contract }).root))
-        .value as Output<R, M>
-    return this.raw(role, id, method, args, at)
+    return this.attempts(async (at) => {
+      const value = located
+        ? (await this.routed(at, id, this.argumentRoot(args), method as Method<'store'>, args as never)).value
+        : role === 'store' && method === 'home'
+          ? (await this.followHomeRaw(at, id, (args as { root: Contract }).root)).value
+          : await this.raw(role, id, method, args, at)
+      return { value: value as Output<R, M>, height: at.height }
+    }, true)
   }
   private api<R extends ContractRole>(role: R, id: string): ReadApi<R> {
     return Object.fromEntries(

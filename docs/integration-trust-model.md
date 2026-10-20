@@ -194,7 +194,9 @@ a sequence that crossed a block is read again, whether it returned or failed, up
 three times. With block hashes, a block that replaces the tip at the same height is a new
 tip too. A failure at an unchanged tip is final. A client shares reads between its
 operations: a read (contract, function and input bytes) made at the tip it last saw is
-made once, whether in flight or answered, and a failed read is not kept. An operation
+made once, whether in flight or answered, and a failed read is not kept. A read that alone
+makes up an operation and that the multicall answers ([batched reads](#batched-reads)) is
+shared only with identical reads in its own query. An operation
 opens with a tip read that arrived before its first read was sent: one that arrived less
 than `heightReuseMs` ago (1000 by default; 0 reads a new one every time), or one in
 flight for another operation, or a new one. It closes with a tip read sent after it began
@@ -413,15 +415,6 @@ reply it uses must report the attempt's height: one that reports another shows a
 node that went back, and the snapshot is read again at once. A query reports no block hash, so a block
 replaced at the same height shows only in the closing tip read, as without batching.
 
-Reads made again. What 0.4.1 answers from a reply it shared at a tip it saw within `heightReuseMs` is
-answered so, between tip reads, with no query: a read made again within it reads one tip, and
-concurrent ones share it. A one-query reply is kept for that too, by its height alone, as a reply a
-transport without block hashes reads is: only for the same read made alone, at that height, within
-`heightReuseMs`, and forgotten once the client sees another block at that height. No multi-read
-snapshot takes one; it shares only replies read between its tip reads. A block replaced at that height
-before the client saw either, and within that window, is the one change such a read can miss, as a
-one-query read can.
-
 Lens deployment. Batching, the lens deployment check's two reads go out with the directory's
 verification, in its query, unless the check would read nothing (its facts kept, the lens off or held
 off); the check takes their replies only once the directory verified, and reads for itself what no
@@ -434,17 +427,16 @@ hides; nothing in the SDK depends on it. A reply past 32 KiB fails as the HTTP t
 one. Such a failure is the read's answer at its query's height, held to it as a reply is: one below what
 the client saw is read again between tip reads, and in a snapshot one from another height reads the
 snapshot again. A read outside any snapshot, such as a contract's verification, uses no reply or failure
-from below what the client saw: it is sent again as one direct query, as 0.4.1 sends it. The client takes only a reply that is exactly what rkyv writes, each result's bytes
-claimed once and in order, and reads a reply no further than its bound. A query the node rate-limits (429, or 503 with `Retry-After`) fails each of its reads with that
-status and wait, as one direct read: a lens view sends its query again after the wait, three times a
-call, and any other read fails; none is sent alone, which would multiply the load. Any other failure
-of the whole query, such as an error page, a reply that does not decode or a chain without the
-multicall, sends its reads again one query each, and a second in a row turns batching off for 5
-minutes. The tab keeps that count in `sessionStorage`, under a key derived from the node's URL and the
-multicall's ID, so a broken multicall costs a tab two failed queries in all: the record holds only when
-it ends and why (one failure, or the holdoff), and expires with it. Where storage is missing or throws,
-each client counts its own. `onMulticallFallback` reports each. What verification and
-`verificationCache` keep is the same either way: the same facts, from the same replies.
+from below what the client saw: it is sent again as one direct query, as 0.4.1 sends it. The client
+takes only a reply that is exactly what rkyv writes, each result's bytes claimed once and in order, and
+reads a reply no further than its bound. A query the node rate-limits (429, or 503 with `Retry-After`)
+fails each of its reads with that status and wait, as one direct read: a lens view sends its query
+again after the wait, three times a call, and any other read fails; none is sent alone, which would
+multiply the load. Any other failure of the whole query, such as an error page, a reply that does not
+decode or a chain without the multicall, sends its reads again one query each, and a second in a row
+turns batching off in that client for 5 minutes. `onMulticallFallback` reports each. What
+verification and `verificationCache` keep is the same either way: the same facts, from the same
+replies.
 
 ## Writes
 

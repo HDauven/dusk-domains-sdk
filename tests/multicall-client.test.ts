@@ -3,14 +3,13 @@
  * does without batching, a read that alone makes up an operation takes its height from the query, a
  * multi-read snapshot never mixes heights, and whatever fails fails as a direct read does.
  */
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { FrozenClient, type ClientOptions, type MulticallFallback, type VerificationCache } from '../src/frozen/client.ts'
 import { MULTICALL_CONTRACT_ID as MC, type MulticallResult } from '../src/frozen/multicall.ts'
 import { NodeReadError } from '../src/frozen/transport.ts'
 import { bytes, id } from './helpers.ts'
-import { fromHex, nameKey } from '../src/frozen/bytes.ts'
-import { child, clocks, encode, endpoint, lensId, lensWorld, pointer, ref, released, store, view, type LensWorld } from './lens-world.ts'
-import { hex } from '../src/frozen/bytes.ts'
+import { hex, nameKey } from '../src/frozen/bytes.ts'
+import { child, encode, endpoint, lensId, lensWorld, pointer, ref, released, store, view, type LensWorld } from './lens-world.ts'
 import type { NameView } from '../src/frozen/types.ts'
 import { fakeNode, withMulticall, type FakeNodeOptions, type Query } from './multicall-world.ts'
 
@@ -63,11 +62,27 @@ const counts = (n: ReturnType<typeof fakeNode>) => ({
   reads: n.requests.filter((r) => r.kind === 'read').length,
   queries: n.requests.filter((r) => r.kind === 'aggregate').length,
 })
-const lensCalls = (q: Query) => q.calls.filter((c) => c.contract === lensId).map((c) => c.fn)
-afterEach(() => {
-  vi.restoreAllMocks()
-  vi.unstubAllGlobals()
-})
+/** A node whose next query that makes a matching call, once armed, answers at `height` and gives that call `answer`. */
+const laggingOnce = (w: LensWorld, match: (call: { contract: string; fn: string }) => boolean, answer?: MulticallResult, height = -1n) => {
+  let armed = false,
+    now = false
+  const n = node(w, {
+    before: (calls) => {
+      now = armed && calls.some(match)
+      if (now) armed = false
+    },
+    height: () => (now ? w.chain.height + height : w.chain.height),
+    respond: (call) => (now && answer && match(call) ? answer : undefined),
+  })
+  return { n, arm: () => void (armed = true) }
+}
+/** A client that has shown height 120, from a read in one query. */
+const showing120 = async (w: LensWorld, n: ReturnType<typeof fakeNode>) => {
+  const c = await on(w, n)
+  w.chain.height = 120n
+  expect((await c.readAt('directory', id(1), 'config', null)).height).toBe(120n)
+  return c
+}
 
 describe('when the client batches', () => {
   it('batches through the transport it builds, through a custom one only when asked, and never with `multicall: false`', async () => {
@@ -285,6 +300,7 @@ describe('under random delays and blocks', () => {
     const sleep = () => new Promise((resolve) => setTimeout(resolve, Math.floor(random() * 3)))
     const w = await lensWorld(4, 3, { lens: false })
     const state = () => {
+      w.chain.schedule = { ...w.chain.schedule, version: w.chain.height }
       w.chain.names.set(`${w.newest}:${hex(child.node)}`, view(child, { records: pointer, expires_at: 1000n + w.chain.height }))
       w.chain.replies.set(`${w.newest.slice(0, 2)}.quote_renewal`, {
         Local: { schedule_version: 3n, total_lux: '123', referral_lux: '12', new_expiry: 5000n + w.chain.height, new_grace_end: 6000n },
@@ -307,8 +323,10 @@ describe('under random delays and blocks', () => {
       }
     })()
     let committed = 0,
-      crossed = 0
-    for (let round = 0; round < 12; round++)
+      crossed = 0,
+      rounds = 0
+    // At least 12 rounds, and on until a few blocks landed between them.
+    for (; rounds < 64 && (rounds < 12 || w.chain.height <= 105n); rounds++)
       await Promise.all(
         Array.from({ length: 8 }, async (_, i) => {
           const start = w.chain.height
@@ -318,8 +336,9 @@ describe('under random delays and blocks', () => {
               expect((r.value as { Local: { new_expiry: bigint } }).Local.new_expiry).toBe(5000n + r.height)
               expect(r.height >= start && r.height <= w.chain.height).toBe(true)
             } else if (i % 4 === 3) {
-              // A read that alone makes up an operation: at the height of the query that answered it.
-              const r = await c.readAt('directory', id(1), 'allocation', null)
+              // A read that alone makes up an operation: at the height of the query that answered it, and its state.
+              const r = await c.readAt('directory', id(1), 'renewal_schedule', null)
+              expect(r.value.version).toBe(r.height)
               expect(r.height >= start && r.height <= w.chain.height).toBe(true)
             } else {
               const r = await c.getName('child.example.dusk', random() < 0.5 ? w.newest : undefined)
@@ -335,7 +354,7 @@ describe('under random delays and blocks', () => {
       )
     running = false
     await blocks
-    expect(committed + crossed).toBe(96)
+    expect(committed + crossed).toBe(rounds * 8)
     expect(committed).toBeGreaterThan(0)
     expect(w.chain.height).toBeGreaterThan(105n)
     // Batched: one query for many reads.
@@ -515,232 +534,6 @@ describe('rate limits and failures', () => {
   })
 })
 
-describe('a read made again', () => {
-  /** Ten reads that each make up an operation alone, as the SDK set 0.4.1 answered in 57 ms when made again. */
-  const singles = (c: FrozenClient, w: LensWorld) =>
-    Promise.all([
-      c.directory.config(), c.directory.registration_context(), c.directory.renewal_schedule(), c.directory.allocation(),
-      c.directory.members({ kind: 'Store', start: 0, limit: 16 }), c.directory.members({ kind: 'Resolver', start: 0, limit: 16 }),
-      c.directory.member({ kind: 'Store', id: fromHex(w.newest, 32) }), c.directory.market({ id: fromHex(id(6), 32) }),
-      c.store(w.newest).stats(), c.store(w.newest).capacity(),
-    ])
-  it('within heightReuseMs is answered as 0.4.1 answers it: one tip read and no contract query', async () => {
-    const w = await lensWorld(4)
-    const again: Record<string, string[]> = {}
-    for (const multicall of [false, true]) {
-      const n = node(w)
-      const c = await on(w, n, { multicall, heightReuseMs: 1000 })
-      const first = await singles(c, w)
-      n.requests.length = 0
-      expect(await singles(c, w), String(multicall)).toEqual(first)
-      again[String(multicall)] = n.requests.map((r) => r.kind)
-    }
-    expect(again.true).toEqual(again.false)
-    expect(again.false).toEqual(['tip'])
-  })
-  it('is never answered from another height, or from another block at its height, and no snapshot takes a one-query reply', async () => {
-    const w = await lensWorld(4, 3, { lens: false })
-    const n = node(w)
-    const c = await on(w, n, { heightReuseMs: 60_000 })
-    const direct = async () => (await on(w, node(w), { multicall: false })).directory.renewal_schedule()
-    const schedule = (version: bigint) => void (w.chain.schedule = { ...w.chain.schedule, version })
-    // A tip seen, then the read in one query: its reply kept for its height.
-    await c.getName('child.example.dusk')
-    schedule(1n)
-    expect((await c.readAt('directory', id(1), 'renewal_schedule', null)).value.version).toBe(1n)
-    // A block replaces the tip at the same height with another schedule: the read gives the new block's.
-    w.chain.fork++
-    schedule(2n)
-    expect(await c.readAt('directory', id(1), 'renewal_schedule', null)).toEqual({ value: await direct(), height: w.chain.height })
-    expect((await direct()).version).toBe(2n)
-    // A block lands with another: the new height's.
-    w.chain.height++
-    schedule(3n)
-    expect(await c.readAt('directory', id(1), 'renewal_schedule', null)).toEqual({ value: await direct(), height: w.chain.height })
-    // Made again with no block since: the same answer, at the same height, without a query.
-    const queries = n.queries.length
-    expect(await c.readAt('directory', id(1), 'renewal_schedule', null)).toEqual({ value: await direct(), height: w.chain.height })
-    expect(n.queries.length).toBe(queries)
-    // A snapshot reads what it uses itself, or shares a reply read between its tip reads: never a one-query reply.
-    w.chain.height++
-    await c.directory.members({ kind: 'Store', start: 0, limit: 16 })
-    const from = n.queries.length
-    await c.getName('child.example.dusk')
-    const members = n.queries.slice(from).flatMap((q) => q.calls).filter((x) => x.fn === 'members' && JSON.parse(new TextDecoder().decode(x.args)).kind === 'Store')
-    expect(members.length).toBeGreaterThan(0)
-  })
-  it.each([250, 1000])(
-    'under random delays, blocks and replaced blocks, answers a single read with one block\'s state at its height (heightReuseMs %s)',
-    async (heightReuseMs) => {
-      // Seeded. Every block's schedule names it, `height × 1000 + fork`, and its name's expiry its height; blocks
-      // land or replace the tip between queries, as a query reads one state.
-      let seed = 20261021
-      const random = () => (seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) / 2 ** 32
-      const sleep = () => new Promise((resolve) => setTimeout(resolve, Math.floor(random() * 3)))
-      const w = await lensWorld(4, 3, { lens: false })
-      const tips: { block: string; from: number }[] = []
-      const state = () => {
-        w.chain.schedule = { ...w.chain.schedule, version: w.chain.height * 1000n + BigInt(w.chain.fork) }
-        w.chain.names.set(`${w.newest}:${hex(child.node)}`, view(child, { records: pointer, expires_at: 1000n + w.chain.height }))
-        tips.push({ block: `${w.chain.height}/${w.chain.fork}`, from: performance.now() })
-      }
-      state()
-      let busy = 0
-      const n = node(w, { before: () => void busy++, after: () => void busy-- })
-      const c = await on(w, n, { heightReuseMs })
-      w.chain.onRead = sleep
-      w.chain.onHeight = sleep
-      let running = true
-      const blocks = (async () => {
-        while (running) {
-          await new Promise((resolve) => setTimeout(resolve, 1 + Math.floor(random() * 8)))
-          if (busy) continue
-          if (random() < 0.3) w.chain.fork++
-          else w.chain.height++
-          state()
-        }
-      })()
-      // The blocks that were the tip at some time between `since` and now.
-      const current = (since: number) => tips.filter((t, i) => i === tips.length - 1 || tips[i + 1].from >= since).map((t) => t.block)
-      let single = 0
-      // At least 16 rounds, and on until blocks were replaced a few times.
-      for (let round = 0; round < 64 && (round < 16 || w.chain.fork <= 3); round++)
-        await Promise.all(
-          Array.from({ length: 8 }, async (_, i) => {
-            const began = performance.now()
-            try {
-              if (i % 2) {
-                const r = await c.readAt('directory', id(1), 'renewal_schedule', null)
-                const v = r.value.version
-                // Never another height's state; one block's, which was the tip during the call or, answered
-                // again, within heightReuseMs before it.
-                expect(v / 1000n).toBe(r.height)
-                expect(current(began - heightReuseMs - 50)).toContain(`${v / 1000n}/${v % 1000n}`)
-                single++
-              } else {
-                const r = await c.getName('child.example.dusk', random() < 0.5 ? w.newest : undefined)
-                expect((r.value as { Local: NameView }).Local.name.expires_at).toBe(1000n + r.height)
-              }
-            } catch (error) {
-              expect((error as Error).message).toBe('Chain tip changed during read; retry the snapshot')
-            }
-          }),
-        )
-      running = false
-      await blocks
-      expect(single).toBeGreaterThan(30)
-      expect(w.chain.fork).toBeGreaterThan(3)
-    },
-    60_000,
-  )
-})
-
-/** A tab's `sessionStorage`, which the clients a test makes share as page loads of one tab do; or storage that throws. */
-function tabStorage(throws = false) {
-  const items = new Map<string, string>()
-  const refuse = (): never => {
-    throw new DOMException('The operation is insecure.', 'SecurityError')
-  }
-  const storage = {
-    getItem: (k: string) => (throws ? refuse() : (items.get(k) ?? null)),
-    setItem: (k: string, v: string) => (throws ? refuse() : void items.set(k, String(v))),
-    removeItem: (k: string) => (throws ? refuse() : void items.delete(k)),
-  }
-  return { items, storage }
-}
-describe('the multicall held off for the tab', () => {
-  const broken = (w: LensWorld) => node(w, { multicall: null })
-  const failed = (n: ReturnType<typeof fakeNode>) => n.requests.filter((r) => r.contract === MC).length
-  /** A page load: a new client, and its reads, `queries` of them one after the other. */
-  const load = async (w: LensWorld, n: ReturnType<typeof fakeNode>, queries: number, options: ClientOptions = {}) => {
-    const c = await on(w, n, options)
-    const reads = [() => c.directory.config(), () => c.directory.allocation(), () => c.directory.registration_context()]
-    const got = []
-    for (const read of reads.slice(0, queries)) got.push(await read())
-    return got
-  }
-  it.each([1, 2])('costs at most two failed queries per tab across page loads (%i a page), and keeps only the holdoff\'s end and reason', async (queries) => {
-    const w = await lensWorld(1, 3, { lens: false })
-    const tab = tabStorage()
-    vi.stubGlobal('sessionStorage', tab.storage)
-    const n = broken(w)
-    const direct = await load(w, node(w), queries, { multicall: false })
-    for (let page = 0; page < 6; page++) expect(await load(w, n, queries)).toEqual(direct)
-    expect(failed(n)).toBe(2)
-    // Kept: when batching may start again, and why; nothing of the node, its errors or the reads.
-    expect(tab.items.size).toBe(1)
-    const [[key, value]] = [...tab.items]
-    expect(key).not.toContain(w.release.manifest.nodeUrl)
-    expect(Object.keys(JSON.parse(value)).sort()).toEqual(['reason', 'until'])
-    expect(JSON.parse(value).reason).toBe('holdoff')
-    // Kept per node and multicall: another multicall on this node batches, the directory's check and the read.
-    const other = 'ab'.repeat(32), m = node(w, { multicall: other })
-    await load(w, m, 1, { multicall: other })
-    expect(m.requests.filter((r) => r.kind === 'aggregate').length).toBe(2)
-  })
-  it('carries one failed query into the next page load: a session whose pages make one query each pays two in all', async () => {
-    for (const kept of [true, false]) {
-      const w = await lensWorld(1)
-      vi.stubGlobal('sessionStorage', tabStorage(!kept).storage)
-      // The session's verification cache, as the site keeps one: after a first page, a page verifies nothing
-      // and its one view is one query.
-      const items = new Map<string, string>()
-      const cache: VerificationCache = { getItem: (k) => items.get(k) ?? null, setItem: (k, v) => void items.set(k, v) }
-      const session = { verificationCache: cache, transportNamespace: 'fake-node' }
-      const page = async (n: ReturnType<typeof fakeNode>, options: ClientOptions = {}) => (await on(w, n, { ...session, ...options })).bootstrap()
-      const direct = await page(node(w), { multicall: false })
-      const n = broken(w)
-      for (let load = 0; load < 6; load++) expect(await page(n), String(kept)).toEqual(direct)
-      // Kept by the tab: a strike, then a holdoff. Without storage, as 0.5.0: a failed query every page load.
-      expect(failed(n), String(kept)).toBe(kept ? 2 : 6)
-      expect(w.fallbacks).toEqual([])
-      vi.unstubAllGlobals()
-    }
-  })
-  it('behaves as 0.5.0 when session storage throws or is missing: each page load pays its own failures', async () => {
-    for (const make of [
-      () => vi.stubGlobal('sessionStorage', tabStorage(true).storage),
-      () => Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, get: () => { throw new DOMException('Blocked', 'SecurityError') } }),
-      () => vi.stubGlobal('sessionStorage', undefined),
-    ]) {
-      make()
-      try {
-        const w = await lensWorld(1, 3, { lens: false })
-        const n = broken(w)
-        const direct = await load(w, node(w), 2, { multicall: false })
-        for (let page = 0; page < 3; page++) expect(await load(w, n, 2)).toEqual(direct)
-        // Two failures a page, then each read alone: per client, as 0.5.0 holds off.
-        expect(failed(n)).toBe(6)
-      } finally {
-        delete (globalThis as { sessionStorage?: unknown }).sessionStorage
-        vi.unstubAllGlobals()
-      }
-    }
-  })
-  it('batches again once the holdoff ends, and not before', async () => {
-    const w = await lensWorld(1, 3, { lens: false })
-    vi.stubGlobal('sessionStorage', tabStorage().storage)
-    const clock = clocks()
-    try {
-      const n = broken(w)
-      await load(w, n, 2)
-      expect(failed(n)).toBe(2)
-      // The node's multicall works again: a page within the holdoff still reads each read alone.
-      clock.advance(300_000 - 1)
-      const fixed = node(w)
-      await load(w, fixed, 2)
-      expect(fixed.requests.filter((r) => r.kind === 'aggregate')).toHaveLength(0)
-      // Past its end, batching starts again: the directory's check and both reads.
-      clock.advance(2)
-      const later = node(w)
-      await load(w, later, 2)
-      expect(later.requests.filter((r) => r.kind === 'aggregate')).toHaveLength(3)
-    } finally {
-      clock.restore()
-    }
-  })
-})
-
 describe('a cold page', () => {
   const calls = (q: Query) => q.calls.map((x) => `${x.contract.slice(0, 2)}.${x.fn}`).sort()
   it('checks the lens deployment in the query that verifies the directory: a cold home page is two queries', async () => {
@@ -802,44 +595,25 @@ describe('a call that fails in a query', () => {
     ['an unknown function', { Err: 'Unknown' }],
     ['a reply over 32 KiB', { Ok: new Uint8Array(40_000) }],
   ]
-  it.each(failures)('fails a read alone only at a height the client may show: %s from a query below it is read again between tip reads', async (_, failure) => {
+  it.each(failures)('fails a read only at a height it may answer at: %s from a query at another is read again', async (_, failure) => {
+    // A read alone, from a query below what the client showed: read again between tip reads.
     const w = await lensWorld(1)
-    let lag = false
-    // One query answers a block behind the tip, and fails the read there.
-    const n = node(w, {
-      height: () => (lag ? w.chain.height - 1n : w.chain.height),
-      respond: (call) => (lag && call.fn === 'allocation' ? failure : undefined),
-      after: () => void (lag = false),
-    })
-    const c = await on(w, n)
-    w.chain.height = 120n
-    expect((await c.readAt('directory', id(1), 'config', null)).height).toBe(120n)
+    const { n, arm } = laggingOnce(w, (x) => x.fn === 'allocation', failure)
+    const c = await showing120(w, n)
     const direct = await (await on(w, node(w), { multicall: false })).readAt('directory', id(1), 'allocation', null)
-    lag = true
+    arm()
     expect(await c.readAt('directory', id(1), 'allocation', null)).toEqual(direct)
     expect(n.queries.map((q) => q.height).slice(-2)).toEqual([119n, 120n])
+    // A snapshot's, from a query at another height than its tip, below or above: the snapshot read again.
+    for (const offset of [-1n, 1n]) {
+      const v = await lensWorld(4, 3, { lens: false })
+      const lagging = laggingOnce(v, (x) => x.fn === 'get_name', failure, offset)
+      const d = await on(v, lagging.n)
+      lagging.arm()
+      expect(await d.getName('child.example.dusk'), String(offset)).toEqual(await (await on(v, node(v), { multicall: false })).getName('child.example.dusk'))
+      expect(lagging.n.queries.some((q) => q.height === v.chain.height + offset), String(offset)).toBe(true)
+    }
   })
-  it.each(failures.flatMap(([label, failure]) => [[label, failure, -1n], [label, failure, 1n]] as [string, MulticallResult, bigint][]))(
-    'reads a snapshot again when %s comes from a query at another height than its tip (%s)',
-    async (_, failure, offset) => {
-      const w = await lensWorld(4, 3, { lens: false })
-      let lagging = false,
-        used = false
-      // The first query that reads the name answers at another height than the tip, and fails the read there.
-      const n = node(w, {
-        before: (calls) => {
-          lagging = !used && calls.some((x) => x.fn === 'get_name')
-          if (lagging) used = true
-        },
-        height: () => (lagging ? w.chain.height + offset : w.chain.height),
-        respond: (call) => (lagging && call.fn === 'get_name' ? failure : undefined),
-      })
-      const c = await on(w, n)
-      const got = await c.getName('child.example.dusk')
-      expect(used).toBe(true)
-      expect(got).toEqual(await (await on(w, node(w), { multicall: false })).getName('child.example.dusk'))
-    },
-  )
 })
 
 describe('the multicall by default', () => {
@@ -868,26 +642,6 @@ describe('the multicall by default', () => {
 })
 
 describe('a read outside a snapshot', () => {
-  /** A node whose next query that makes a matching call, once armed, answers at `height` and gives that call `answer`. */
-  const laggingOnce = (w: LensWorld, match: (call: { contract: string; fn: string }) => boolean, answer?: MulticallResult, height = -1n) => {
-    let armed = false,
-      now = false
-    const n = node(w, {
-      before: (calls) => {
-        now = armed && calls.some(match)
-        if (now) armed = false
-      },
-      height: () => (now ? w.chain.height + height : w.chain.height),
-      respond: (call) => (now && answer && match(call) ? answer : undefined),
-    })
-    return { n, arm: () => void (armed = true) }
-  }
-  const showing120 = async (w: LensWorld, n: ReturnType<typeof fakeNode>) => {
-    const c = await on(w, n)
-    w.chain.height = 120n
-    expect((await c.readAt('directory', id(1), 'config', null)).height).toBe(120n)
-    return c
-  }
   const cases: [string, string, MulticallResult][] = [
     ['a panic', 'interface_version', { Err: { Panic: 'DuskDS:v1:NotFound' } }],
     ['a missing contract', 'interface_version', { Err: 'DoesNotExist' }],
