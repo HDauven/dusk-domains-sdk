@@ -35,6 +35,14 @@ To regenerate, copy `primary-verification.rs` into
 reference revision, run `cargo run -p dusk-domains-types --example primary-verification
 --features serde` from `contracts`, and gzip stdout with `gzip -n`.
 
+## Multicall
+
+`multicall.wasm.gz` and `multicall-driver.wasm.gz` are the Multicall for Dusk v0.1.0 release
+assets (SHA-256 `65f77a27…` and `d2ed9e7b…` uncompressed), `multicall-vectors.json` its
+`tests/vectors.json`. The SDK ships neither Wasm: tests check its hand codec against the driver.
+`multicall-testnet.json.gz` is one `aggregate` the deployed contract answered on testnet, against
+the ab905e64 rehearsal stack, with each call read directly at the same block.
+
 ## Read lens
 
 The lens fixtures come from the deployed testnet lens, not from this repository:

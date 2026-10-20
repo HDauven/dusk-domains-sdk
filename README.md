@@ -2,7 +2,7 @@
 
 TypeScript SDK for the ADR 0004 frozen layer: directory, store shards,
 registry-qualified resolvers, vault, replaceable policy and marketplace v1.
-Version **0.4.1** targets a fresh frozen deployment. The 0.2 router/core/treasury
+Version **0.5.0** targets a fresh frozen deployment. The 0.2 router/core/treasury
 clients and legacy events have been removed.
 
 ## Quickstart
@@ -59,7 +59,14 @@ Operations share identical reads made at one tip, in flight or answered, open at
 height read that arrived in the last `heightReuseMs` (1 s by default), and close with a
 height read sent after every reply they used, so a page reads each fact about once per
 block. A view the release's lens answers in one query reads no tip: its reply reports its
-height. A custom transport without `currentBlock` gives heights only: operations then
+height. The client sends the contract reads it makes in one tick as one query of
+[Multicall for Dusk](https://github.com/HDauven/dusk-multicall) (`MULTICALL_CONTRACT_ID`, the
+same on mainnet and testnet), and each read answers and fails as it would alone; a read that
+alone makes up an operation, such as `client.directory.config()`, then reads no tip either, as
+the query reports its height (`readAt` returns it). It is on by default for a mainnet or testnet
+release through the transport the client builds; elsewhere, and through a custom `transport`, only
+with `multicall: true` or a contract ID, and `multicall: false` sends every read as its own query
+([batched reads](docs/integration-trust-model.md#batched-reads)). A custom transport without `currentBlock` gives heights only: operations then
 share an answered read only within `heightReuseMs`, as such a transport cannot show a
 same-height replacement. Use a consistent node endpoint; height bracketing is not a
 historical-state proof. The node is a
@@ -285,7 +292,9 @@ Golden tests run the protocol's real, pinned WASM data drivers and JSON/rkyv
 fixtures locally, the lens's against replies read from the testnet lens. To compare the
 client without a lens against the SDK before it, point `SDK_BASELINE` at a checkout of
 `fedc2d24` with its dependencies installed:
-`SDK_BASELINE=/path/to/sdk npx vitest run tests/lens-baseline.test.ts` (skipped otherwise). No test contacts a chain. `npm run generate` regenerates the
+`SDK_BASELINE=/path/to/sdk npx vitest run tests/lens-baseline.test.ts` (skipped otherwise). To compare the
+client with batching off against 0.4.1, read for read, point `SDK_041_BASELINE` at a checkout of `a3d3a9d`
+and run `tests/multicall-baseline.test.ts`. No test contacts a chain. `npm run generate` regenerates the
 TypeScript types, builders and catalog from reviewed schema snapshots. This
 repository does not publish or deploy as part of the build.
 

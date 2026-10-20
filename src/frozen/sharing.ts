@@ -8,11 +8,18 @@
  * exports it.
  * @module
  */
+import type { Batcher } from './batching.ts'
 import { hex } from './bytes.ts'
 import { u64 } from './json.ts'
 import type { ChainTip, ReadTransport } from './transport.ts'
 import type { Stage } from './trust.ts'
 import type { Admission } from './types.ts'
+
+/**
+ * An attempt saw a block land, from a reply that reports another height than its own: a store's quote,
+ * or a batched read. Its snapshot runs it again.
+ */
+export class TipMoved extends Error {}
 
 /** One attempt of a snapshot. */
 export interface Attempt {
@@ -43,6 +50,20 @@ interface Shared {
   settled?: number
   /** When its reply arrived, in milliseconds (`elapsed`). */
   arrived?: number
+  /** Whether a multicall answered it. */
+  batched?: boolean
+}
+/**
+ * A one-query reply: the state of one block at `height`, which block not known. Only a read that alone makes
+ * up its operation takes it again, at that height and within the window, so it is never read beside another.
+ */
+interface Lone {
+  readonly bytes: Uint8Array
+  readonly height: bigint
+  /** When it arrived, on the client's clock. */
+  readonly settled: number
+  /** When it arrived, in milliseconds (`elapsed`). */
+  readonly arrived: number
 }
 /** Whether two tips are one block: the same height and, where the transport reads one, hash. */
 export function sameTip(a: ChainTip | undefined, b: ChainTip | undefined): boolean {
@@ -58,6 +79,16 @@ async function tipOf(transport: ReadTransport): Promise<ChainTip> {
 }
 /** Replies kept for the height last seen, at most. The oldest is dropped first. */
 const LIMIT = 256
+/** The height of the query whose call failed a read, by the error it failed with. */
+const failures = new WeakMap<object, bigint>()
+/** Mark `error` as a read's answer in a multicall query at `height`: its own call's failure there. */
+export function failedAt(error: object, height: bigint): void {
+  failures.set(error, height)
+}
+/** The height of the query a read failed in, as its own call's answer there; undefined for any other failure. */
+export function failureHeight(error: unknown): bigint | undefined {
+  return typeof error === 'object' && error !== null ? failures.get(error) : undefined
+}
 /** Milliseconds, on a clock that never runs back where the platform has one. */
 export const elapsed = (): number => (typeof performance === 'object' && performance ? performance.now() : Date.now())
 
@@ -72,13 +103,18 @@ export class ReadSharing {
   /** The highest height any height read that arrived reported. */
   private top?: bigint
   private readonly shared = new Map<string, Shared>()
+  private readonly lone = new Map<string, Lone>()
   /**
    * `windowMs`: by height alone, how long after a reply arrived another operation may share it.
-   * With a block hash, a reply is shared for as long as the client sees its tip.
+   * With a block hash, a reply is shared for as long as the client sees its tip. `batcher`: reads go
+   * through the multicall, and a batched reply an attempt uses must be at the attempt's height. `floor`:
+   * the highest height the client showed, below which a batched reply no attempt uses is not used.
    */
   constructor(
     private readonly transport: ReadTransport,
     private readonly windowMs: number,
+    private readonly batcher?: Batcher,
+    private readonly floor?: () => bigint | undefined,
   ) {}
   /** Advance the client's clock, which orders sends and replies. */
   now(): number {
@@ -96,6 +132,10 @@ export class ReadSharing {
         if (this.top === undefined || tip.height > this.top) this.top = tip.height
         if (!sameTip(tip, this.seen)) {
           this.shared.clear()
+          // Another block at the height of a one-query reply may have replaced the one it read: forget
+          // every one at that height. One at the new tip's height is kept, as a reply by height alone is.
+          const replaced = this.seen?.height === tip.height
+          for (const [key, entry] of this.lone) if (replaced || entry.height !== tip.height) this.lone.delete(key)
           this.seen = tip
         }
         this.seenAt = elapsed()
@@ -139,7 +179,7 @@ export class ReadSharing {
    * The read another attempt made that attempt `at` may share: at the tip last seen, in flight, or
    * answered. By height alone, an answered one only while it is younger than the window.
    */
-  private kept(at: Attempt, key: string): Shared | undefined {
+  private kept(at: ChainTip, key: string): Shared | undefined {
     if (!sameTip(at, this.seen)) return undefined
     const entry = this.shared.get(key)
     if (entry?.arrived !== undefined && at.hash === undefined && elapsed() - entry.arrived >= this.windowMs) {
@@ -159,13 +199,41 @@ export class ReadSharing {
     fn: string,
     input: Uint8Array,
     share = true,
+    info?: { batched?: boolean; alone?: boolean; lone?: boolean; ownHeight?: boolean },
   ): Promise<Uint8Array> {
-    if (!at) return this.transport.read(id, fn, input)
+    // `alone`: one query of its own, not batched, and shared with no other attempt.
+    const batcher = info?.alone ? undefined : this.batcher
+    if (info?.alone) share = false
+    if (!at) {
+      if (!batcher) return this.transport.read(id, fn, input)
+      // Read outside an attempt, as 0.4.1 reads it alone: a batched outcome, reply or failure, from below
+      // what the client showed is not used, and the read goes out again as one direct query; unless its
+      // reply reports its own height, which its caller holds to that (`ownHeight`), as a lens view's does.
+      const stale = (height: bigint | undefined) => {
+        const floor = info?.ownHeight ? undefined : this.floor?.()
+        return height !== undefined && floor !== undefined && height < floor
+      }
+      let reply
+      try {
+        reply = await batcher.read(id, fn, input)
+      } catch (error) {
+        if (stale(failureHeight(error))) return this.transport.read(id, fn, input)
+        throw error
+      }
+      if (stale(reply.height)) return this.transport.read(id, fn, input)
+      if (info) info.batched = reply.height !== undefined
+      return reply.bytes
+    }
     const key = share && sameTip(at, this.seen) ? `${id}/${fn}/${hex(input)}` : undefined
     let read = key === undefined ? undefined : this.kept(at, key)
+    // A read that alone makes up its operation (`lone`) takes a one-query reply at its height, as it would a
+    // shared one: the attempt still closes with a height read sent after that reply arrived.
+    const prior = !read && info?.lone ? this.loneReply(`${id}/${fn}/${hex(input)}`) : undefined
+    if (prior && prior.height === at.height)
+      read = { bytes: Promise.resolve(prior.bytes), settled: prior.settled, arrived: prior.arrived, batched: true }
     if (!read) {
-      const entry: { bytes: Promise<Uint8Array>; settled?: number; arrived?: number } = { bytes: undefined as never }
-      entry.bytes = (async () => this.transport.read(id, fn, input))().then(
+      const entry: Shared & { bytes: Promise<Uint8Array> } = { bytes: undefined as never }
+      entry.bytes = (async () => (batcher ? this.fetch(at, entry, batcher, id, fn, input) : this.transport.read(id, fn, input)))().then(
         (bytes) => {
           entry.settled = this.now()
           entry.arrived = elapsed()
@@ -184,10 +252,31 @@ export class ReadSharing {
       read = entry
     }
     try {
-      return new Uint8Array(await read.bytes)
+      const bytes = new Uint8Array(await read.bytes)
+      if (info) info.batched = read.batched === true
+      return bytes
     } finally {
       at.replied = Math.max(at.replied, read.settled!)
     }
+  }
+  /**
+   * One read for an attempt. Through the multicall, its reply reports the height its query read, which
+   * must be the attempt's: anything else is a reply from another tip, which the attempt cannot use.
+   */
+  private async fetch(at: Attempt, entry: Shared, batcher: Batcher, id: string, fn: string, input: Uint8Array): Promise<Uint8Array> {
+    let reply
+    try {
+      reply = await batcher.read(id, fn, input)
+    } catch (error) {
+      // A call that failed at another height failed in another state than the attempt's: not its answer.
+      const failed = failureHeight(error)
+      if (failed !== undefined && failed !== at.height) throw new TipMoved(`A batched read failed at height ${failed}, not ${at.height}`)
+      throw error
+    }
+    if (reply.height !== undefined && reply.height !== at.height)
+      throw new TipMoved(`A batched read answered at height ${reply.height}, not ${at.height}`)
+    entry.batched = reply.height !== undefined
+    return reply.bytes
   }
   /** Keep a reply `at` read unshared, which its caller checked, for the state reads at its tip; never over one kept. */
   publish(at: Attempt, id: string, fn: string, input: Uint8Array, bytes: Uint8Array): void {
@@ -200,8 +289,43 @@ export class ReadSharing {
   holds(at: Attempt, id: string, fn: string, input: Uint8Array): boolean {
     return this.kept(at, `${id}/${fn}/${hex(input)}`) !== undefined
   }
+  /** Keep a one-query reply at `height` for the same read, alone, within the window. */
+  keepLone(id: string, fn: string, input: Uint8Array, height: bigint, bytes: Uint8Array): void {
+    if (!(this.windowMs > 0)) return
+    const key = `${id}/${fn}/${hex(input)}`
+    this.lone.delete(key)
+    this.lone.set(key, { bytes: new Uint8Array(bytes), height, settled: this.now(), arrived: elapsed() })
+    if (this.lone.size > LIMIT) this.lone.delete(this.lone.keys().next().value!)
+  }
+  /** The one-query reply kept for a read, while it is younger than the window. */
+  private loneReply(key: string): Lone | undefined {
+    const entry = this.lone.get(key)
+    if (entry && elapsed() - entry.arrived >= this.windowMs) {
+      this.lone.delete(key)
+      return undefined
+    }
+    return entry
+  }
+  /**
+   * The tip a read that alone makes up its operation opens at to be answered without a contract query, as
+   * 0.4.1 answers it, at a height of `min` or more: the tip seen within the window, where a reply is kept for
+   * it or a one-query reply that arrived within it is at its height; with no tip seen within it, the height
+   * alone of such a one-query reply. A tip read then closes the attempt, as any. Undefined: a query answers it.
+   */
+  opening(id: string, fn: string, input: Uint8Array, min?: bigint): ChainTip | undefined {
+    const key = `${id}/${fn}/${hex(input)}`,
+      tip = this.recent(this.windowMs),
+      lone = this.loneReply(key)
+    if (tip) {
+      if (min !== undefined && tip.height < min) return undefined
+      return this.kept(tip, key) !== undefined || lone?.height === tip.height ? tip : undefined
+    }
+    if (!lone || (min !== undefined && lone.height < min)) return undefined
+    return { height: lone.height }
+  }
   /** Forget every reply kept. */
   clear(): void {
     this.shared.clear()
+    this.lone.clear()
   }
 }

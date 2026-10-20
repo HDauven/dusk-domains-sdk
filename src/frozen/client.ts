@@ -28,7 +28,9 @@ import { parseJson, stringifyJson, u64 } from './json.ts'
 import { wireValue } from './wire.ts'
 import { primaryNameStatus } from '../core/primary.ts'
 import { createHttpTransport, type ChainTip, type ReadTransport } from './transport.ts'
-import { ReadSharing, elapsed, sameTip, type Attempt } from './sharing.ts'
+import { ReadSharing, TipMoved, elapsed, failureHeight, sameTip, type Attempt } from './sharing.ts'
+import { Batcher, Unbatched, rateLimit, tabHoldoff, type MulticallFallback } from './batching.ts'
+import { MULTICALL_CONTRACT_ID } from './multicall.ts'
 import {
   ContractRefusedError,
   createLedger,
@@ -108,6 +110,8 @@ import type {
 } from './types.ts'
 
 export { ContractRefusedError, UnverifiedContractError, UnverifiedQuoteError } from './trust.ts'
+export { MULTICALL_CONTRACT_ID } from './multicall.ts'
+export type { MulticallFallback } from './batching.ts'
 export type { Bootstrap, LensFallbackReason, NameLifecycle, NamePage, Pricing, RenewalInputs, Resolved } from './lens.ts'
 /** A read that fell back from the release's lens to direct reads, and why. */
 export interface LensFallback {
@@ -147,8 +151,6 @@ function settle<T>(check: () => T): T {
     )
   }
 }
-/** An operation saw a block land; its snapshot runs it again. */
-class TipMoved extends Error {}
 const policyAdmissionMismatch = () =>
   new Error("Policy initialization does not match its admission's init commitment")
 /**
@@ -234,6 +236,20 @@ export interface ClientOptions extends ManifestOptions {
   heightReuseMs?: number
   /** Called, never awaited, whenever a read falls back from the lens to direct reads. */
   onLensFallback?: (fallback: LensFallback) => void
+  /**
+   * Send the contract reads made in one tick as one query of Multicall for Dusk
+   * (`MULTICALL_CONTRACT_ID`, the same on mainnet and testnet), or a few when they pass its limits:
+   * each read settles from its own result, as a direct read would. On by default where it is deployed:
+   * a mainnet or testnet release (network 1 or 2), read through the transport the client builds from the
+   * manifest's node URL. `true` batches anywhere else too, through a custom `transport` as well, a
+   * contract ID batches through that deployment, and `false` sends every read as its own query. A query
+   * that fails whole is read again one query per read, and two such failures in a row turn batching off
+   * for 5 minutes, as on a chain without the multicall. A read that alone makes up an operation, such as
+   * `client.directory.config()`, takes its height from the query's reply and reads no tip.
+   */
+  multicall?: boolean | string
+  /** Called, never awaited, whenever batched reads are sent one query at a time instead. */
+  onMulticallFallback?: (fallback: MulticallFallback) => void
 }
 /**
  * A tenth of Dusk's block time of about 10 s: a height read this recent has gone stale about one time
@@ -261,13 +277,17 @@ const LENS_RETRY_MAX_MS = 10_000
 const LENS_CACHE_MS = 1_000
 /** The reply checks' version: lens health is kept per version and release. Bump it when they change. */
 const LENS_EVIDENCE_VERSION = 1
-/** The wait before a rate-limited read (429, or 503 with a wait) is sent again; undefined for other failures. */
-function rateLimit(error: unknown): number | undefined {
-  const e = error as { status?: unknown; retryAfterMs?: unknown } | null
-  if (!e || typeof e !== 'object') return undefined
-  const wait = typeof e.retryAfterMs === 'number' && e.retryAfterMs >= 0 ? e.retryAfterMs : undefined
-  return e.status === 429 ? (wait ?? LENS_RETRY_MS) : e.status === 503 ? wait : undefined
-}
+/**
+ * Gas a lens read is given inside a multicall. The lens shares what its query has left among every read
+ * it may still make (`reads`), keeping 2M for its own work around each and 20M for its reply, and refuses
+ * with `GasBudget` once a read would get less than 1M. A direct query gives it Rusk's 3e9; in a batch each
+ * read gets 2M at the least, 15 times what the costliest frozen read takes (131k), and an availability
+ * check's final store quote its full 500M, as in a direct query.
+ */
+const LENS_READS: Partial<Record<LensMethod, number>> = { resolve: 90, reverse: 203, name_page: 271, availability: 140, bootstrap: 20, pricing: 4 }
+const lensGas = (reads: number) => BigInt(reads) * 4_000_000n + 30_000_000n
+/** A store prices a registration only with more than 60M left (`QUOTE_GAS` and `FAILURE_RESERVE`). */
+const QUOTE_REGISTRATION_GAS = 80_000_000n
 /** The rate-limit retries one lens call has left, for every read it sends. */
 interface LensBudget {
   retries: number
@@ -397,6 +417,17 @@ interface PageFacts {
   value: Located<NameView>
   renewal: RenewalInputs | null
 }
+/** A read of a contract encoded: the ID it reads, its input, and its reply's decoder. */
+interface EncodedRead<R extends ContractRole, M extends Method<R>> {
+  id: string
+  input: Uint8Array
+  decode: (bytes: Uint8Array) => Output<R, M>
+}
+/** The lens deployment check's two replies, read ahead: undefined where no multicall answered one. */
+interface LensAhead {
+  binding: Promise<Uint8Array | undefined>
+  face: Promise<Uint8Array | undefined>
+}
 /** What the lens deployment check reads, which a deployed lens cannot change. */
 interface LensFacts {
   binding: Binding
@@ -413,6 +444,11 @@ export class FrozenClient {
   readonly hopLimit: number
   /** See `ClientOptions.heightReuseMs`. */
   readonly heightReuseMs: number
+  /** The multicall this client batches its reads through; undefined when it sends each read alone. */
+  readonly multicall?: string
+  private readonly batcher?: Batcher
+  /** The highest height of a multicall reply a read without tips used: no later one shows an older state. */
+  private batchTop?: bigint
   private readonly options: ClientOptions
   private readonly ledger: Ledger
   private readonly verifying = new Map<string, Promise<void>>()
@@ -428,6 +464,9 @@ export class FrozenClient {
   private readonly unkept = new WeakMap<VerifiedContract, string>()
   /** The lens deployment check, once per client; after one that failed, again by the next call. */
   private lensCheck?: Promise<void>
+  /** Batching, the lens deployment check's reads, sent with the directory's verification; and whether a check took them. */
+  private lensAhead?: Promise<LensAhead | undefined>
+  private lensAheadTaken = false
   /** Until when, on this client's monotonic clock (`elapsed`), the lens is not used: its deployment failed a check. */
   private lensCheckUntil = -Infinity
   /** What `verificationCache` keeps of the lens's health, loaded once per client; and whether it stopped using that. */
@@ -500,7 +539,18 @@ export class FrozenClient {
     this.heightReuseMs = options.heightReuseMs ?? HEIGHT_REUSE_MS
     if (typeof this.heightReuseMs !== 'number' || !(this.heightReuseMs >= 0))
       throw new Error('heightReuseMs must be zero or more')
-    this.sharing = new ReadSharing(this.transport, this.heightReuseMs)
+    const network = release.manifest.network
+    const multicall = options.multicall ?? (!options.transport && (network === 1 || network === 2))
+    if (multicall !== false) {
+      this.multicall = contractId(multicall === true ? MULTICALL_CONTRACT_ID : multicall)
+      // The tab remembers this node's multicall failing across page loads, under a key of its URL and the
+      // multicall's ID; a transport that names no node keeps them in this client alone.
+      const node = options.transportNamespace ?? this.transport.namespace
+      const tab = node === undefined ? undefined
+        : tabHoldoff(`duskds:sdk:multicall-holdoff:v1:${hex(hash('duskds:sdk:multicall-holdoff:v1', stringifyJson([node, this.multicall])))}`)
+      this.batcher = new Batcher(this.transport, this.multicall, (id, fn) => this.batchGas(id, fn), options.onMulticallFallback, tab)
+    }
+    this.sharing = new ReadSharing(this.transport, this.heightReuseMs, this.batcher, () => this.seenHeight())
     // The release's contracts as this client starts with them, and the checks' version.
     this.lensScope = hex(hash('duskds:sdk:lens-health:v1', stringifyJson([
       LENS_EVIDENCE_VERSION,
@@ -513,6 +563,18 @@ export class FrozenClient {
     ])))
     this.directory = this.api('directory', this.directoryId)
     this.vault = this.api('vault', this.vaultId)
+  }
+  /**
+   * The cap a read takes inside a multicall: what makes it answer as a direct query does. A frozen read
+   * takes at most 131k gas, far below a fair share of any query, except a store's registration quote.
+   */
+  private batchGas(id: string, fn: string): bigint {
+    const lens = this.release.lens
+    if (lens && id === contractId(lens.contract.contractId)) {
+      const reads = LENS_READS[fn as LensMethod]
+      return reads === undefined ? 0n : lensGas(reads)
+    }
+    return fn === 'quote_registration' ? QUOTE_REGISTRATION_GAS : 0n
   }
   /**
    * Run `operation` at one chain height. Nodes answer reads at their tip only, so a sequence
@@ -539,15 +601,17 @@ export class FrozenClient {
    * a new one would; how old it is decides only how likely the attempt is to cross a block. If such
    * an attempt crosses one, it is not one of the three, and a failure it met is not one of three that
    * must repeat; it commits, or fails for good, like any other. Only the first attempt can open this
-   * way, so a snapshot makes four attempts at most.
+   * way, so a snapshot makes four attempts at most. `opening`: the tip it opens at instead, for a read
+   * made again (`ReadSharing.opening`). One known by height alone matches no tip read with a hash: the
+   * attempt after it opens at the height read that closed it, and closes with it too if no block landed.
    */
-  private async attempts<T>(operation: (at: Attempt) => Promise<T>, tracked: boolean): Promise<T> {
+  private async attempts<T>(operation: (at: Attempt) => Promise<T>, tracked: boolean, opening?: ChainTip): Promise<T> {
     let crossed: unknown
     // Messages of attempts that failed across a block; the same one every time is not chance.
     const failures: string[] = []
     const began = this.sharing.now()
     let since = began,
-      reused = this.sharing.recent(this.heightReuseMs),
+      reused = opening ?? this.sharing.recent(this.heightReuseMs),
       first = true
     for (let counted = 0; counted < 3; ) {
       const free = reused !== undefined,
@@ -640,6 +704,21 @@ export class FrozenClient {
     shared = !candidate,
     onReply?: (input: Uint8Array, bytes: Uint8Array) => void,
   ): Promise<Output<R, M>> {
+    const read = this.encodeRead(role, id, method, args, candidate)
+    const bytes = await this.sharing.read(at, read.id, method, read.input, shared)
+    const value = read.decode(bytes)
+    onReply?.(read.input, bytes)
+    if (at && role === 'directory') this.observe(at, method, args, value)
+    return value
+  }
+  /** A read of a verified contract, or of the candidate under verification: its input, and its reply's decoder. */
+  private encodeRead<R extends ContractRole, M extends Method<R>>(
+    role: R,
+    id: string,
+    method: M,
+    args: Input<R, M>,
+    candidate?: { role: ContractRole; driver: DataDriver },
+  ): EncodedRead<R, M> {
     id = contractId(id)
     const contract = candidate ?? this.ledger.verified.get(id)
     if (!contract || contract.role !== role || this.ledger.refused.has(id))
@@ -653,14 +732,48 @@ export class FrozenClient {
       method,
       stringifyJson(wireValue(spec.input, args)),
     )
-    const bytes = await this.sharing.read(at, id, method, input, shared)
-    const value = wireValue(
-      spec.output,
-      contract.driver.decodeOutput(method, bytes),
-    ) as Output<R, M>
-    onReply?.(input, bytes)
-    if (at && role === 'directory') this.observe(at, method, args, value)
-    return value
+    return {
+      id,
+      input,
+      decode: (bytes) => wireValue(spec.output, contract.driver.decodeOutput(method, bytes)) as Output<R, M>,
+    }
+  }
+  /**
+   * A read that makes up an operation alone, in one multicall query: its reply reports the height of the
+   * state the query read, which is the read's, as for a lens view, so no tip is read. Undefined, to read it
+   * between tip reads instead, when no multicall answered it or its height is below what this client saw.
+   * A failure is final: it is the read's answer at that height.
+   */
+  private async once<R extends ContractRole, M extends Method<R>>(
+    read: EncodedRead<R, M>,
+    role: R,
+    method: M,
+    args: Input<R, M>,
+  ): Promise<{ value: Output<R, M>; height: bigint } | undefined> {
+    let reply
+    try {
+      reply = await this.batcher!.read(read.id, method, read.input, true)
+    } catch (error) {
+      if (error instanceof Unbatched) return undefined
+      // A failure is final only at a height this client may show: one below what it saw is read again.
+      const failed = failureHeight(error),
+        seen = this.seenHeight()
+      if (failed !== undefined && seen !== undefined && failed < seen) return undefined
+      throw error
+    }
+    const height = reply.height!,
+      seen = this.seenHeight()
+    if (seen !== undefined && height < seen) return undefined
+    const value = read.decode(reply.bytes)
+    if (role === 'directory') {
+      // As a committed snapshot at that height would observe it.
+      const at: Attempt = { height, stage: { touched: new Set() }, began: 0, replied: 0 }
+      this.observe(at, method, args, value)
+      this.commitObserved(at)
+    }
+    if (this.batchTop === undefined || height > this.batchTop) this.batchTop = height
+    this.sharing.keepLone(read.id, method, read.input, height, reply.bytes)
+    return { value, height }
   }
   /** The exact ABI read surface, with lossless typed output and automatic height acquisition. */
   async read<R extends ContractRole, M extends ReadMethods[R] & Method<R>>(
@@ -669,29 +782,72 @@ export class FrozenClient {
     method: M,
     args: Input<R, M>,
   ): Promise<Output<R, M>> {
+    return (await this.readAt(role, id, method, args)).value
+  }
+  /**
+   * `read`, with the height it was read at: of the multicall query that answered it, or of the snapshot
+   * whose tip reads bracket it.
+   */
+  async readAt<R extends ContractRole, M extends ReadMethods[R] & Method<R>>(
+    role: R,
+    id: string,
+    method: M,
+    args: Input<R, M>,
+  ): Promise<{ value: Output<R, M>; height: bigint }> {
     // A Located read looks for the name from this store first, as `locate` does, and verifies each
     // store its route reads through. Every other read is of this contract alone.
     const located =
       role === 'store' && methodDefinition(role, method).output.startsWith('Located<')
     if (!located) await this.verifyContract(role, id)
-    return this.attempts(async (at) => {
-      if (located) {
-        const root = this.argumentRoot(args)
-        return (
-          await this.routed(
-            at,
-            id,
-            root,
-            method as Method<'store'>,
-            args as never,
-          )
-        ).value as Output<R, M>
-      }
-      if (role === 'store' && method === 'home')
-        return (await this.followHomeRaw(at, id, (args as { root: Contract }).root))
-          .value as Output<R, M>
-      return this.raw(role, id, method, args, at)
-    }, true)
+    if (this.batcher && !located && !(role === 'store' && method === 'home')) {
+      const read = this.encodeRead(role, id, method, args)
+      // What 0.4.1 answers from a reply it shared at a tip seen within `heightReuseMs`, or a one-query reply
+      // within it, is answered so: between tip reads, without a contract query.
+      const opening = this.sharing.opening(read.id, method, read.input, this.seenHeight())
+      if (opening)
+        return this.attempts(async (at) => ({ height: at.height, value: await this.loneIn(at, read, role, method, args) }), true, opening)
+      const once = await this.once(read, role, method, args)
+      if (once) return once
+    }
+    return this.attempts(async (at) => ({ height: at.height, value: await this.readIn(at, role, id, method, args, located) }), true)
+  }
+  /** A read that alone makes up an operation, in attempt `at`: a one-query reply at its height may answer it. */
+  private async loneIn<R extends ContractRole, M extends Method<R>>(
+    at: Attempt,
+    read: EncodedRead<R, M>,
+    role: R,
+    method: M,
+    args: Input<R, M>,
+  ): Promise<Output<R, M>> {
+    const value = read.decode(await this.sharing.read(at, read.id, method, read.input, true, { lone: true }))
+    if (role === 'directory') this.observe(at, method, args, value)
+    return value
+  }
+  /** `read` inside the caller's attempt. */
+  private async readIn<R extends ContractRole, M extends ReadMethods[R] & Method<R>>(
+    at: Attempt,
+    role: R,
+    id: string,
+    method: M,
+    args: Input<R, M>,
+    located: boolean,
+  ): Promise<Output<R, M>> {
+    if (located) {
+      const root = this.argumentRoot(args)
+      return (
+        await this.routed(
+          at,
+          id,
+          root,
+          method as Method<'store'>,
+          args as never,
+        )
+      ).value as Output<R, M>
+    }
+    if (role === 'store' && method === 'home')
+      return (await this.followHomeRaw(at, id, (args as { root: Contract }).root))
+        .value as Output<R, M>
+    return this.raw(role, id, method, args, at)
   }
   private api<R extends ContractRole>(role: R, id: string): ReadApi<R> {
     return Object.fromEntries(
@@ -794,6 +950,8 @@ export class FrozenClient {
     }
     const run = this.verifyNew(role, id, evidence, fromDirectory, at, probed, live)
     this.verifying.set(key, run)
+    // Batching, the lens deployment check's reads join this query: the check takes them once this passed.
+    if (role === 'directory' && this.batcher && !this.lensAhead) this.lensAhead = this.readLensAhead()
     try {
       await run
     } finally {
@@ -871,8 +1029,9 @@ export class FrozenClient {
       if (stage) stage.touched.add(id)
       else this.keepFacts(row)
     } catch (error) {
-      // Artifacts, evidence and contract checks do not depend on the height a snapshot reads at.
-      throw heightIndependent(error)
+      // Artifacts, evidence and contract checks do not depend on the height a snapshot reads at; a
+      // batched reply from another block only shows the snapshot must read again.
+      throw error instanceof TipMoved ? error : heightIndependent(error)
     }
   }
   /**
@@ -897,18 +1056,12 @@ export class FrozenClient {
       if (!held) this.refuse(id, message)
       return undefined
     }
-    const iface =
-      held?.interface ??
-      (proven
-        ? frozenInterface(role)
-        : ((await this.raw(
-            role,
-            id,
-            'interface_version' as Method<typeof role>,
-            null as never,
-            at,
-            candidate,
-          )) as Interface))
+    // Batching, the reads below go out together, in one query; they are checked in the same order.
+    const early = !held && !proven && this.batcher !== undefined
+    const ifaceRead = this.started(early, () => this.raw(role, id, 'interface_version' as Method<typeof role>, null as never, at, candidate) as Promise<Interface>)
+    const bindingRead = this.started(early, () => this.raw(role, id, 'binding' as Method<typeof role>, null as never, at, candidate) as Promise<Binding>)
+    const orderRead = role === 'marketplace' ? this.started(early, () => this.raw('marketplace', id, 'order_api_version', null, at, candidate)) : undefined
+    const iface = held?.interface ?? (proven ? frozenInterface(role) : await ifaceRead())
     if (
       iface.kind.toLowerCase() !== role ||
       iface.version !== 1 ||
@@ -917,18 +1070,7 @@ export class FrozenClient {
         (role === 'store' || role === 'marketplace' ? 1 : 0)
     )
       return fail('Unsupported frozen contract interface')
-    const binding =
-      held?.binding ??
-      (proven
-        ? this.directoryBinding()
-        : ((await this.raw(
-            role,
-            id,
-            'binding' as Method<typeof role>,
-            null as never,
-            at,
-            candidate,
-          )) as Binding))
+    const binding = held?.binding ?? (proven ? this.directoryBinding() : await bindingRead())
     if (
       contractId(binding.directory) !== this.directoryId ||
       contractId(binding.vault) !== this.vaultId ||
@@ -937,7 +1079,7 @@ export class FrozenClient {
       return fail('Contract deployment binding mismatch')
     const facts: Facts = held ?? { interface: iface, binding }
     if (role === 'marketplace') {
-      if (!held) facts.orderApi = await this.raw('marketplace', id, 'order_api_version', null, at, candidate)
+      if (!held) facts.orderApi = await orderRead!()
       if (facts.orderApi !== 1) return fail('Unsupported marketplace order API')
     }
     let initHash = record ? hex(record.init_hash) : c.initHash
@@ -956,6 +1098,21 @@ export class FrozenClient {
       kept.publish?.()
     }
     return { facts, initHash }
+  }
+  /**
+   * A read to await later: sent now when `now`, its outcome kept until then, else sent when awaited.
+   */
+  private started<T>(now: boolean, read: () => Promise<T>): () => Promise<T> {
+    if (!now) return read
+    const sent = read().then(
+      (value) => ({ value }),
+      (error: unknown) => ({ error }),
+    )
+    return async () => {
+      const r = await sent
+      if ('error' in r) throw r.error
+      return r.value
+    }
   }
   /**
    * Whether the directory's own record of a contract shows that the directory probed it before
@@ -1537,8 +1694,9 @@ export class FrozenClient {
         if (home.value === 'Local') return { start, store: home.store, forwards: home.forwards, local: true }
         passed(start, home.forwards)
         hinted = { start, store: home.store, forwards: home.forwards, local: false }
-      } catch {
-        // Only reads were spent: the search below decides.
+      } catch (error) {
+        // Only reads were spent: the search below decides. A moved tip is the attempt's.
+        if (error instanceof TipMoved) throw error
       }
     for (const a of await this.storeList(at)) {
       const start = contractId(a.id)
@@ -1636,7 +1794,7 @@ export class FrozenClient {
         throw error
       }))
     } catch (error) {
-      if (rateLimit(error) !== undefined) throw error
+      if (rateLimit(error, LENS_RETRY_MS) !== undefined) throw error
       // A deployment that failed a check is held off; one whose check could not be read is not.
       const failed = error instanceof LensFailure && error.reason === 'deployment'
       if (failed) {
@@ -1654,7 +1812,7 @@ export class FrozenClient {
       if (this.lensStrikes.delete(lensMethod)) void this.noteLensHealth((h) => void delete h.strikes[lensMethod])
       return { value }
     } catch (error) {
-      if (rateLimit(error) !== undefined) throw error
+      if (rateLimit(error, LENS_RETRY_MS) !== undefined) throw error
       const reason = error instanceof LensFailure ? error.reason : 'read'
       // A reply that does not decode or check, three times without an answer in between, is not a
       // passing fault: the method is held off. No other failure counts.
@@ -1748,12 +1906,19 @@ export class FrozenClient {
     return Promise.race([Promise.resolve(op), late]).finally(stop)
   }
   /** A lens read: one the node rate-limits is sent again after its wait while `budget` lasts, never after one over 10 s. */
-  private async lensRead(at: Attempt | undefined, id: string, method: LensMethod, input: Uint8Array, budget: LensBudget): Promise<Uint8Array> {
+  private async lensRead(
+    at: Attempt | undefined,
+    id: string,
+    method: LensMethod,
+    input: Uint8Array,
+    budget: LensBudget,
+    info?: { batched?: boolean; alone?: boolean; ownHeight?: boolean },
+  ): Promise<Uint8Array> {
     for (;;) {
       try {
-        return await this.sharing.read(at, id, method, input)
+        return await this.sharing.read(at, id, method, input, true, info)
       } catch (error) {
-        const wait = rateLimit(error)
+        const wait = rateLimit(error, LENS_RETRY_MS)
         if (wait === undefined) throw error
         // A rate limit says nothing about the height: no snapshot reads it again at another.
         if (budget.retries <= 0 || wait > LENS_RETRY_MAX_MS) throw heightIndependent(error)
@@ -1762,11 +1927,37 @@ export class FrozenClient {
       }
     }
   }
-  /** The highest height this client saw, from a tip read or a lens reply it used. */
+  /**
+   * A lens query's reply. One a multicall answered that refuses for want of gas, which the lens's share of
+   * that query may cause and a direct query would not, is read again as a query of its own.
+   */
+  private async lensReply(
+    at: Attempt | undefined,
+    id: string,
+    driver: DataDriver,
+    method: LensMethod,
+    input: Uint8Array,
+    budget: LensBudget,
+  ): Promise<Uint8Array> {
+    // A view's reply reports its height, which the view is held to.
+    const info: { batched?: boolean; ownHeight?: boolean } = { ownHeight: true }
+    const bytes = await this.lensRead(at, id, method, input, budget, info)
+    if (!info.batched) return bytes
+    const short = (r: LensRefusal | null | undefined) => r != null && (r.code === 'GasBudget' || r.code === 'ReadFailed' || r.cause === 'GasBudget')
+    let refusal: LensRefusal | null | undefined
+    try {
+      // A name page's own primary check refuses inside its reply.
+      refusal = lensOutput<{ primary?: { refused?: LensRefusal | null } }>(driver, method, bytes).primary?.refused
+    } catch (error) {
+      refusal = error instanceof LensFailure ? error.refusal : undefined
+    }
+    return short(refusal) ? this.lensRead(at, id, method, input, budget, { alone: true }) : bytes
+  }
+  /** The highest height this client saw, from a tip read, a lens reply or a one-query read it used. */
   private seenHeight(): bigint | undefined {
-    const tip = this.sharing.highest(),
-      lens = this.lensTop
-    return tip === undefined ? lens : lens === undefined || tip > lens ? tip : lens
+    let top = this.sharing.highest()
+    for (const h of [this.lensTop, this.batchTop]) if (h !== undefined && (top === undefined || h > top)) top = h
+    return top
   }
   /**
    * One lens query and no tip read: its reply's height is the view's. Undefined, to read it between tip
@@ -1784,7 +1975,7 @@ export class FrozenClient {
     const refused = this.lensRefusedAt.get(request),
       sent = this.seenHeight()
     if (refused !== undefined && (sent === undefined || refused >= sent)) return undefined
-    const bytes = await this.lensRead(undefined, id, method, input, budget)
+    const bytes = await this.lensReply(undefined, id, driver, method, input, budget)
     // Below what this client saw by the time the reply arrived: an older state than it showed.
     const stale = (height: bigint) => {
       const seen = this.seenHeight()
@@ -1831,7 +2022,7 @@ export class FrozenClient {
       const refused = this.lensRefusals.get(`${request}/${at.height}`)
       if (refused)
         throw heightIndependent(new LensFailure('refused', `Lens ${method} refused this request at this height: ${refused.code}`, { refusal: refused }))
-      const bytes = await this.lensRead(at, id, method, input, budget)
+      const bytes = await this.lensReply(at, id, driver, method, input, budget)
       try {
         let reply: R
         try {
@@ -1861,7 +2052,8 @@ export class FrozenClient {
   /**
    * The lens deployment, once per client and, with `verificationCache`, once per cache: its entry commits
    * to its code and to an initialization bound to the release's directory, and the deployed lens reports
-   * that directory's binding and lens v1's interface, read one after the other. What it reported is kept
+   * that directory's binding and lens v1's interface, checked one after the other: read so, or, batching,
+   * together and ahead, in the directory verification's query (`readLensAhead`). What it reported is kept
    * only once both checks passed on chain reads, and checked again on every load.
    */
   private async checkLens(budget: LensBudget): Promise<void> {
@@ -1882,15 +2074,41 @@ export class FrozenClient {
     const key = this.factsKey('lens', id, contract),
       kept = await this.cachedLensFacts(key)
     if (kept && sound(kept)) return this.lensChecked()
-    const read = async <T>(method: 'binding' | 'lens_interface'): Promise<T> =>
-      lensOutput<T>(driver, method, await this.lensRead(undefined, id, method, lensInput(driver, method, null), budget))
-    const binding = await read<Binding>('binding')
+    // Read ahead with the directory's verification, or now; batching, both in one query, checked in order.
+    const ahead = this.lensAhead && !this.lensAheadTaken ? await this.lensAhead : undefined
+    this.lensAheadTaken = true
+    const read = <T>(method: 'binding' | 'lens_interface', sent?: Promise<Uint8Array | undefined>) =>
+      this.started(this.batcher !== undefined, async (): Promise<T> =>
+        lensOutput<T>(driver, method, (await sent) ?? (await this.lensRead(undefined, id, method, lensInput(driver, method, null), budget))))
+    const bindingRead = read<Binding>('binding', ahead?.binding),
+      faceRead = read<typeof LENS_INTERFACE>('lens_interface', ahead?.face)
+    const binding = await bindingRead()
     if (!sameBinding(binding, this.directoryBinding())) off('Lens deployment binding mismatch')
-    const face = await read<typeof LENS_INTERFACE>('lens_interface')
+    const face = await faceRead()
     if (Object.entries(LENS_INTERFACE).some(([k, v]) => face[k as keyof typeof face] !== v))
       off('Unsupported lens interface')
     this.keepLensFacts(key, { binding, face })
     this.lensChecked()
+  }
+  /**
+   * The lens deployment check's two reads, sent now, beside the directory's verification and in its query:
+   * none where the check would read nothing, with no lens or the lens off, its check held off or its facts
+   * kept. Each is answered only by a multicall reply; anything else leaves the check to read it itself.
+   */
+  private async readLensAhead(): Promise<LensAhead | undefined> {
+    const lens = this.release.lens
+    if (!lens || this.options.useLens === false || !this.batcher?.active) return undefined
+    const id = contractId(lens.contract.contractId)
+    try {
+      await (this.lensHealth ??= this.loadLensHealth(lens.contract))
+      if (this.lensCheck || this.lensCheckUntil > elapsed() || (await this.cachedLensFacts(this.factsKey('lens', id, lens.contract))))
+        return undefined
+    } catch {
+      return undefined
+    }
+    const read = (method: 'binding' | 'lens_interface') =>
+      this.batcher!.read(id, method, lensInput(lens.driver, method, null), true).then((reply) => reply.bytes, () => undefined)
+    return { binding: read('binding'), face: read('lens_interface') }
   }
   /** The deployment passed its check: nothing holds the lens off in this client. */
   private lensChecked(): void {
@@ -2055,6 +2273,7 @@ export class FrozenClient {
               p.incarnation.serial === view.name.incarnation.serial,
           )
         } catch (error) {
+          if (error instanceof TipMoved) throw error
           page.primary.error = error
         }
       }
@@ -2461,8 +2680,9 @@ export class FrozenClient {
         try {
           const home = await this.followHomeRaw(at, contractId(homeHint), key.root)
           if (home.value === 'Local') guesses.push(home.store)
-        } catch {
+        } catch (error) {
           // Only reads were spent: the newest store is asked next.
+          if (error instanceof TipMoved) throw error
         }
       guesses.push(contractId(context.newest_store))
       for (const store of new Set(guesses))
@@ -2508,8 +2728,9 @@ export class FrozenClient {
       try {
         const found = await this.primaryAt(at, contractId(homeHint), endpoint)
         if (found) return found
-      } catch {
+      } catch (error) {
         // Only reads were spent: every store is asked below.
+        if (error instanceof TipMoved) throw error
       }
     let found: VerifiedPrimary | null = null
     for (const a of await this.storeList(at)) {

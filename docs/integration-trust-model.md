@@ -376,6 +376,76 @@ per-contract read scopes never use the lens (as `quoteRenewal`, `locate`,
 `quoteRegistration` and `prepareRegistration` do not), or a client created with
 `useLens: false`.
 
+### Batched reads
+
+The client sends the contract reads it makes in one tick, before the next task runs, as one
+query of [Multicall for Dusk](https://github.com/HDauven/dusk-multicall) v0.1.0 (`aggregate`), at
+`MULTICALL_CONTRACT_ID` on mainnet and testnet: its reviewed Wasm, deployed with nonce 0, which the
+ID derives from. It is on by default where that deployment is, for a mainnet or testnet release
+(network 1 or 2) read through the transport the client builds from the manifest's node URL. Elsewhere,
+and through a custom `transport`, it batches only with `multicall: true` or a contract ID, and
+`multicall: false` sends every read as its own query. The query goes out at the next task, which a
+background tab does not hold back as it holds timers. The multicall runs each call as a sub-call, all in one session at one state,
+and returns each callee's reply bytes or error with the height of the block whose state the query
+read. Each read decodes its reply with the release's driver, as a direct read does. The multicall adds
+no trust: it holds no state, refuses every caller but a query, and its answers are the node's, as a
+direct read's are. Identical reads in one tick are one call.
+
+Gas. A query has Rusk's 3e9 bound, and a call with a cap of 0 gets a fair share of what is left. On
+testnet every frozen read takes at most 131k gas, far below any share, except a store's
+`quote_registration`, which prices only with more than 60M left: it gets 80M. A lens view shares its
+gas among the reads it may still make and refuses with `GasBudget` below 1M a read; it gets its
+reads × 4M + 30M (`resolve` 390M, `reverse` 842M, `name_page` 1.114e9, `availability` 590M,
+`bootstrap` 110M, `pricing` 46M), so each nested read gets at least 2M, and an availability check's
+store quote its full 500M, as in a direct query. Capped calls go first, at most 2.5e9 of caps a query,
+so a fair share is still at least 1.9M a call when each spends its whole cap. A call that runs out of
+gas anyway is sent again alone, and so is a lens view a batch left refusing for want of gas.
+
+Limits. A query takes at most 256 calls and an envelope of 64 KiB, and is planned for 60,000 bytes of
+replies, from the largest reply each function returned so far (2 KiB before one did). A query whose
+replies pass 64 KiB fails whole.
+
+Heights. A read that alone makes up an operation, a contract read scope's other than a routed
+`Located` read or `home`, takes its height from the query and reads no tip: one query reads one
+state, as a lens view does. Its answer is used only at or above the highest height the client saw;
+one below is read again between tip reads. A multi-read snapshot keeps its tip reads, and each batched
+reply it uses must report the attempt's height: one that reports another shows a block landed, or a
+node that went back, and the snapshot is read again at once. A query reports no block hash, so a block
+replaced at the same height shows only in the closing tip read, as without batching.
+
+Reads made again. What 0.4.1 answers from a reply it shared at a tip it saw within `heightReuseMs` is
+answered so, between tip reads, with no query: a read made again within it reads one tip, and
+concurrent ones share it. A one-query reply is kept for that too, by its height alone, as a reply a
+transport without block hashes reads is: only for the same read made alone, at that height, within
+`heightReuseMs`, and forgotten once the client sees another block at that height. No multi-read
+snapshot takes one; it shares only replies read between its tip reads. A block replaced at that height
+before the client saw either, and within that window, is the one change such a read can miss, as a
+one-query read can.
+
+Lens deployment. Batching, the lens deployment check's two reads go out with the directory's
+verification, in its query, unless the check would read nothing (its facts kept, the lens off or held
+off); the check takes their replies only once the directory verified, and reads for itself what no
+multicall answered. A cold page's lens view is then its second query.
+
+Failures. A call that fails fails its read as a direct query would: a callee's panic, a missing
+contract or function, with a `NodeReadError` of status 500, as public nodes answer a direct read that
+fails. The message names the callee's error (`DuskDS:v1:<code>`), which a public node's direct reply
+hides; nothing in the SDK depends on it. A reply past 32 KiB fails as the HTTP transport fails a direct
+one. Such a failure is the read's answer at its query's height, held to it as a reply is: one below what
+the client saw is read again between tip reads, and in a snapshot one from another height reads the
+snapshot again. A read outside any snapshot, such as a contract's verification, uses no reply or failure
+from below what the client saw: it is sent again as one direct query, as 0.4.1 sends it. The client takes only a reply that is exactly what rkyv writes, each result's bytes
+claimed once and in order, and reads a reply no further than its bound. A query the node rate-limits (429, or 503 with `Retry-After`) fails each of its reads with that
+status and wait, as one direct read: a lens view sends its query again after the wait, three times a
+call, and any other read fails; none is sent alone, which would multiply the load. Any other failure
+of the whole query, such as an error page, a reply that does not decode or a chain without the
+multicall, sends its reads again one query each, and a second in a row turns batching off for 5
+minutes. The tab keeps that count in `sessionStorage`, under a key derived from the node's URL and the
+multicall's ID, so a broken multicall costs a tab two failed queries in all: the record holds only when
+it ends and why (one failure, or the holdoff), and expires with it. Where storage is missing or throws,
+each client counts its own. `onMulticallFallback` reports each. What verification and
+`verificationCache` keep is the same either way: the same facts, from the same replies.
+
 ## Writes
 
 Calls freeze reviewed arguments. Paid calls derive the exact deposit from those
