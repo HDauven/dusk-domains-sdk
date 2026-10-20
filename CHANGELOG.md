@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.5.1 (2026-10-20)
+
+- Keep the multicall's holdoff per client; drop its `sessionStorage` record.
+- Read a single read made again in one multicall query, not from a kept reply.
+
 ## 0.5.0 (2026-10-20)
 
 - Send the contract reads of one tick as one Multicall for Dusk query (`MULTICALL_CONTRACT_ID`), on by default for mainnet and testnet releases through the transport the client builds; add the `multicall` and `onMulticallFallback` options.

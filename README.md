@@ -2,7 +2,7 @@
 
 TypeScript SDK for the ADR 0004 frozen layer: directory, store shards,
 registry-qualified resolvers, vault, replaceable policy and marketplace v1.
-Version **0.5.0** targets a fresh frozen deployment. The 0.2 router/core/treasury
+Version **0.5.1** targets a fresh frozen deployment. The 0.2 router/core/treasury
 clients and legacy events have been removed.
 
 ## Quickstart
@@ -63,7 +63,7 @@ height. The client sends the contract reads it makes in one tick as one query of
 [Multicall for Dusk](https://github.com/HDauven/dusk-multicall) (`MULTICALL_CONTRACT_ID`, the
 same on mainnet and testnet), and each read answers and fails as it would alone; a read that
 alone makes up an operation, such as `client.directory.config()`, then reads no tip either, as
-the query reports its height (`readAt` returns it). It is on by default for a mainnet or testnet
+the query reports its height (`readAt` returns it), and is read again each time it is made. It is on by default for a mainnet or testnet
 release through the transport the client builds; elsewhere, and through a custom `transport`, only
 with `multicall: true` or a contract ID, and `multicall: false` sends every read as its own query
 ([batched reads](docs/integration-trust-model.md#batched-reads)). A custom transport without `currentBlock` gives heights only: operations then

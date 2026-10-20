@@ -40,62 +40,6 @@ export interface MulticallFallback {
   disabled: boolean
 }
 /**
- * What the tab keeps of the multicall's failures, under one node and multicall: when the record ends, in
- * milliseconds since the epoch (`Date.now`), and why. Nothing else.
- */
-export interface TabHoldoff {
-  until: number
-  /** `strike`: one query failed whole; `holdoff`: two in a row did, and batching is off until `until`. */
-  reason: 'strike' | 'holdoff'
-}
-export interface TabHoldoffStore {
-  load(): TabHoldoff | undefined
-  save(record: TabHoldoff): void
-  clear(): void
-}
-/**
- * The tab's record under `key`, in `sessionStorage`, so a page load after one whose queries failed holds off
- * too. Every access is inside try/catch: where storage is missing, throws or is blocked, nothing is kept and
- * each client holds batching off on its own failures alone.
- */
-export function tabHoldoff(key: string): TabHoldoffStore {
-  const storage = (): Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | undefined => {
-    try {
-      return (globalThis as { sessionStorage?: Storage }).sessionStorage ?? undefined
-    } catch {
-      return undefined
-    }
-  }
-  return {
-    load() {
-      try {
-        const text = storage()?.getItem(key)
-        if (typeof text !== 'string') return undefined
-        const record = JSON.parse(text) as Partial<TabHoldoff> | null
-        if (!record || (record.reason !== 'strike' && record.reason !== 'holdoff')) return undefined
-        if (typeof record.until !== 'number' || !Number.isFinite(record.until)) return undefined
-        return { until: record.until, reason: record.reason }
-      } catch {
-        return undefined
-      }
-    },
-    save(record) {
-      try {
-        storage()?.setItem(key, JSON.stringify({ until: record.until, reason: record.reason }))
-      } catch {
-        // Not kept: this client holds off on its own.
-      }
-    },
-    clear() {
-      try {
-        storage()?.removeItem(key)
-      } catch {
-        // Not kept either way.
-      }
-    },
-  }
-}
-/**
  * Run `task` at the next task, after every microtask of this one, as `setTimeout(task, 0)` would, but not
  * behind the timers a background tab throttles to one a second: through a fresh MessageChannel where the
  * platform has one, its port closed once used, so that Node and Deno still exit; else `setImmediate`, else
@@ -166,33 +110,16 @@ export class Batcher {
   private readonly sizes = new Map<string, number>()
   /**
    * `gas`: the cap a read needs, 0 for a fair share of the query's gas. `report` hears every fallback
-   * and is never awaited. `tab`: where the tab keeps failures, so they count across its page loads.
+   * and is never awaited.
    */
   constructor(
     private readonly transport: ReadTransport,
     readonly contractId: string,
     private readonly gas: (id: string, fn: string) => bigint,
     private readonly report?: (fallback: MulticallFallback) => void,
-    private readonly tab?: TabHoldoffStore,
-  ) {
-    this.recall()
-  }
-  /**
-   * The tab's record, while it holds: a holdoff holds batching off here too, a strike counts as one query
-   * that failed. One past its end, or further off than any holdoff lasts (a clock set back), holds nothing.
-   */
-  private recall(): TabHoldoff | undefined {
-    const record = this.tab?.load()
-    const left = record ? record.until - Date.now() : 0
-    if (!record || !(left > 0 && left <= HOLDOFF_MS)) return undefined
-    if (record.reason === 'holdoff') this.offUntil = Math.max(this.offUntil, elapsed() + left)
-    else this.streak = Math.max(this.streak, 1)
-    return record
-  }
-  /** Whether reads go through the multicall now, or one at a time while it is held off, here or by the tab. */
+  ) {}
+  /** Whether reads go through the multicall now, or one at a time while it is held off. */
   get active(): boolean {
-    if (elapsed() < this.offUntil) return false
-    this.recall()
     return elapsed() >= this.offUntil
   }
   /**
@@ -240,7 +167,7 @@ export class Batcher {
    * Queries for `calls`: every capped call first, then the fair shares, each query within 256 calls, an
    * envelope of 64 KiB, `REPLY_BUDGET` of estimated reply and `CAP_BUDGET` of caps.
    */
-  plan(calls: Call[]): Call[][] {
+  private plan(calls: Call[]): Call[][] {
     const ordered = [...calls.filter((c) => c.gas > 0n), ...calls.filter((c) => c.gas === 0n)]
     const queries: Call[][] = []
     let current: Call[] = [],
@@ -297,8 +224,6 @@ export class Batcher {
       return this.fail(batch, error)
     }
     this.streak = 0
-    // A query answered: a failure the tab kept is no longer one of two in a row.
-    if (this.tab?.load()?.reason === 'strike') this.tab.clear()
     batch.forEach((c, i) => this.settle(c, results[i], height))
   }
   private settle(c: Call, result: MulticallResult, height: bigint): void {
@@ -331,19 +256,11 @@ export class Batcher {
       for (const w of c.waiters) w.reject(failure)
     }
   }
-  /**
-   * A query that failed whole: its reads are sent alone, and a second failure in a row, in this client or
-   * an earlier page load of the tab, holds batching off; the tab keeps which.
-   */
+  /** A query that failed whole: its reads are sent alone, and a second failure in a row holds batching off. */
   private fail(batch: Call[], error: unknown, counts = true): void {
-    if (counts) {
-      const kept = this.recall()
-      if (kept?.reason === 'holdoff') this.streak = 0
-      else if (++this.streak >= STREAK) {
-        this.offUntil = elapsed() + HOLDOFF_MS
-        this.streak = 0
-        this.tab?.save({ until: Date.now() + HOLDOFF_MS, reason: 'holdoff' })
-      } else this.tab?.save({ until: Date.now() + HOLDOFF_MS, reason: 'strike' })
+    if (counts && ++this.streak >= STREAK) {
+      this.offUntil = elapsed() + HOLDOFF_MS
+      this.streak = 0
     }
     this.tell({ reason: 'batch', error, calls: batch.length, disabled: !this.active })
     for (const c of batch) this.sendAlone(c)
