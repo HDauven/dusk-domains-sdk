@@ -1,5 +1,9 @@
 /** Bounded indexer confirmation. A submitted transaction is not yet projected state. @module */
 import type { DuskDomainsIndexerClient } from '../indexer/client.ts'
+/**
+ * Options for `waitForIndexerConfirmation`: the check, the attempts (20 by default), the delay between
+ * them (1000 ms by default), an abort signal and a custom wait.
+ */
 export interface IndexerConfirmationOptions {
   check: () => Promise<boolean>
   attempts?: number
@@ -7,6 +11,10 @@ export interface IndexerConfirmationOptions {
   signal?: AbortSignal
   wait?: (delayMs: number, signal?: AbortSignal) => Promise<void>
 }
+/**
+ * Outcome of a confirmation wait: whether the check passed, the attempts used, and the error of the
+ * last attempt if it threw.
+ */
 export interface IndexerConfirmationResult {
   confirmed: boolean
   attempts: number
@@ -27,6 +35,10 @@ async function delay(ms: number, signal?: AbortSignal): Promise<void> {
     signal?.addEventListener('abort', abort, { once: true })
   })
 }
+/**
+ * Run `check` until it returns true, up to `attempts` times with `delayMs` between them. Running out is
+ * `confirmed: false`, not success; an abort throws.
+ */
 export async function waitForIndexerConfirmation(
   options: IndexerConfirmationOptions,
 ): Promise<IndexerConfirmationResult> {

@@ -17,6 +17,10 @@ interface Shape {
   maxItems?: number
   format?: string
 }
+/**
+ * Canonical encoding C of a checked wire value, the bytes frozen digests hash: little-endian integers,
+ * u32 length prefixes and one-byte tags. Throws for a value the schema rejects.
+ */
 export function canonicalBytes(type: string, value: unknown): number[] {
   const checked = wireValue(type, value)
   function integer(value: unknown, width: number): number[] {
@@ -81,6 +85,10 @@ export function canonicalBytes(type: string, value: unknown): number[] {
   }
   return encode(definitions[type] as Shape, checked, type)
 }
+/**
+ * Digest of a name's records in key-byte order, as a slot pointer commits to it. Throws for more than
+ * 16 records or a duplicate key.
+ */
 export function recordsDigest(records: RecordValue[]): number[] {
   if (records.length > 16) throw new Error('Too many records')
   const sorted = [...records].sort((a, b) => {
@@ -141,6 +149,7 @@ export function moveManifestDigest(
   }
   return hash('duskds:manifest:v1', ...parts)
 }
+/** Throw unless `records` has `count` entries whose `recordsDigest` is `digest`. */
 export function assertRecordsDigest(
   records: RecordValue[],
   count: number,

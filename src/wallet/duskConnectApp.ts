@@ -1,4 +1,12 @@
-/** Dusk Connect public-wallet integration with exact deposits and explicit action gas. @module */
+/**
+ * Signing through Dusk Connect: `createDuskDomainsConnectApp` prepares and submits frozen
+ * calls as public Moonlight transactions, only for contracts its client verified against
+ * the release, with exact deposits and each action's gas limit.
+ *
+ * Import it in the app that signs; reading and building calls need only the root.
+ *
+ * @module
+ */
 import { type FrozenCall, buildCall } from '../frozen/calls.ts'
 import type { LoadedRelease } from '../frozen/manifest.ts'
 import { MAX_AUTO_GAS_PRICE, MAX_GAS_LIMIT } from '../frozen/gas.ts'
@@ -22,9 +30,14 @@ import {
   WriteBalanceError,
 } from '../writes/balance.ts'
 export { UnverifiedContractError } from '../frozen/trust.ts'
+/** A Dusk Connect wallet, such as `app.wallet` from `@dusk/connect`: anything with its `request` method. */
 export interface ConnectWallet {
   request(method: string, params?: unknown): Promise<unknown>
 }
+/**
+ * A call encoded for review and for `dusk_sendTransaction`: chain, contract, function, encoded
+ * arguments, deposit, gas, and display text.
+ */
 export interface PreparedCall {
   chainId: string
   contractId: string
@@ -39,10 +52,15 @@ export interface PreparedCall {
     maximumGasCostLux: string
   }
 }
+/**
+ * A gas price to use instead of the wallet's estimate, and how long to wait for that estimate (1000 ms
+ * by default).
+ */
 export interface ConnectOptions {
   gasPrice?: bigint
   estimateTimeoutMs?: number
 }
+/** Prepares calls for review and submits them through the wallet, from `createDuskDomainsConnectApp`. */
 export interface ConnectApp {
   prepare(call: FrozenCall): Promise<PreparedCall>
   submit(call: FrozenCall): Promise<unknown>

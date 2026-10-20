@@ -4,6 +4,7 @@
 
 - Keep the multicall's holdoff per client; drop its `sessionStorage` record.
 - Read a single read made again in one multicall query, not from a kept reply.
+- Document every entrypoint and exported symbol.
 
 ## 0.5.0 (2026-10-20)
 

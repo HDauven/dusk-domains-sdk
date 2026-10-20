@@ -21,4 +21,26 @@ jobs:
           test "$GITHUB_REF_NAME" = "v$(node -p "require('./package.json').version")"
       - run: npm test
       - run: npm run build && npm run typecheck
-      - run: npx jsr publish
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: 2.9.7
+      # JSR can queue a version for many minutes, and the CLI gives up at the first failed status
+      # poll, before it signs provenance. Run again, it resumes the queued task and signs once that
+      # finishes, so only that failure is retried. If the task finished before the retry, the CLI
+      # skips the published version unsigned, and the job fails to say so.
+      - name: Publish to JSR with provenance
+        shell: bash
+        run: |
+          log="$RUNNER_TEMP/publish.log"
+          for attempt in 1 2 3 4 5; do
+            if deno publish --no-check 2>&1 | tee "$log"; then
+              if [ "$attempt" -gt 1 ] && grep -q 'Skipping, already published' "$log"; then
+                echo '::error::JSR published the version between attempts, so it has no provenance.'
+                exit 1
+              fi
+              exit 0
+            fi
+            grep -q 'Failed to get publishing status' "$log" || exit 1
+            [ "$attempt" -lt 5 ] && sleep 15
+          done
+          exit 1

@@ -51,7 +51,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && node scripts/build-event-catalog.mjs",
-    "jsr:dry-run": "npx jsr publish --dry-run --allow-dirty",
+    "jsr:dry-run": "deno publish --dry-run --allow-dirty --no-check",
     "prepare": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",

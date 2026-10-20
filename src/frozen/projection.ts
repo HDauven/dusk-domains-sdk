@@ -21,6 +21,10 @@ type Effect = {
     body: T.EventTypes[K] extends T.Event<infer B> ? B : never
   }
 }[EffectTopic]
+/**
+ * A root's move out of a store as its events tell it: ticket, progress, deadlines, staged rows, and
+ * how it ended.
+ */
 export interface ProjectedMove {
   ticket: T.MoveTicket
   lastProgressAt: bigint
@@ -30,6 +34,10 @@ export interface ProjectedMove {
   cancelled: T.MoveCancelled | null
   forwarded: T.Forward | null
 }
+/**
+ * A root's import into a destination store as its events tell it: status, staged rows, readiness and
+ * how it ended.
+ */
 export interface ProjectedImport {
   status: T.ImportStatus
   rows: Record<number, T.ImportRowStaged>
@@ -49,8 +57,13 @@ interface MarketTotals {
 /** Pre-consent-change checkpoints can lack counters; refresh before proposing. */
 export type ProjectedAdmission = Omit<T.Admission, 'governance_version'> &
   Partial<Pick<T.Admission, 'governance_version'>>
+/** Pre-consent-change checkpoints can lack `recipient_version`; refresh before proposing. */
 export type ProjectedDirectoryConfig = Omit<T.DirectoryConfig, 'recipient_version'> &
   Partial<Pick<T.DirectoryConfig, 'recipient_version'>>
+/**
+ * Live projection state, `schemaVersion` 3: everything the events say about the deployment, with its
+ * indexes. Persist it whole, with a codec that keeps bigints.
+ */
 export interface ProjectionState {
   schemaVersion: 3
   /** Disable effect retention when the indexer persists its own event history. */
@@ -104,24 +117,30 @@ export interface ProjectionState {
   effects: CommittedEvent[]
   receipts: Record<string, true>
 }
+/** The scope to project: the directory and the release-verified contracts, by ID and role. */
 export interface ProjectionOptions {
   directoryId: string
   contracts: Record<string, ContractRole>
   /** Defaults to true; false keeps effects empty for external history storage. */
   retainEffects?: boolean
 }
+/** Key of a name in `ProjectionState.names`. */
 export function nameStateKey(store: string, key: T.NameKey): string {
   return `${contractId(store)}:${hex(key.root)}:${hex(key.node)}`
 }
+/** Key of a root in the per-root maps of `ProjectionState`, such as `counters` and `forwards`. */
 export function rootStateKey(store: string, root: T.Node): string {
   return `${contractId(store)}:${hex(root)}`
 }
+/** Key of a primary in `ProjectionState.primaries`. */
 export function primaryStateKey(store: string, endpoint: T.Endpoint): string {
   return `${contractId(store)}:${hex(endpoint)}`
 }
+/** Key of a resolver slot in `ProjectionState.slots`. */
 export function slotStateKey(resolver: string, slot: T.SlotKey): string {
   return `${contractId(resolver)}:${hex(slot.registry)}:${hex(slot.node)}:${slot.epoch}`
 }
+/** Key of a beneficiary in `ProjectionState.referrals`. */
 export function principalStateKey(p: T.TypedPrincipal): string {
   return `${p.kind}:${hex(p.bytes)}`
 }
@@ -149,6 +168,7 @@ function requireHistory(
   if (!condition)
     throw new Error(`Missing or inconsistent event history: ${message}`)
 }
+/** An empty projection for `options`. Throws unless `contracts` holds exactly one directory, `directoryId`. */
 export function createProjectionState(
   options: ProjectionOptions,
 ): ProjectionState {
@@ -333,6 +353,7 @@ export function moveLockEndsAt(move: ProjectedMove): bigint {
     ].reduce((a, b) => (a < b ? a : b))
   )
 }
+/** Whether `move` still locks its root at `height`: not cancelled or forwarded, and before `moveLockEndsAt`. */
 export function effectiveMoveLock(
   move: ProjectedMove,
   height: bigint,
@@ -1321,6 +1342,7 @@ export function restoreProjection(
   Reflect.deleteProperty(restored, 'controllerApprovals')
   return restored
 }
+/** The projector `createProjector` returns: live state, `apply`, and in-memory checkpoints. */
 export interface Projector {
   /** Live state; use snapshotProjection for an independent view. */
   readonly state: ProjectionState
@@ -1492,6 +1514,7 @@ export function projectedName(
     },
   }
 }
+/** The store's `read_records` answer from projected state, its digest checked against the slot pointer. */
 export function projectedRecords(
   state: ProjectionState,
   store: string,
@@ -1519,6 +1542,10 @@ export function projectedRecords(
     },
   }
 }
+/**
+ * The store's `children` answer from projected state: up to `limit` children after `after`, ordered by
+ * node. Throws for a limit outside 1 to 16.
+ */
 export function projectedChildren(
   state: ProjectionState,
   store: string,
@@ -1542,6 +1569,10 @@ export function projectedChildren(
     },
   }
 }
+/**
+ * The store's `pending_commitment` answer at `height`: a commitment aged 0 to 8,640 blocks, or with
+ * `raw` any stored one, as `commitment_raw` answers.
+ */
 export function projectedCommitment(
   state: ProjectionState,
   store: string,
@@ -1558,6 +1589,10 @@ export function projectedCommitment(
     ? structuredClone(c)
     : null
 }
+/**
+ * The store's `move_status` answer at `height`: a preparing move with its lock end, its forward once
+ * it completed, or `null` for an unknown or cancelled move.
+ */
 export function projectedMoveStatus(
   state: ProjectionState,
   store: string,
@@ -1583,6 +1618,10 @@ export function projectedMoveStatus(
     },
   }
 }
+/**
+ * The store's `move_cooldowns` answer at `height`: root and initiator cancellations still inside their
+ * 8,640-block cooldown.
+ */
 export function projectedCooldowns(
   state: ProjectionState,
   store: string,

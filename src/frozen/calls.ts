@@ -6,15 +6,22 @@ import { walletGasLimit } from './wallet-gas.ts'
 import { refuseLensRows } from './trust.ts'
 import type { Methods } from './types.ts'
 import type { ContractRole } from './manifest.ts'
+/** Method names of contract role `R`. */
 export type Method<R extends ContractRole> = keyof Methods[R] & string
+/** Input wire type of method `M` on role `R`. */
 export type Input<
   R extends ContractRole,
   M extends Method<R>,
 > = Methods[R][M] extends { input: infer I } ? I : never
+/** Output wire type of method `M` on role `R`. */
 export type Output<
   R extends ContractRole,
   M extends Method<R>,
 > = Methods[R][M] extends { output: infer O } ? O : never
+/**
+ * A contract call as `buildCall` makes it, deeply frozen: role, contract ID, method, checked wire
+ * arguments, the deposit in Lux and the gas limit.
+ */
 export interface FrozenCall<
   R extends ContractRole = ContractRole,
   M extends string = string,
@@ -26,12 +33,17 @@ export interface FrozenCall<
   readonly deposit: string
   readonly gasLimit: bigint
 }
+/**
+ * A method's catalog entry: its name, input and output wire type names, and its mode (`read`, `write`,
+ * `internal` or `metadata`).
+ */
 export interface MethodDefinition {
   name: string
   input: string
   output: string
   mode: string
 }
+/** Catalog entry of a role's method; throws for an unknown method. */
 export function methodDefinition(
   role: ContractRole,
   method: string,

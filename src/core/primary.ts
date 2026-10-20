@@ -2,6 +2,12 @@
 import { authority, equalBytes, nameKey } from '../frozen/bytes.ts'
 import { u64 } from '../frozen/json.ts'
 import type { NameView, PrimaryView, RecordValue } from '../frozen/types.ts'
+/**
+ * `verified`, or the first check that failed: no mapping (`missing`), a mapping that no longer matches
+ * the current name (`stale`), an inactive or expired name (`inactive`), an endpoint that is neither
+ * owner nor manager (`unauthorized`), and a forward record that is missing (`forward_missing`) or is
+ * not this endpoint's `moonlight_address` (`forward_mismatch`).
+ */
 export type PrimaryNameStatus =
   | 'missing'
   | 'stale'
@@ -10,6 +16,7 @@ export type PrimaryNameStatus =
   | 'forward_missing'
   | 'forward_mismatch'
   | 'verified'
+/** Result of `primaryNameStatus`; `verified` is true only for the `verified` status. */
 export interface PrimaryNameVerification {
   status: PrimaryNameStatus
   verified: boolean

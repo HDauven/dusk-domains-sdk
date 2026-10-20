@@ -1,6 +1,14 @@
 // Generated from indexerEventCatalog.ts by npm run build. Do not edit.
 // Generated from the frozen v1 protocol schemas by scripts/generate-frozen.mjs.
-/** Authoritative frozen v1 event topics, emitter roles and wire schemas. @module */
+/**
+ * Every frozen v1 event topic, with the role that emits it and its wire type.
+ *
+ * Import this entrypoint where only the catalog is needed, such as indexer
+ * tooling that routes or checks raw events: it imports nothing else.
+ *
+ * @module
+ */
+/** Emitter role and wire type of each topic; role `*` accepts any role. */
 export const indexerEventCatalog = {
     "operation_begin": {
         "role": "*",
@@ -247,4 +255,5 @@ export const indexerEventCatalog = {
         "type": "Event<RootCeded>"
     }
 };
+/** Every topic in `indexerEventCatalog`, in catalog order. */
 export const duskDomainsIndexedEventTypes = Object.keys(indexerEventCatalog);

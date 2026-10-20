@@ -27,10 +27,18 @@ import type {
   RenewalQuote,
   Name,
 } from '../frozen/types.ts'
+/** Lux in one DUSK: DUSK amounts have nine decimals. */
 export const LUX_PER_DUSK = 1_000_000_000n
+/** Largest registration or renewal fee in Lux the v1 rules allow: 2^53 - 1. */
 export const MAX_REGISTRATION_FEE_LUX = 9_007_199_254_740_991n
+/** Days after a root's grace end during which registering it again costs a premium. */
 export const PREMIUM_WINDOW_DAYS = 21
+/** The launch policy's starting premium in Lux: 1,000,000 DUSK. */
 export const INITIAL_PREMIUM_LUX = '1000000000000000'
+/**
+ * The launch policy's configuration: yearly prices by label length, the premium start, referral rates
+ * and `RESERVED_LABELS`. Fetch the selected policy's config for current rules.
+ */
 export function launchPolicyConfig(): PolicyConfig {
   return {
     config_version: 1n,
@@ -50,6 +58,10 @@ export function launchPolicyConfig(): PolicyConfig {
     denied: [],
   }
 }
+/**
+ * Format Lux as DUSK text without floating point, such as `1.5 DUSK`. Throws a `RangeError` for a
+ * string that is not an integer.
+ */
 export function formatLuxAsDusk(value: bigint | string): string {
   if (typeof value === 'string' && !/^-?\d+$/u.test(value))
     throw new RangeError('Invalid Lux')
@@ -62,6 +74,10 @@ export function formatLuxAsDusk(value: bigint | string): string {
     .replace(/0+$/u, '')
   return `${sign}${absolute / LUX_PER_DUSK}${fraction ? `.${fraction}` : ''} DUSK`
 }
+/**
+ * The premium due now, and when it next drops and when it ends, as heights and estimated ISO dates.
+ * Dates need `nowSeconds`; heights and dates are null when no premium applies.
+ */
 export interface PremiumSchedule {
   premiumLux: string
   premiumEndsAtBlockHeight: bigint | null
@@ -69,6 +85,12 @@ export interface PremiumSchedule {
   premiumEndsAt: string | null
   nextStepAt: string | null
 }
+/**
+ * Premium for registering a root again whose grace ended at `graceEndsAtBlockHeight`, seen at
+ * `currentBlockHeight`. It starts near `premiumStartLux` and about halves each day; it is zero before
+ * the grace end, from day `PREMIUM_WINDOW_DAYS` on, and for `null` (no earlier registration). Throws
+ * for a start that is not Lux text or exceeds `MAX_REGISTRATION_FEE_LUX`.
+ */
 export function registrationPremiumSchedule(options: {
   premiumStartLux: string
   graceEndsAtBlockHeight: bigint | null
@@ -108,6 +130,11 @@ export function registrationPremiumSchedule(options: {
     nextStepAt: date(next),
   }
 }
+/**
+ * Check a policy configuration against the wire schema and the v1 rules: config version 1, a minimum
+ * root length of 1 to 63 bytes, sorted unique canonical label lists, referral rates up to 3000 bps
+ * and fees within `MAX_REGISTRATION_FEE_LUX`. Returns the checked copy; throws otherwise.
+ */
 export function validatePolicyConfig(input: PolicyConfig): PolicyConfig {
   const config = wireValue('PolicyConfig', input)
   if (
@@ -133,6 +160,10 @@ export function validatePolicyConfig(input: PolicyConfig): PolicyConfig {
     throw new RangeError('Policy exceeds fee cap')
   return config
 }
+/**
+ * Referral reward in Lux: `baseBps` of the base fee plus `premiumBps` of the premium, each rounded
+ * down. Throws a `RangeError` for a rate outside 0 to 3000 bps or fees above `MAX_REGISTRATION_FEE_LUX`.
+ */
 export function referralRewardLux(
   baseLux: string,
   premiumLux: string,
@@ -153,6 +184,7 @@ export function referralRewardLux(
     (premium * BigInt(premiumBps)) / 10000n
   ).toString()
 }
+/** A local policy quote from `estimateRegistrationQuote`, with its total. It never replaces a store quote. */
 export interface EstimatedPolicyQuote extends PolicyQuote {
   estimate: true
   total_lux: string

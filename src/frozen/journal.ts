@@ -7,6 +7,7 @@ import {
 } from '../indexer/events/indexerEventCatalog.ts'
 import type { ContractRole } from './manifest.ts'
 import type { OperationBegin, OperationEnd, Event } from './types.ts'
+/** A receipt event: emitter, topic, decoded data, receipt ordinal and whether it reverted. */
 export interface ReceiptEvent {
   emitter: string
   topic: string
@@ -14,12 +15,17 @@ export interface ReceiptEvent {
   reverted?: boolean
   ordinal: number
 }
+/** A transaction receipt to project: ID, block height, success and its events in ordinal order. */
 export interface Receipt {
   id: string
   height: bigint
   success: boolean
   events: ReceiptEvent[]
 }
+/**
+ * An event that `committedEvents` kept: from a scoped emitter, checked against its topic's wire type,
+ * inside operations that all ended.
+ */
 export interface CommittedEvent extends ReceiptEvent {
   /** Receipt ordinal of this operation begin, even when op_seq is reused. */
   operationOrdinal?: number

@@ -1,21 +1,31 @@
 /** Store lifecycle and target-block-time estimates (§3). @module */
 import { u64 } from '../frozen/json.ts'
+/** One day in seconds; over the target block time it gives `BLOCKS_PER_DAY`. */
 export const SECONDS_PER_DAY = 86_400
+/** Dusk's target block time in seconds, which every height-to-time estimate here assumes. */
 export const DUSK_APPROX_BLOCK_TIME_SECONDS = 10
+/** Blocks in a day at the target block time. */
 export const BLOCKS_PER_DAY = 8_640n
+/** Blocks in one registration year: 365 days at the target block time. */
 export const REGISTRATION_YEAR_BLOCKS = 3_153_600n
+/** Grace period after a root's expiry, in blocks: 30 days. */
 export const DEFAULT_GRACE_PERIOD_BLOCKS = 259_200n
+/** Furthest a root's expiry may lie past the current height, in blocks: ten registration years. */
 export const MAX_REGISTRATION_AHEAD_BLOCKS = 31_536_000n
+/** Expiry and grace-end block heights of a root registration. */
 export interface RegistrationLifecycle {
   expiresAt: bigint
   graceEndsAt: bigint
 }
+/** Where a height falls in a registration: before expiry, in grace, or past the grace end. */
 export type RegistrationLifecycleStatus = 'active' | 'grace' | 'expired'
+/** Blocks in `years` registration years. Throws a `RangeError` unless `years` is an integer from 1 to 10. */
 export function registrationYears(years: number): bigint {
   if (!Number.isInteger(years) || years < 1 || years > 10)
     throw new RangeError('Invalid years')
   return BigInt(years) * REGISTRATION_YEAR_BLOCKS
 }
+/** Expiry and grace end of a registration that starts at height `startsAt` and runs `years` years. */
 export function createRegistrationLifecycle(options: {
   startsAt: bigint
   years: number
@@ -28,6 +38,12 @@ export function createRegistrationLifecycle(options: {
     graceEndsAt: u64(expiresAt + DEFAULT_GRACE_PERIOD_BLOCKS),
   }
 }
+/**
+ * Lifecycle after renewing for `years` from the current expiry, also during grace. Throws a
+ * `RangeError` once grace has ended at `now`, for a grace end other than expiry plus
+ * `DEFAULT_GRACE_PERIOD_BLOCKS`, or when the new expiry lies more than
+ * `MAX_REGISTRATION_AHEAD_BLOCKS` past `now`.
+ */
 export function renewRegistrationLifecycle(options: {
   currentExpiresAt: bigint
   currentGraceEndsAt?: bigint
@@ -50,6 +66,7 @@ export function renewRegistrationLifecycle(options: {
     throw new RangeError('Expiry horizon exceeded')
   return result
 }
+/** Status at height `now`: `active` before expiry, `grace` until the grace end, then `expired`. */
 export function registrationLifecycleStatus(
   lifecycle: RegistrationLifecycle,
   now: bigint,
@@ -65,6 +82,7 @@ export function registrationLifecycleStatus(
       ? 'grace'
       : 'expired'
 }
+/** Current Unix time, rounded down to a whole second. */
 export function currentUnixSeconds(): number {
   return Math.floor(Date.now() / 1000)
 }
@@ -87,6 +105,10 @@ export function blockHeightToUnixSeconds(
     throw new RangeError('Unsafe block time estimate')
   return result
 }
+/**
+ * Blocks that cover `seconds` at the target block time, rounded up: an estimate. Throws a
+ * `RangeError` for a negative or unsafe integer.
+ */
 export function blocksForSeconds(seconds: number): bigint {
   if (!Number.isSafeInteger(seconds) || seconds < 0)
     throw new RangeError('Invalid seconds')

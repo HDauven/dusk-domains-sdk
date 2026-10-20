@@ -1,5 +1,11 @@
-/** Measured Moonlight wallet budgets with contract admission reserves. @module */
+/**
+ * Measured Moonlight wallet budgets with contract admission reserves.
+ *
+ * @module
+ */
+/** The protocol's gas ceiling, 3 billion; the Connect app refuses a call whose limit is higher. */
 export const MAX_GAS_LIMIT: bigint = 3_000_000_000n
+/** Highest gas price, in Lux per gas unit, the Connect app takes from the wallet's estimate. */
 export const MAX_AUTO_GAS_PRICE: bigint = 10n
 /**
  * Conservative no-input ceilings, gas units; buildCall refines these from the
@@ -93,6 +99,7 @@ export const GAS_LIMITS: Readonly<Record<string, bigint>> = Object.freeze({
   'marketplace.retry_return': 5_000_000n,
   'marketplace.claim_refund': 130_000_000n,
 })
+/** The `GAS_LIMITS` ceiling of a write; throws for a method without a wallet gas policy. */
 export function gasLimit(role: string, method: string): bigint {
   const value = GAS_LIMITS[`${role}.${method}`]
   if (value === undefined)

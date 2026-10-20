@@ -7,6 +7,7 @@ import { parseJson } from './json.ts'
 import { loadDataDriver, type DataDriver } from './driver.ts'
 import { methodCatalog } from './catalog.ts'
 import { lensCatalog } from './lens-schema.ts'
+/** Role of a contract in a frozen v1 deployment. */
 export type ContractRole =
   | 'directory'
   | 'store'
@@ -14,6 +15,10 @@ export type ContractRole =
   | 'vault'
   | 'policy'
   | 'marketplace'
+/**
+ * A release file, by path relative to the manifest, with its size and at least one digest (lowercase
+ * hex); other fields are kept.
+ */
 export interface Artifact {
   path: string
   bytes?: number
@@ -22,6 +27,10 @@ export interface Artifact {
   blake3?: string
   [key: string]: unknown
 }
+/**
+ * One contract of a release: role, contract ID, data driver and the optional code and init
+ * commitments. Other fields are kept.
+ */
 export interface ReleaseContract {
   role: ContractRole
   contractId: string
@@ -47,6 +56,10 @@ export interface LensContract {
   initHash?: string
   [key: string]: unknown
 }
+/**
+ * A validated release manifest: chain, frozen network byte, node and indexer URLs, contracts and the
+ * optional lens. Other fields are kept.
+ */
 export interface ReleaseManifest {
   chainId: string
   network: number
@@ -57,6 +70,10 @@ export interface ReleaseManifest {
   lens?: LensContract
   [key: string]: unknown
 }
+/**
+ * Options for loading a manifest: the fetch to use, the artifact base URL, node and indexer URL
+ * overrides, and whether to read through the lens.
+ */
 export interface ManifestOptions {
   /**
    * Fetches the manifest and artifacts and, with the default transport, sends node reads. It must
@@ -74,6 +91,10 @@ export interface ManifestOptions {
    */
   useLens?: boolean
 }
+/**
+ * A validated manifest with its contracts and verified data drivers by contract ID, the base URL its
+ * artifacts load from, and the lens when it loaded.
+ */
 export interface LoadedRelease {
   manifest: ReleaseManifest
   contracts: Map<string, ReleaseContract>
@@ -84,6 +105,7 @@ export interface LoadedRelease {
   /** Why the manifest's lens was not loaded: no code or init commitment, or its driver fetch failed. */
   lensError?: unknown
 }
+/** `value` as a plain object; throws for `null`, an array or a non-object. */
 export function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new Error('Expected an object')
@@ -108,6 +130,10 @@ const roles: readonly ContractRole[] = [
   'policy',
   'marketplace',
 ]
+/**
+ * Validate one `contracts` entry, its role taken from `role`, `key` or `roleHint`. Throws for an
+ * unknown role or any invalid field.
+ */
 export function validateReleaseContract(
   value: unknown,
   roleHint?: string,
@@ -254,6 +280,10 @@ export function verifyArtifact(bytes: Uint8Array, artifact: Artifact): void {
     if (artifact[key] !== undefined && hex(digest()) !== artifact[key])
       throw new Error(`Driver ${key} mismatch`)
 }
+/**
+ * Fetch a contract's data driver relative to `base` and load it only once its size and every digest
+ * match; throws unless its schema matches the role's methods.
+ */
 export async function fetchDriver(
   contract: ReleaseContract | LensContract,
   base: string,
@@ -305,6 +335,10 @@ async function driverFrom(contract: ReleaseContract | LensContract, bytes: Uint8
   }
   return driver
 }
+/**
+ * Load a release manifest from its URL, or an in-memory one with `artifactBaseUrl`, then fetch and
+ * verify every contract's data driver, and the lens's when the client may use it.
+ */
 export async function loadReleaseManifest(
   source: string | unknown,
   options: ManifestOptions = {},
