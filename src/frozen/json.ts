@@ -1,4 +1,9 @@
-/** Lossless JSON at driver and node boundaries. @module */
+/**
+ * Lossless JSON at driver and node boundaries.
+ *
+ * @module
+ */
+/** A JSON value as the lossless parser reads it: `bigint` for integers outside the safe range. */
 export type JsonValue =
   | null
   | boolean
@@ -7,6 +12,7 @@ export type JsonValue =
   | bigint
   | JsonValue[]
   | { [key: string]: JsonValue }
+/** Largest u64 value, 2^64 - 1. */
 export const U64_MAX: bigint = 18_446_744_073_709_551_615n
 
 /** Parse integer tokens without passing unsafe values through Number. Duplicate keys reject. */
@@ -142,6 +148,7 @@ export function u64(value: unknown): bigint {
     throw new Error('Expected a lossless u64 integer')
   return n
 }
+/** Canonical Lux text: decimal digits up to `U64_MAX`, without leading zeros. Throws for anything else. */
 export function lux(value: unknown): string {
   if (
     typeof value !== 'string' ||

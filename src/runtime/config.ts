@@ -4,7 +4,15 @@ import {
   type ReleaseManifest,
   type ManifestOptions,
 } from '../frozen/manifest.ts'
+/**
+ * Environment values for `createDuskDomainsRuntimeConfig`, such as `process.env` or Vite's
+ * `import.meta.env`. Only its `DUSK_DOMAINS_*` and `VITE_DUSK_DOMAINS_*` keys are read.
+ */
 export type DuskDomainsRuntimeEnv = Record<string, string | boolean | undefined>
+/**
+ * The validated release manifest and its node URL, indexer URL, chain ID and network byte, after
+ * environment overrides.
+ */
 export interface DuskDomainsRuntimeConfig {
   manifest: ReleaseManifest
   nodeUrl: string

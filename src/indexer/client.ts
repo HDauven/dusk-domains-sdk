@@ -37,6 +37,10 @@ import type {
   IndexedHome,
   IndexedCooldowns,
 } from './types.ts'
+/**
+ * Options for an indexer client: base URL, chain ID, directory, and an optional fetch and request
+ * timeout (10 s by default).
+ */
 export interface DuskDomainsIndexerClientOptions {
   baseUrl: string
   chainId: string
@@ -44,11 +48,16 @@ export interface DuskDomainsIndexerClientOptions {
   fetch?: typeof fetch
   timeoutMs?: number
 }
+/** Thrown when the indexer answers with an HTTP error status, kept as `status`. */
 export class IndexerHttpError extends Error {
   constructor(readonly status: number) {
     super(`Indexer HTTP ${status}`)
   }
 }
+/**
+ * Thrown when an indexer response is malformed or does not match the request, the deployment or the
+ * pinned snapshot; `code` names the check that failed.
+ */
 export class IndexerResponseError extends Error {
   constructor(readonly code: string) {
     super(`Invalid indexer response: ${code}`)
@@ -89,6 +98,10 @@ function page<T>(
   assert(nextCursor === null || o.items.length > 0, 'empty_continuation')
   return { items: o.items.map(decode), nextCursor }
 }
+/**
+ * Client for the frozen indexer's HTTP API v1. Every response is checked against the chain, the
+ * directory and the request; absence comes back as `null` or `Absent`, never as an error.
+ */
 export class DuskDomainsIndexerClient {
   readonly baseUrl: string
   readonly chainId: string
@@ -686,11 +699,13 @@ function pageQuery(
     blockHash: params.blockHash,
   }
 }
+/** Create an indexer client; no request is sent until a method is called. */
 export function createDuskDomainsIndexerClient(
   options: DuskDomainsIndexerClientOptions,
 ): DuskDomainsIndexerClient {
   return new DuskDomainsIndexerClient(options)
 }
+/** Create an indexer client for a release manifest's indexer URL, chain ID and directory. */
 export function createIndexerClientFromManifest(
   manifest: ReleaseManifest,
   options: Pick<DuskDomainsIndexerClientOptions, 'fetch' | 'timeoutMs'> = {},

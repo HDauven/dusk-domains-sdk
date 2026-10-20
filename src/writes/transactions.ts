@@ -1,6 +1,10 @@
 /** Dusk Connect submission/execution states without presentation copy. @module */
 import type { FrozenCall } from '../frozen/calls.ts'
 import type { ConnectApp } from '../wallet/duskConnectApp.ts'
+/**
+ * Stage of a write: `preparing`, `awaiting_approval`, `submitted`, `executing`, then `executed`,
+ * `failed`, `rejected` or `timeout`.
+ */
 export type DuskDomainTxStatus =
   | 'preparing'
   | 'awaiting_approval'
@@ -10,6 +14,10 @@ export type DuskDomainTxStatus =
   | 'failed'
   | 'rejected'
   | 'timeout'
+/**
+ * Latest known state of a write: its status and call, the transaction ID once known, and the wallet's
+ * result or error.
+ */
 export interface DuskDomainTxState {
   status: DuskDomainTxStatus
   call: { contractId: string; functionName: string }
@@ -17,7 +25,12 @@ export interface DuskDomainTxState {
   result?: unknown
   error?: unknown
 }
+/** Same as `DuskDomainTxState`. */
 export type TransactionState = DuskDomainTxState
+/**
+ * What the tracker reads from a wallet's transaction handle: its ID, status, wait functions and
+ * status events.
+ */
 export interface DuskTxHandleLike {
   hash?: string
   id?: string
@@ -26,10 +39,12 @@ export interface DuskTxHandleLike {
   waitExecuted?: () => Promise<unknown>
   onStatus?: (callback: (status: unknown) => void) => (() => void) | void
 }
+/** A callback for every state change, and how long to wait for execution (60 s by default). */
 export interface SubmitDuskDomainWriteOptions {
   onUpdate?: (state: DuskDomainTxState) => void
   timeoutMs?: number
 }
+/** Whether a write is still in progress: preparing, awaiting approval, submitted or executing. */
 export function isDuskDomainTxBusy(
   state: DuskDomainTxState | null | undefined,
 ): boolean {
@@ -92,6 +107,10 @@ function status(value: unknown): DuskDomainTxStatus | undefined {
 function terminal(s: DuskDomainTxStatus): boolean {
   return ['executed', 'failed', 'rejected', 'timeout'].includes(s)
 }
+/**
+ * Follow a submitted transaction until it is `executed`, `failed`, `rejected` or `timeout`, reporting
+ * each state to `onUpdate`. A bare hash stays `submitted`, never `executed`.
+ */
 export async function trackDuskDomainTransaction(
   handle: DuskTxHandleLike,
   call: DuskDomainTxState['call'],
@@ -169,6 +188,10 @@ export async function trackDuskDomainTransaction(
     unsubscribe?.()
   }
 }
+/**
+ * Prepare, submit and track `call` through a Connect app. A failure or a wallet rejection comes back as
+ * a `failed` or `rejected` state, not as an exception.
+ */
 export async function submitDuskDomainWrite(
   app: ConnectApp,
   call: FrozenCall,

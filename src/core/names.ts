@@ -67,24 +67,32 @@ export const RESERVED_LABELS: readonly string[] = Object.freeze([
   'webwallet',
   'zedger',
 ])
+/** Root label rules of a policy: minimum length in bytes, and the reserved and denied labels. */
 export interface RootEligibilityPolicy {
   minimum_root_bytes: number
   reserved: readonly string[]
   denied: readonly string[]
 }
+/** The launch policy's root rules: at least 3 bytes, `RESERVED_LABELS` reserved, nothing denied. */
 export const LAUNCH_NAME_POLICY: Readonly<RootEligibilityPolicy> =
   Object.freeze({
     minimum_root_bytes: 3,
     reserved: Object.freeze([...RESERVED_LABELS]),
     denied: Object.freeze([]),
   })
+/**
+ * Why `validateName` rejects a spelling: `empty`, no `.dusk` suffix, more than three subname labels
+ * (`depth`), or a label that is not canonical.
+ */
 export type NameIssue = 'empty' | 'suffix' | 'depth' | 'label'
+/** A structurally valid name: canonical spelling, labels, root label and subname depth (0 for a root). */
 export interface NormalizedName {
   canonical: string
   labels: string[]
   registrableLabel: string
   depth: number
 }
+/** Outcome of `validateName`: the name and its root label's eligibility, or the spelling and its issues. */
 export type NameValidationResult =
   | { ok: true; name: NormalizedName; rootEligibility: LabelStatus; issues: [] }
   | { ok: false; canonical: string; labels: string[]; issues: NameIssue[] }
@@ -93,6 +101,11 @@ export function normalizeNameInput(value: string): string {
   const text = value.trim().replace(/[A-Z]/gu, (c) => c.toLowerCase())
   return !text || text.endsWith('.dusk') ? text : `${text}.dusk`
 }
+/**
+ * Eligibility of a root label under `policy`, the launch policy by default: `Denied` when listed as
+ * denied, `Reserved` when reserved, `Denied` when shorter than the minimum, else `Public`. Throws
+ * for a label that is not canonical.
+ */
 export function rootLabelStatus(
   label: string,
   policy: RootEligibilityPolicy = LAUNCH_NAME_POLICY,
@@ -133,6 +146,10 @@ export function validateName(
     issues: [],
   }
 }
+/**
+ * Status `analyzeName` reports: an `invalid` spelling, a `reserved` or `denied` root, `unchecked`
+ * without an observation, `available`, `registered`, in `grace`, or a `subname`.
+ */
 export type NameStatus =
   | 'invalid'
   | 'reserved'
@@ -142,6 +159,7 @@ export type NameStatus =
   | 'registered'
   | 'grace'
   | 'subname'
+/** What `analyzeName` reports: canonical spelling, root label, status and the validation behind it. */
 export interface NameResult {
   canonical: string
   label: string

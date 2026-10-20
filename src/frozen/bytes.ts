@@ -7,9 +7,14 @@ import type {
   Node,
   TypedPrincipal,
 } from './types.ts'
+/** Lowercase hex of `bytes`, without `0x`. */
 export function hex(bytes: readonly number[] | Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
 }
+/**
+ * Bytes of hex text, with or without `0x`. Throws for an odd length, a non-hex digit, or a size other
+ * than `length` bytes.
+ */
 export function fromHex(value: string, length?: number): number[] {
   const s = value.replace(/^0x/u, '')
   if (
@@ -21,6 +26,7 @@ export function fromHex(value: string, length?: number): number[] {
     Number.parseInt(s.slice(i * 2, i * 2 + 2), 16),
   )
 }
+/** A contract ID as 64 lowercase hex digits without `0x`. Throws unless it is 32 bytes and not all zero. */
 export function contractId(value: string | readonly number[]): string {
   const b = typeof value === 'string' ? fromHex(value, 32) : value
   if (
@@ -31,12 +37,14 @@ export function contractId(value: string | readonly number[]): string {
     throw new Error('Invalid contract ID')
   return hex(b)
 }
+/** Whether two byte arrays hold the same bytes. */
 export function equalBytes(
   a: readonly number[],
   b: readonly number[],
 ): boolean {
   return a.length === b.length && a.every((x, i) => x === b[i])
 }
+/** BLAKE2b-256 of the parts in order, strings as UTF-8. Throws for a byte outside 0 to 255. */
 export function hash(
   ...parts: (readonly number[] | Uint8Array | string)[]
 ): Digest {
@@ -55,15 +63,18 @@ export function hash(
   }
   return Array.from(blake2b(bytes, { dkLen: 32 }))
 }
+/** Throw unless `label` is canonical: 1 to 63 lowercase ASCII letters, digits and inner hyphens. */
 export function validateLabel(label: string): void {
   if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(label))
     throw new Error('Expected a canonical 1–63 byte ASCII label')
 }
+/** Node of `label` under `parent`: `hash(parent, hash(label))`. */
 export function childNode(parent: Node, label: string): Node {
   if (parent.length !== 32) throw new Error('Invalid parent node')
   validateLabel(label)
   return hash(parent, hash(label))
 }
+/** Root and node of a canonical `.dusk` name with up to three subname labels; throws for any other spelling. */
 export function nameKey(spelling: string): NameKey {
   const labels = spelling.split('.')
   if (labels.length < 2 || labels.length > 5 || labels.at(-1) !== 'dusk')
@@ -78,12 +89,18 @@ export function nameKey(spelling: string): NameKey {
   }
   return { root, node }
 }
+/** Node of a canonical `.dusk` name: the ENS-style hash chain from 32 zero bytes, with BLAKE2b-256. */
 export function namehash(spelling: string): Node {
   return nameKey(spelling).node
 }
+/** `namehash` as lowercase hex without `0x`. */
 export function namehashHex(spelling: string): string {
   return hex(namehash(spelling))
 }
+/**
+ * Frozen v1 authority of a principal: a contract's ID, or the hash of a 96-byte Moonlight key. Throws
+ * for a Phoenix principal or a malformed key.
+ */
 export function authority(principal: TypedPrincipal): Authority {
   if (principal.kind === 'Contract')
     return fromHex(contractId(principal.bytes), 32)
@@ -91,6 +108,10 @@ export function authority(principal: TypedPrincipal): Authority {
     return hash('dusk-domains:runtime-authority:v1', principal.bytes)
   throw new Error('Principal has no frozen v1 authority')
 }
+/**
+ * Registration commitment: BLAKE2b-256 over the protocol tag, `actor`, the root's node, `label` and
+ * `secret`. Throws unless `actor` and `secret` are 32 bytes and `label` is canonical.
+ */
 export function commitmentHash(
   actor: Authority,
   label: string,

@@ -182,6 +182,10 @@ export interface VerificationCache {
   getItem(key: string): string | null | undefined | Promise<string | null | undefined>
   setItem(key: string, value: string): unknown
 }
+/**
+ * Client options: the manifest options, plus the transport, hop limit, verification cache, height
+ * reuse, lens and multicall settings.
+ */
 export interface ClientOptions extends ManifestOptions {
   transport?: ReadTransport
   hopLimit?: number
@@ -348,23 +352,33 @@ function healthTurn(cache: object, key: string, run: () => Promise<void>): Promi
   })
   return next
 }
+/**
+ * Typed reads of a contract role: one method per read, taking its wire input (none for unit reads) and
+ * resolving to its output.
+ */
 export type ReadApi<R extends ContractRole> = {
   [M in ReadMethods[R] & Method<R>]: (
     ...args: Input<R, M> extends null ? [] : [args: Input<R, M>]
   ) => Promise<Output<R, M>>
 }
+/**
+ * A store read after following forwards: the store that answered, its `Located` value, the forwards
+ * followed, and the height read at.
+ */
 export interface Routed<T> {
   store: string
   value: Located<T>
   forwards: Forward[]
   height: bigint
 }
+/** A primary name `verifyPrimary` verified: its store, the mapping, the forward record and the height. */
 export interface VerifiedPrimary {
   store: string
   primary: PrimaryView
   record: RecordValue
   height: bigint
 }
+/** What `discover()` returns: the directory's configuration and admitted stores and resolvers at one height. */
 export interface DirectoryState {
   height: bigint
   config: DirectoryConfig
@@ -372,12 +386,20 @@ export interface DirectoryState {
   resolvers: Admission[]
 }
 
+/**
+ * Where a root registers: the chosen store, the root's canonical home if it has one, its released root
+ * when that home is retiring, and the height read at.
+ */
 export interface RegistrationPlacement {
   store: string
   canonicalStore: string | null
   releasedRoot: ReleasedRoot | null
   height: bigint
 }
+/**
+ * A registration ready to sign: its placement, the quote request and store quote, and the commit and
+ * reveal calls.
+ */
 export interface PreparedRegistration extends RegistrationPlacement {
   quoteRequest: QuoteRequest
   quote: RegistrationQuote
@@ -428,6 +450,10 @@ interface LensFacts {
   face: typeof LENS_INTERFACE
 }
 
+/**
+ * Verified reads, routing and registration helpers for one frozen v1 release. Each contract is verified
+ * the first time an operation reads through it; `createClientFromManifest` creates one.
+ */
 export class FrozenClient {
   readonly release: LoadedRelease
   readonly transport: ReadTransport

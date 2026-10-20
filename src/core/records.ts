@@ -15,13 +15,21 @@ import type {
   RecordMutation,
 } from '../frozen/types.ts'
 import { decodeBase58, isMoonlightEndpoint } from './principal.ts'
+/** Most records one name can hold. */
 export const MAX_RECORDS_PER_NAME = 16
+/** Most mutations one `mutate_records` call can apply. */
 export const MAX_RECORD_MUTATIONS_PER_BATCH = 8
+/** Most key and value bytes one mutation batch can carry. */
 export const MAX_RECORD_BATCH_PAYLOAD_BYTES = 4096
+/** Most key and value bytes a name's records can hold together. */
 export const MAX_RECORD_SET_PAYLOAD_BYTES = 9216
+/** Longest record key, in UTF-8 bytes; keys are at least 1 byte. */
 export const MAX_RECORD_KEY_BYTES = 64
+/** Longest record value in bytes; values are at least 1 byte. */
 export const MAX_RECORD_VALUE_BYTES = 512
+/** Longest record TTL in seconds (one day); the shortest is 1. A TTL never expires stored data. */
 export const MAX_RECORD_TTL_SECONDS = 86400n
+/** Record keys with a convention in `STATIC_RECORD_DEFINITIONS`. */
 export type StaticRecordKey =
   | 'moonlight_address'
   | 'phoenix_payment_endpoint'
@@ -37,8 +45,11 @@ export type StaticRecordKey =
   | 'content_pointer'
   | 'attestation_ref'
   | 'compliance_ref'
+/** Any record key: resolvers also take custom keys of 1 to `MAX_RECORD_KEY_BYTES` UTF-8 bytes. */
 export type ResolverRecordKey = string
+/** A stored record, the same as `RecordValue`. */
 export type ResolverRecord = RecordValue
+/** Problem code from record validation; the app owns the wording. */
 export type RecordIssue =
   | 'key_bytes'
   | 'value_bytes'
@@ -48,6 +59,7 @@ export type RecordIssue =
   | 'invalid_reference'
   | 'invalid_text'
   | 'invalid_identifier'
+/** Convention for a record key: largest value, default TTL, encoding, and whether it can verify a primary name. */
 export interface RecordDefinition {
   key: string
   maxBytes: number
@@ -96,6 +108,7 @@ function definition(key: string): RecordDefinition {
     eligibleForPrimaryName: key === 'moonlight_address',
   }
 }
+/** Conventions for the `StaticRecordKey` keys. */
 export const STATIC_RECORD_DEFINITIONS: readonly RecordDefinition[] =
   Object.freeze(keys.map((k) => Object.freeze(definition(k))))
 /** Custom keys are accepted by the resolver. They receive the raw UTF-8 convention. */
@@ -236,6 +249,11 @@ export function createResolverRecord(
     updated_at: u64(updatedAt),
   }
 }
+/**
+ * Check a name's whole record set at `height` and return it sorted by key bytes. Throws for an
+ * invalid record, more than 16 records, a duplicate key, a record stamped after `height`, or more
+ * than `MAX_RECORD_SET_PAYLOAD_BYTES` of keys and values.
+ */
 export function validateRecordSet(
   input: readonly RecordValue[],
   height: bigint,

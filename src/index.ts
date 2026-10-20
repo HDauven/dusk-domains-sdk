@@ -1,4 +1,14 @@
-/** Dusk Domains frozen-layer SDK v0.3. @module */
+/**
+ * TypeScript SDK and integration helpers for Dusk Domains, the `.dusk` name service.
+ *
+ * Import the root for the client and the core API: `createClientFromManifest` and
+ * `FrozenClient` for verified reads, the frozen wire types, lossless JSON, helpers for
+ * names, commitments, pricing and records, the write builders and the indexer client.
+ * `./writes`, `./marketplace` and `./indexer` are narrower imports of parts of it;
+ * `./connect-app`, `./projection`, `./event-catalog` and `./chain-addresses` hold the rest.
+ *
+ * @module
+ */
 export * from './frozen/types.ts'
 export * from './frozen/bytes.ts'
 export {

@@ -99,6 +99,7 @@ export function setRecipientProposalCall(
     },
   })
 }
+/** New owner and manager for a name, and whether to clear its records and primary identity. */
 export interface TransferInput {
   name: NameRef
   owner: Authority
@@ -117,12 +118,17 @@ export function transferCall(
     clear_identity: input.clear_records,
   })
 }
+/** Build the `store.update_authorities` call that reassigns a subname: the same call as `transferCall`. */
 export function reassignSubnameCall(
   store: string,
   input: TransferInput,
 ): FrozenCall<'store', 'update_authorities'> {
   return transferCall(store, input)
 }
+/**
+ * Inputs of `registrationCalls`: actor, root label, years, secret, original commitment store and
+ * height, the verified quote, and the optional deadline, referrer, records and primary.
+ */
 export interface RegistrationInput {
   actor: Authority
   label: string
@@ -138,6 +144,7 @@ export interface RegistrationInput {
   records?: RecordInput[]
   primary?: number[] | null
 }
+/** The commit and reveal calls `registrationCalls` builds, and the commitment they share. */
 export interface RegistrationCalls {
   commit: FrozenCall<'store', 'commit'>
   reveal: FrozenCall<'store', 'register'>
@@ -199,6 +206,10 @@ export function registrationCalls(
     commitment,
   }
 }
+/**
+ * Call builders for one marketplace, from `createMarketplaceCalls`. Each checks the terms first: this
+ * deployment's directory, version 1, a root name, and the order kind its call needs.
+ */
 export interface MarketplaceCalls {
   listFixed(intent: CustodyIntent): FrozenCall<'store', 'transfer_and_call'>
   auction(intent: CustodyIntent): FrozenCall<'store', 'transfer_and_call'>

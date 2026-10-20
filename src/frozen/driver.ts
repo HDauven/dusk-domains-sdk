@@ -1,5 +1,9 @@
 /** WASM data-driver adapter with lossless JSON decoding. @module */
 import { parseJson } from './json.ts'
+/**
+ * A loaded frozen v1 data driver: it encodes method inputs to rkyv bytes, decodes inputs, outputs and
+ * events to lossless JSON values, and reports its schema and version.
+ */
 export interface DataDriver {
   encodeInput(functionName: string, json: string): Uint8Array
   decodeInput(functionName: string, bytes: Uint8Array): unknown

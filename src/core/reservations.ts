@@ -4,12 +4,18 @@ import { u64, parseJson, stringifyJson } from '../frozen/json.ts'
 import { registrationCommitmentHex } from './commitment.ts'
 import { registrationYears } from './lifecycle.ts'
 import { validateName } from './names.ts'
+/** Storage key the pending reservations are saved under, as one JSON array. */
 export const PENDING_NAME_RESERVATIONS_STORAGE_KEY =
   'dusk-domains:pending-reservations:frozen:v1'
+/** Synchronous key-value storage for reservations, such as `localStorage`. */
 export interface ReservationStorage {
   getItem(key: string): string | null
   setItem(key: string, value: string): void
 }
+/**
+ * A saved commit-reveal registration, enough to finish it after a reload. It holds the secret: keep it
+ * out of logs and telemetry.
+ */
 export interface PendingNameReservation {
   name: string
   node: string
@@ -25,12 +31,14 @@ export interface PendingNameReservation {
   createdAt: string
   updatedAt: string
 }
+/** Fields `listPendingNameReservations` filters on; an omitted field matches every reservation. */
 export interface PendingNameReservationFilter {
   chainId?: string
   directory?: string
   controller?: string
   commitmentStore?: string
 }
+/** Identifies one saved reservation: chain, directory, controller, original commitment store and commitment. */
 export interface PendingNameReservationKey {
   chainId: string
   directory: string
@@ -38,6 +46,7 @@ export interface PendingNameReservationKey {
   commitmentStore: string
   commitment: string
 }
+/** Thrown when a reservation save fails: storage `unavailable`, `corrupt` data, or `write_failed`. */
 export class ReservationStorageError extends Error {
   constructor(
     readonly code: 'unavailable' | 'corrupt' | 'write_failed',
@@ -200,12 +209,21 @@ export function upsertPendingNameReservation(
     ...rows.filter((r) => !keyMatches(r, next)),
   ])
 }
+/**
+ * Remove the reservation under `key` and return the rest, newest first. Throws a
+ * `ReservationStorageError` when storage fails.
+ */
 export function removePendingNameReservation(
   key: PendingNameReservationKey,
   storage?: ReservationStorage | null,
 ): PendingNameReservation[] {
   return mutate(storage, (rows) => rows.filter((r) => !keyMatches(r, key)))
 }
+/**
+ * Set the commit's inclusion height and transaction ID on the reservation under `key`, or clear them
+ * with `null` after a reorg, and return every reservation, newest first. Throws a
+ * `ReservationStorageError` when storage fails.
+ */
 export function updatePendingNameReservationBlock(
   key: PendingNameReservationKey,
   update: {

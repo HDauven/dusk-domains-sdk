@@ -77,6 +77,10 @@ async function detail(response: Response): Promise<string> {
   const text = new TextDecoder().decode(bytes).trim()
   return size > DETAIL_BYTES ? `${text}…` : text
 }
+/**
+ * How a client reaches the chain: the tip's height, optionally the tip with its block hash, and raw
+ * contract reads.
+ */
 export interface ReadTransport {
   currentBlockHeight(): Promise<bigint>
   /**
@@ -102,6 +106,10 @@ export interface ReadTransport {
     maxBytes?: number,
   ): Promise<Uint8Array>
 }
+/**
+ * Read transport for a Rusk node's HTTP API. It reads the tip's height and hash in one GraphQL query,
+ * names itself by the node URL, and throws `NodeReadError` for an HTTP error.
+ */
 export function createHttpTransport(
   nodeUrl: string,
   fetcher: typeof fetch = fetch,

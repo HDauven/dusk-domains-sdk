@@ -62,6 +62,7 @@ export function wireValue<T extends keyof WireTypes>(
   type: T,
   value: unknown,
 ): WireTypes[T]
+/** The same check for any type name, including the read lens's own types. */
 export function wireValue(type: string, value: unknown): unknown
 export function wireValue(type: string, value: unknown): unknown {
   const root = schemaOf(type) as Schema | undefined
@@ -192,12 +193,14 @@ export function wireInput(
     throw new Error('Vault fee metadata exceeds 512 bytes')
   return checked
 }
+/** Check `value` as wire type `type` and serialize it as lossless JSON for a data driver. */
 export function encodeJson<T extends keyof WireTypes>(
   type: T,
   value: WireTypes[T],
 ): string {
   return stringifyJson(wireValue(type, value))
 }
+/** Parse lossless JSON with canonical integers and check it as wire type `type`. */
 export function decodeJson<T extends keyof WireTypes>(
   type: T,
   text: string,
