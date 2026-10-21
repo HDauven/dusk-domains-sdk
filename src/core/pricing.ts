@@ -36,17 +36,18 @@ export const PREMIUM_WINDOW_DAYS = 21
 /** The launch policy's starting premium in Lux: 1,000,000 DUSK. */
 export const INITIAL_PREMIUM_LUX = '1000000000000000'
 /**
- * The launch policy's configuration: yearly prices by label length, the premium start, referral rates
- * and `RESERVED_LABELS`. Fetch the selected policy's config for current rules.
+ * The launch policy's configuration: roots from 1 character, yearly prices of 1,000, 400, 150, 50 and
+ * 10 DUSK for 1, 2, 3, 4 and 5+ characters, the premium start, referral rates and `RESERVED_LABELS`.
+ * Fetch the selected policy's config for current rules.
  */
 export function launchPolicyConfig(): PolicyConfig {
   return {
     config_version: 1n,
     registration_open: true,
-    minimum_root_bytes: 3,
+    minimum_root_bytes: 1,
     annual_lux: [
-      '150000000000',
-      '150000000000',
+      '1000000000000',
+      '400000000000',
       '150000000000',
       '50000000000',
       '10000000000',

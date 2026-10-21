@@ -144,15 +144,16 @@ export class LensFailure extends Error {
   }
 }
 /**
- * The launch policy's code hash: the v1 policy's pricing for 3 or more characters, and 1- and 2-character
- * roots `Denied` until its operator opens their release (`start_release`), then priced from its
- * `release()` heights, which this SDK does not read; a later SDK models them.
+ * The code hash of the short-name release policy once planned for launch: the v1 policy's pricing for 3
+ * or more characters, and 1- and 2-character roots `Denied` until its operator opens their release
+ * (`start_release`), then priced from its `release()` heights, which this SDK does not read.
  */
 export const LAUNCH_POLICY_CODE_HASH = 'fc0bf306316c0b25695b459a423025ccc59a81bdd8647534ec42b3f08bc4709f'
 /**
  * Policies whose pricing this SDK computes (`estimateRegistrationQuote`), by code hash: the published
- * v1 policy, and the launch policy for 3 or more characters, priced as v1. A reply priced by another,
- * or quoting a 1- or 2-character root under the launch policy, reads directly.
+ * v1 policy, which the launch release runs, and the short-name release policy for 3 or more characters,
+ * priced as v1. A reply priced by another, or quoting a 1- or 2-character root under the release policy,
+ * reads directly.
  */
 export const PRICED_POLICIES: ReadonlySet<string> = new Set([
   'c6a9d9013d8dc2c0e3415b8aafbcc1d5c91d275531d7e677ab3cff57b22de678',
@@ -608,7 +609,7 @@ function knownPricing(ctx: EvidenceContext, policy: string, label?: string): voi
     throw new LensFailure('unsupported', "This SDK does not know the selected policy's pricing", { strikes: false })
   // Released or not, the store's quote alone prices them: an honest released quote never strikes.
   if (code === LAUNCH_POLICY_CODE_HASH && label !== undefined && label.length < 3)
-    throw new LensFailure('unsupported', "This SDK does not price the launch policy's 1- and 2-character roots", { strikes: false })
+    throw new LensFailure('unsupported', "This SDK does not price the release policy's 1- and 2-character roots", { strikes: false })
 }
 /** `bootstrap`: the whole pool and the preferred marketplace, each against the release. */
 export function checkBootstrap(ctx: EvidenceContext, r: LensBootstrap): Bootstrap {

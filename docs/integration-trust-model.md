@@ -304,12 +304,13 @@ A reply is used only if it passes these checks:
 - for `previewRegistration`, a registered root's own name in its lifecycle, a placement
   consistent with the listed admissions, neither stop flag set, registration open, a
   label that is not denied, and the price recomputed from the committed config. Only the
-  published v1 policy's pricing is known to the SDK, and the launch policy's (code hash
-  `fc0bf306…`) for 3 or more characters, priced as v1: under another, `previewRegistration`
-  and `pricing` read directly, and under the launch policy a 1- or 2-character root is
-  always quoted from its store, without a strike. The SDK's own display of those names,
-  `analyzeName` and `estimateRegistrationQuote`, is correct only before their release
-  opens (`start_release`); a later SDK models `release()`.
+  published v1 policy's pricing is known to the SDK, the policy the launch release runs
+  with roots from 1 character, and the short-name release policy's (code hash `fc0bf306…`)
+  for 3 or more characters, priced as v1: under another, `previewRegistration` and
+  `pricing` read directly, and under the release policy a 1- or 2-character root is
+  always quoted from its store, without a strike. The SDK's own display of those names
+  under it, `analyzeName` and `estimateRegistrationQuote`, is correct only before their
+  release opens (`start_release`); a later SDK models `release()`.
 
 The lens checks the interface and binding of what the directory did not probe (the
 store and resolver at ordinal 0, the vault, a genesis policy or market) in the same

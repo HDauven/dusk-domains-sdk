@@ -4,6 +4,7 @@ import {
   validateName,
   analyzeName,
   rootLabelStatus,
+  LAUNCH_NAME_POLICY,
   RESERVED_LABELS,
 } from '../src/core/names.ts'
 import { namehashHex, nameKey } from '../src/frozen/bytes.ts'
@@ -79,13 +80,22 @@ it.each(reserved)(
   },
 )
 it.each([
-  ['a', 'Denied'],
-  ['ab', 'Denied'],
+  ['a', 'Public'],
+  ['ab', 'Public'],
   ['abc', 'Public'],
   ['walletx', 'Public'],
 ])('policy owns minimum and exact reserved matching for %s', (label, status) =>
   expect(rootLabelStatus(label)).toBe(status),
 )
+it('takes launch roots from 1 character: a 1- or 2-character root is available unless observed', () => {
+  expect(LAUNCH_NAME_POLICY.minimum_root_bytes).toBe(1)
+  for (const label of ['x', 'ab']) {
+    expect(validateName(label)).toMatchObject({ ok: true, rootEligibility: 'Public' })
+    expect(analyzeName(label, { current: null, height: 100n })).toMatchObject({ status: 'available', canRegister: true })
+  }
+  // A policy with a higher minimum still decides for itself.
+  expect(rootLabelStatus('ab', { ...LAUNCH_NAME_POLICY, minimum_root_bytes: 3 })).toBe('Denied')
+})
 it('honors denied/reserved/minimum precedence for replacement policy', () => {
   const p = {
     minimum_root_bytes: 20,

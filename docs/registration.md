@@ -100,9 +100,9 @@ public Moonlight calls and never inherits an outer signer's contract authority.
 `normalizeNameInput` trims and folds ASCII uppercase for a search field. It does
 not map Unicode. `validateName` checks the store's 1–63-byte label rules and up to
 three subname labels; `ok` describes structure. Its separate `rootEligibility`
-uses the policy's denied/reserved/minimum precedence. The launch policy requires
-three-byte roots and reserves the 17 labels in `RESERVED_LABELS`. A subname may
-have one character, repeated interior hyphens, or a reserved root label.
+uses the policy's denied/reserved/minimum precedence. The launch policy takes roots
+from one byte and reserves the 61 labels in `RESERVED_LABELS`. A subname may have
+one character, repeated interior hyphens, or a reserved root label.
 `namehashHex` requires a canonical full spelling and returns **unprefixed** hex.
 
 `analyzeName(query, { policy, current, height })` produces `NameResult` and a
