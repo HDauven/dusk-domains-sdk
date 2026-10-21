@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.3 (2026-10-21)
+
+- `launchPolicyConfig()` and `LAUNCH_NAME_POLICY` follow the launch release: roots from 1 character, at 1,000, 400, 150, 50 and 10 DUSK a year.
+
 ## 0.5.2 (2026-10-21)
 
 - Answer `pricing` and `previewRegistration` through the lens under the launch policy (`fc0bf306…`) too, priced as v1, quoting 1- and 2-character roots from the store.

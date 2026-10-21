@@ -28,8 +28,8 @@ const request = (label = 'example'): QuoteRequest => ({
 })
 // Port of policy/src/tests.rs: every tier/year and every premium-day boundary.
 for (const [label, annual, status] of [
-  ['a', 0n, 'Denied'],
-  ['ab', 0n, 'Denied'],
+  ['a', 1000000000000n, 'Public'],
+  ['ab', 400000000000n, 'Public'],
   ['abc', 150000000000n, 'Public'],
   ['abcd', 50000000000n, 'Public'],
   ['abcde', 10000000000n, 'Public'],
@@ -80,6 +80,19 @@ for (let day = 0; day <= 22; day++)
           new Date((1000 + Number(8640n - offset) * 10) * 1000).toISOString(),
         )
     })
+it('is the launch release: roots from 1 character at 1,000, 400, 150, 50 and 10 DUSK a year', () => {
+  expect(launchPolicyConfig()).toMatchObject({
+    config_version: 1n,
+    registration_open: true,
+    minimum_root_bytes: 1,
+    annual_lux: ['1000000000000', '400000000000', '150000000000', '50000000000', '10000000000'],
+    premium_start_lux: '1000000000000000',
+    base_referral_bps: 2000,
+    premium_referral_bps: 0,
+    reserved: RESERVED_LABELS,
+    denied: [],
+  })
+})
 it.each(RESERVED_LABELS)(
   'reserved quote %s has no economic components',
   (label) =>
@@ -167,7 +180,7 @@ it('bounds max fee exactly', () => {
   const config = launchPolicyConfig()
   config.premium_start_lux = (
     9007199254740991n -
-    150000000000n * 10n
+    1000000000000n * 10n
   ).toString()
   expect(() => validatePolicyConfig(config)).not.toThrow()
   config.premium_start_lux = (BigInt(config.premium_start_lux) + 1n).toString()

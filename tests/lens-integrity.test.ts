@@ -607,8 +607,11 @@ describe("the launch policy's 1- and 2-character roots", () => {
     expect(w.log.slice(sent).filter((call) => call === '08.availability')).toHaveLength(1)
     expect([...items.values()].some((v) => v.includes('availability'))).toBe(false)
   })
+  /** A policy that takes roots only from 3 characters, as the launch policy before an opening: 1 and 2 are `Denied`. */
+  const fromThree = (r: QuoteRequest) => (r.label.length < 3 ? estimateRegistrationQuote({ ...launchPolicyConfig(), minimum_root_bytes: 3 }, r) : undefined)
   it('reads an unreleased root\'s Denied quote from its store, as before; under the v1 policy still as an evidence failure', async () => {
     for (const [w, reasons] of [[await launch(), ['unsupported']], [await lensWorld(4), ['evidence']]] as const) {
+      w.chain.policyQuote = fromThree
       const c = await w.client()
       for (const label of ['a', 'ab']) {
         const r = await both(w, (x) => x.previewRegistration(preview(label)), c)
@@ -616,6 +619,17 @@ describe("the launch policy's 1- and 2-character roots", () => {
         expect(quoted(r).label_status, label).toBe('Denied')
         expect(r.reasons, label).toEqual(reasons)
       }
+    }
+  })
+  it('prices 1- and 2-character roots through the lens under the v1 policy with the launch config: 1,000 and 400 DUSK', async () => {
+    const w = await lensWorld(4)
+    const c = await w.client()
+    for (const [label, total] of [['a', '1000000000000'], ['ab', '400000000000']] as const) {
+      const r = await both(w, (x) => x.previewRegistration(preview(label)), c)
+      expect(r.viaLens, label).toEqual(r.direct)
+      expect(quoted(r).label_status, label).toBe('Public')
+      expect((r.direct as { value: { quote: RegistrationQuote } }).value.quote.total_lux, label).toBe(total)
+      expect(r.reasons, label).toEqual([])
     }
   })
   it('checks a 3-byte root in full, with the release open: its honest quote is the lens\'s, a wrong one an evidence failure', async () => {

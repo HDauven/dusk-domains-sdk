@@ -73,10 +73,10 @@ export interface RootEligibilityPolicy {
   reserved: readonly string[]
   denied: readonly string[]
 }
-/** The launch policy's root rules: at least 3 bytes, `RESERVED_LABELS` reserved, nothing denied. */
+/** The launch policy's root rules: roots from 1 byte, `RESERVED_LABELS` reserved, nothing denied. */
 export const LAUNCH_NAME_POLICY: Readonly<RootEligibilityPolicy> =
   Object.freeze({
-    minimum_root_bytes: 3,
+    minimum_root_bytes: 1,
     reserved: Object.freeze([...RESERVED_LABELS]),
     denied: Object.freeze([]),
   })
