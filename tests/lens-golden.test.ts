@@ -15,7 +15,7 @@ import { fetchDriver, validateReleaseManifest, type LoadedRelease, type ReleaseC
 import { lensCatalog } from '../src/frozen/lens-schema.ts'
 import {
   checkAvailability, checkBootstrap, checkNamePage, checkPricing, checkResolution, checkReverse,
-  lensInitCommitment, lensInput, type EvidenceContext,
+  LAUNCH_POLICY_CODE_HASH, lensInitCommitment, lensInput, type EvidenceContext,
 } from '../src/frozen/lens.ts'
 import { driverBytes } from './helpers.ts'
 
@@ -143,6 +143,22 @@ describe('the SDK\'s evidence checks', () => {
     }
     // resolve 3, reverse 2, name_page 2, availability 3, bootstrap and pricing.
     expect(checked).toBe(12)
+  })
+  it('accept the pricing and a registrable quote under the launch policy, checked with its driver', async () => {
+    const release = testnetRelease()
+    const ctx = await context(release)
+    // The v1 policy's testnet replies, the release's policy relabelled as the launch policy: its code hash, and
+    // its driver for the init commitment. This exercises the checks with that driver, not the launch policy.
+    const policy = release.manifest.contracts.find((c) => c.role === 'policy')!
+    release.contracts.set(policy.contractId, { ...policy, codeHash: LAUNCH_POLICY_CODE_HASH })
+    release.drivers.set(policy.contractId, await loadDataDriver(new Uint8Array(gunzipSync(fixture('launch-policy-driver.wasm.gz')))))
+    const ok = (c: Case) => (wireValue(lensCatalog.find((m) => m.name === c.export)!.output, c.reply) as { Ok: any }).Ok
+    const pricing = ok(cases('pricing')[0]),
+      [registrable] = cases('availability')
+    expect(checkPricing(ctx, pricing).config).toEqual(pricing.policy.config)
+    expect(checkAvailability(ctx, ok(registrable), nameKey(`${registrable.args.label}.dusk`), registrable.args)).toMatchObject({
+      quote: ok(registrable).status.Registrable.quote,
+    })
   })
 })
 

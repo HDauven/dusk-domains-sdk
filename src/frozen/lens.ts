@@ -144,10 +144,20 @@ export class LensFailure extends Error {
   }
 }
 /**
- * Policies whose pricing this SDK computes (`estimateRegistrationQuote`), by code hash: the published
- * v1 policy. A reply priced by another reads directly.
+ * The launch policy's code hash: the v1 policy's pricing for 3 or more characters, and 1- and 2-character
+ * roots `Denied` until its operator opens their release (`start_release`), then priced from its
+ * `release()` heights, which this SDK does not read; a later SDK models them.
  */
-export const PRICED_POLICIES: ReadonlySet<string> = new Set(['c6a9d9013d8dc2c0e3415b8aafbcc1d5c91d275531d7e677ab3cff57b22de678'])
+export const LAUNCH_POLICY_CODE_HASH = 'fc0bf306316c0b25695b459a423025ccc59a81bdd8647534ec42b3f08bc4709f'
+/**
+ * Policies whose pricing this SDK computes (`estimateRegistrationQuote`), by code hash: the published
+ * v1 policy, and the launch policy for 3 or more characters, priced as v1. A reply priced by another,
+ * or quoting a 1- or 2-character root under the launch policy, reads directly.
+ */
+export const PRICED_POLICIES: ReadonlySet<string> = new Set([
+  'c6a9d9013d8dc2c0e3415b8aafbcc1d5c91d275531d7e677ab3cff57b22de678',
+  LAUNCH_POLICY_CODE_HASH,
+])
 /** Stores whose `quote_renewal` this SDK computes, by code hash: the published v1 store, which prices from the schedule alone. */
 export const PRICED_STORES: ReadonlySet<string> = new Set(['ab7c6e22b4bda3707cee67e584b0070b158821bf404d0da37c1b6c69f84094b2'])
 const evidence = (message: string): never => {
@@ -537,7 +547,7 @@ export function checkAvailability(
   if (!r.policy) return evidence('Lens quote has no policy evidence')
   const policy = checkPolicy(ctx, r.policy, r.context),
     released = placement.released_root
-  knownPricing(ctx, policy)
+  knownPricing(ctx, policy, input.label)
   // Only a quote the store would let register: neither stop flag, registration open, not denied.
   const q = quote.quote
   if (r.context.operator_paused || r.context.guardian_suspended || !q.registration_open || q.label_status === 'Denied')
@@ -591,11 +601,14 @@ export function checkPricing(ctx: EvidenceContext, r: LensPricing): Pricing {
   knownPricing(ctx, policy)
   return { height: r.height, context: r.context, policy, config: r.policy.config }
 }
-/** A policy whose pricing this SDK knows, or a direct read without a strike. */
-function knownPricing(ctx: EvidenceContext, policy: string): void {
+/** A policy whose pricing this SDK knows, for the root `label` a reply quotes; or a direct read without a strike. */
+function knownPricing(ctx: EvidenceContext, policy: string, label?: string): void {
   const code = ctx.release.contracts.get(policy)?.codeHash
   if (code === undefined || !PRICED_POLICIES.has(code))
     throw new LensFailure('unsupported', "This SDK does not know the selected policy's pricing", { strikes: false })
+  // Released or not, the store's quote alone prices them: an honest released quote never strikes.
+  if (code === LAUNCH_POLICY_CODE_HASH && label !== undefined && label.length < 3)
+    throw new LensFailure('unsupported', "This SDK does not price the launch policy's 1- and 2-character roots", { strikes: false })
 }
 /** `bootstrap`: the whole pool and the preferred marketplace, each against the release. */
 export function checkBootstrap(ctx: EvidenceContext, r: LensBootstrap): Bootstrap {

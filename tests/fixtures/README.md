@@ -43,6 +43,15 @@ assets (SHA-256 `65f77a27…` and `d2ed9e7b…` uncompressed), `multicall-vector
 `multicall-testnet.json.gz` is one `aggregate` the deployed contract answered on testnet, against
 the ab905e64 rehearsal stack, with each call read directly at the same block.
 
+## Launch policy
+
+`launch-policy.wasm.gz` and `launch-policy-driver.wasm.gz` are the launch policy, which releases 1- and
+2-character roots, as protocol `feat/short-name-launch-policy` (d42877d2) builds it:
+`target/frozen-contracts/wasm32-unknown-unknown/release/dusk_domains_policy.wasm`, the contract, BLAKE3
+`fc0bf306…` (its code hash), 151,729 bytes; and
+`target/frozen-drivers/wasm32-unknown-unknown/release/dusk_domains_policy.wasm`, its data driver,
+SHA-256 `4d4d3d4e…`, 1,624,064 bytes. Both gzip `-n -9`.
+
 ## Read lens
 
 The lens fixtures come from the deployed testnet lens, not from this repository:

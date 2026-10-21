@@ -2,12 +2,15 @@ import { describe, it, expect } from 'vitest'
 import { FrozenClient, createClientFromManifest } from '../src/frozen/client.ts'
 import { bytes, driverBytes, fixtures, id, jsonDriver, policyInitHash, release as wasmRelease } from './helpers.ts'
 import { authority, fromHex, hex, nameKey } from '../src/frozen/bytes.ts'
-import { launchPolicyConfig } from '../src/core/pricing.ts'
+import { LUX_PER_DUSK, estimateRegistrationQuote, launchPolicyConfig, referralRewardLux } from '../src/core/pricing.ts'
+import { BLOCKS_PER_DAY } from '../src/core/lifecycle.ts'
+import type { QuoteRequest, RegistrationQuote } from '../src/frozen/types.ts'
 import { setAcceptsMovesProposalCall, setRecipientProposalCall, setRetiringProposalCall } from '../src/frozen/actions.ts'
 import { directoryProposeCall } from '../src/frozen/builders.ts'
 import { buildCall } from '../src/frozen/calls.ts'
 import { createMarketplaceCalls } from '../src/frozen/actions.ts'
 import { loadReleaseManifest } from '../src/frozen/manifest.ts'
+import { LAUNCH_POLICY_CODE_HASH } from '../src/frozen/lens.ts'
 import { H, child, clocks, endpoint, forward, lensEntry, lensWorld, rateLimited, ref, released, store, view, type LensWorld } from './lens-world.ts'
 
 const lensCalls = (log: string[]) => log.filter((call) => /^08\.(?!binding|lens_interface)/u.test(call))
@@ -499,11 +502,14 @@ describe('registration through the lens', () => {
     }
   })
 
-  it('reads directly, without a strike, under a policy whose pricing this SDK does not know', async () => {
+  it.each([
+    ['reads directly, without a strike, under a policy whose pricing this SDK does not know', 'ee'.repeat(32), ['unsupported']],
+    ['reads through the lens under the launch policy, priced as the v1 policy', LAUNCH_POLICY_CODE_HASH, []],
+  ])('%s', async (_, code, reasons) => {
     const w = await lensWorld(4)
-    // A governance SetPolicy selected a replacement policy the manifest lists, of other code.
+    // A governance SetPolicy selected a replacement policy the manifest lists, of this code.
     const replacement = id(9)
-    w.release.contracts.set(replacement, { ...w.release.contracts.get(id(3))!, contractId: replacement, codeHash: 'ee'.repeat(32) })
+    w.release.contracts.set(replacement, { ...w.release.contracts.get(id(3))!, contractId: replacement, codeHash: code })
     w.release.drivers.set(replacement, jsonDriver)
     w.chain.policy = fromHex(replacement, 32)
     w.chain.policyVersion = 2n
@@ -513,7 +519,7 @@ describe('registration through the lens', () => {
       for (const read of [(x: FrozenClient) => x.previewRegistration(preview('fresh')), (x: FrozenClient) => x.pricing()]) {
         const r = await both(w, read, c)
         expect(r.viaLens).toEqual(r.direct)
-        expect(r.reasons).toEqual(['unsupported'])
+        expect(r.reasons).toEqual(reasons)
       }
     }
     expect(w.fallbacks.every((f) => !f.disabled)).toBe(true)
@@ -548,6 +554,82 @@ describe('registration through the lens', () => {
       expect(r.viaLens).toEqual(r.direct)
       expect(r.reasons).toEqual(['evidence'])
     }
+  })
+})
+
+describe("the launch policy's 1- and 2-character roots", () => {
+  /** The launch policy, selected by a SetPolicy; its 1- and 2-character releases open at `opened`, if given. */
+  async function launch(opened?: bigint) {
+    const w = await lensWorld(4)
+    const policy = id(9)
+    w.release.contracts.set(policy, { ...w.release.contracts.get(id(3))!, contractId: policy, codeHash: LAUNCH_POLICY_CODE_HASH })
+    w.release.drivers.set(policy, jsonDriver)
+    w.chain.policy = fromHex(policy, 32)
+    w.chain.policyVersion = 2n
+    if (opened !== undefined) w.chain.policyQuote = (r) => releasedQuote(r, opened)
+    return w
+  }
+  /**
+   * The launch policy's quote of a released 1- or 2-character root, as its `quote` computes it (protocol
+   * d42877d2): public at the tier's price, with the larger of the dropped-name premium and the release's,
+   * 2,000,000 or 1,000,000 DUSK halved each day since the opening, for 21 days.
+   */
+  function releasedQuote(r: QuoteRequest, opened: bigint) {
+    if (r.label.length > 2 || r.height < opened) return undefined
+    const q = estimateRegistrationQuote({ ...launchPolicyConfig(), minimum_root_bytes: 1 }, r),
+      start = [2_000_000n, 1_000_000n][r.label.length - 1] * LUX_PER_DUSK,
+      days = (r.height - opened) / BLOCKS_PER_DAY,
+      release = (start >> (days < 21n ? days : 21n)) - (start >> 21n),
+      premium = String(BigInt(q.premium_lux) > release ? BigInt(q.premium_lux) : release)
+    return { ...q, premium_lux: premium, referral_lux: referralRewardLux(q.base_lux, premium, q.base_referral_bps, q.premium_referral_bps), total_lux: String(BigInt(q.base_lux) + BigInt(premium)) }
+  }
+  const quoted = (r: { direct: unknown }) => (r.direct as { value: { quote: RegistrationQuote } }).value.quote.quote
+  it('reads a released root from its store, without a strike: three leave the lens on, for the next root and in the cache', async () => {
+    const w = await launch(100n)
+    const items = new Map<string, string>()
+    const c = await w.client({ verificationCache: { getItem: (k) => items.get(k) ?? null, setItem: (k, v) => void items.set(k, v) } })
+    const premiums: bigint[] = []
+    for (const [label, day] of [['a', 0n], ['ab', 1n], ['z', 2n]] as const) {
+      w.chain.height = 100n + day * BLOCKS_PER_DAY
+      const r = await both(w, (x) => x.previewRegistration(preview(label)), c)
+      // The store's quote: public, with the release premium of that day.
+      expect(r.viaLens, label).toEqual(r.direct)
+      expect(quoted(r).label_status, label).toBe('Public')
+      premiums.push(BigInt(quoted(r).premium_lux))
+      expect(r.reasons, label).toEqual(['unsupported'])
+    }
+    expect(premiums[0] > premiums[1] && premiums[1] > premiums[2] && premiums[2] > 0n).toBe(true)
+    // The next root, of 3 or more characters, is still the lens's: one lens query answers it.
+    const sent = w.log.length
+    const next = await both(w, (x) => x.previewRegistration(preview('fresh')), c)
+    expect(next.viaLens).toEqual(next.direct)
+    expect(next.reasons).toEqual([])
+    expect(w.log.slice(sent).filter((call) => call === '08.availability')).toHaveLength(1)
+    expect([...items.values()].some((v) => v.includes('availability'))).toBe(false)
+  })
+  it('reads an unreleased root\'s Denied quote from its store, as before; under the v1 policy still as an evidence failure', async () => {
+    for (const [w, reasons] of [[await launch(), ['unsupported']], [await lensWorld(4), ['evidence']]] as const) {
+      const c = await w.client()
+      for (const label of ['a', 'ab']) {
+        const r = await both(w, (x) => x.previewRegistration(preview(label)), c)
+        expect(r.viaLens, label).toEqual(r.direct)
+        expect(quoted(r).label_status, label).toBe('Denied')
+        expect(r.reasons, label).toEqual(reasons)
+      }
+    }
+  })
+  it('checks a 3-byte root in full, with the release open: its honest quote is the lens\'s, a wrong one an evidence failure', async () => {
+    const w = await launch(100n)
+    const c = await w.client()
+    const honest = await both(w, (x) => x.previewRegistration(preview('abc')), c)
+    expect(honest.viaLens).toEqual(honest.direct)
+    expect(honest.reasons).toEqual([])
+    tamper(w, (ok, fn) => {
+      if (fn === 'availability' && ok.status.Registrable) ok.status.Registrable.quote.total_lux = '1'
+    })
+    const wrong = await both(w, (x) => x.previewRegistration(preview('abd')), c)
+    expect(wrong.viaLens).toEqual(wrong.direct)
+    expect(wrong.reasons).toEqual(['evidence'])
   })
 })
 

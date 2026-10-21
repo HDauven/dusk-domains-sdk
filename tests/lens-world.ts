@@ -15,7 +15,7 @@ import { bytes, id, jsonDriver, jsonRelease, sample, sevens } from './helpers.ts
 import type { ReadTransport } from '../src/frozen/transport.ts'
 import type { LensContract, LoadedRelease } from '../src/frozen/manifest.ts'
 import type {
-  Admission, Forward, Home, Located, NameKey, NameView, PrimaryView, RecordValue, RecordsView, RenewalSchedule,
+  Admission, Forward, Home, Located, NameKey, NameView, PrimaryView, QuoteRequest, RecordValue, RecordsView, RenewalSchedule,
 } from '../src/frozen/types.ts'
 
 export const encode = (v: unknown) => new TextEncoder().encode(stringifyJson(v))
@@ -121,6 +121,8 @@ export async function lensWorld(n: number, r = 3, { lens = true, storeCode }: { 
     replies: new Map<string, unknown>(),
     /** Change a lens reply before it is sent, as a faulty lens or node would. */
     lensReply: undefined as undefined | ((fn: string, reply: any) => unknown),
+    /** The selected policy's quote, where it prices a request otherwise than the v1 policy does. */
+    policyQuote: undefined as undefined | ((request: QuoteRequest) => ReturnType<typeof estimateRegistrationQuote> | undefined),
     onRead: undefined as undefined | ((call: string) => void | Promise<void>),
     /** Run before a height read is answered, and after a reply was computed, before it arrives. */
     onHeight: undefined as undefined | (() => void | Promise<void>),
@@ -166,12 +168,13 @@ export async function lensWorld(n: number, r = 3, { lens = true, storeCode }: { 
       if (others.some(isStaged) || !others.every((h) => h === 'Absent') || chain.stores.at(-1) !== self)
         return trap(target, 'WrongHome')
     }
-    const { estimate, total_lux, ...q } = estimateRegistrationQuote(launchPolicyConfig(), {
+    const request: QuoteRequest = {
       version: 1, directory: bytes(1), store: fromHex(target, 32), node: args.node, label: args.label,
       actor: args.actor, years: args.years, height: chain.height,
       previous_generation: previous?.name.incarnation.generation ?? 0n,
       previous_grace_end: previous ? previous.name.grace_end : null, policy_version: chain.policyVersion,
-    })
+    }
+    const { estimate, total_lux, ...q } = chain.policyQuote?.(request) ?? estimateRegistrationQuote(launchPolicyConfig(), request)
     void estimate
     return { policy: chain.policy, policy_version: chain.policyVersion, quote: q, total_lux, height: chain.height }
   }

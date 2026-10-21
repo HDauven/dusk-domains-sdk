@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2 (2026-10-21)
+
+- Answer `pricing` and `previewRegistration` through the lens under the launch policy (`fc0bf306…`) too, priced as v1, quoting 1- and 2-character roots from the store.
+
 ## 0.5.1 (2026-10-20)
 
 - Keep the multicall's holdoff per client; drop its `sessionStorage` record.
