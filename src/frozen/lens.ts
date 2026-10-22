@@ -8,12 +8,13 @@ import { canonicalBytes } from './digests.ts'
 import { stringifyJson, U64_MAX } from './json.ts'
 import { initCommitment, markLensRows } from './trust.ts'
 import { wireValue } from './wire.ts'
-import { lensCatalog, type LensMethod } from './lens-schema.ts'
+import { rateLimit } from './batching.ts'
+import { LENS_INTERFACE, lensCatalog, type LensMethod } from './lens-schema.ts'
 import { MAX_REGISTRATION_AHEAD_BLOCKS, REGISTRATION_YEAR_BLOCKS } from '../core/lifecycle.ts'
 import { estimateRegistrationQuote, estimateRenewalQuote } from '../core/pricing.ts'
 import { primaryNameStatus } from '../core/primary.ts'
 import type { DataDriver } from './driver.ts'
-import type { ContractRole, LoadedRelease } from './manifest.ts'
+import type { ContractRole, LensContract, ReleaseContract } from './manifest.ts'
 import type {
   Admission,
   Binding,
@@ -55,10 +56,15 @@ export interface LensVerifiedPrimary {
   primary: PrimaryView
   record: RecordValue
 }
+/** A lens refusal (`LensReply::Refused`): why it gave no answer, at the height of the query. */
 export interface LensRefusal {
+  /** The lens's `LensError`, such as `InvalidName` or `GasBudget`. */
   code: string
+  /** The contract the refusal is about, if one. */
   contract: Contract | null
+  /** The frozen error that contract trapped with, if it named one. */
   cause: string | null
+  /** The height the lens read at. */
   height: bigint
 }
 /** Everything a root's renewal quote reads, for display: `total = annual_lux * years`. */
@@ -143,6 +149,81 @@ export class LensFailure extends Error {
     this.strikes = options.strikes ?? (reason === 'decode' || reason === 'evidence')
   }
 }
+/** What a reply's check threw, as a lens failure: any other error is its evidence failing to check. */
+export function evidenceFailure(error: unknown): LensFailure {
+  return error instanceof LensFailure
+    ? error
+    : new LensFailure('evidence', `Lens evidence does not check: ${error instanceof Error ? error.message : String(error)}`)
+}
+/** Rate-limit retries per lens call, the wait when the node names none, and the longest wait taken. */
+export const LENS_RETRIES = 3
+export const LENS_RETRY_MS = 1_000
+export const LENS_RETRY_MAX_MS = 10_000
+/** How long a lens deployment that failed its check, or a lens method that tripped, is held off. */
+export const LENS_OFF_MS = 600_000
+/** Wait `ms`, or until `signal` aborts, which throws its reason. */
+export function wait(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const stop = () => {
+      clearTimeout(timer)
+      reject(signal!.reason)
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', stop)
+      resolve()
+    }, ms)
+    if (signal?.aborted) stop()
+    else signal?.addEventListener('abort', stop, { once: true })
+  })
+}
+/**
+ * A lens read, sent again after the wait a rate limit names, 1 s if none, while `budget` has retries left
+ * and the wait is at most 10 s; then it throws `limited(error)`. Any other failure throws as it is.
+ */
+export async function lensRetry<T>(
+  read: () => Promise<T>,
+  budget: { retries: number },
+  limited: (error: unknown) => unknown = (error) => error,
+  signal?: AbortSignal,
+): Promise<T> {
+  for (;;) {
+    try {
+      return await read()
+    } catch (error) {
+      const ms = rateLimit(error, LENS_RETRY_MS)
+      if (ms === undefined) throw error
+      if (budget.retries <= 0 || ms > LENS_RETRY_MAX_MS) throw limited(error)
+      budget.retries--
+      await wait(ms, signal)
+    }
+  }
+}
+/** A lens entry that commits to its code and its init, as every lens a client reads through does. Throws `deployment`. */
+export function checkLensCommitments(entry: LensContract): void {
+  if (entry.codeHash === undefined || entry.initHash === undefined)
+    throw new LensFailure('deployment', 'The release lens has no code or init commitment')
+}
+/**
+ * A lens entry a client may read through: it commits to code and init, and its init commitment is that of
+ * `InitLens { directory }` over the release's directory, with the entry's driver. Throws `deployment`.
+ */
+export function checkLensEntry(entry: LensContract, driver: DataDriver, directory: string): void {
+  checkLensCommitments(entry)
+  if (lensInitCommitment(driver, directory) !== entry.initHash)
+    throw new LensFailure('deployment', "The release lens entry's init commitment is not bound to the release's directory")
+}
+/** Whether a deployed lens reports lens v1's interface: its version and the pool's bounds. */
+export function lensInterfaceMatches(face: Record<keyof typeof LENS_INTERFACE, number>): boolean {
+  return Object.entries(LENS_INTERFACE).every(([k, v]) => face[k as keyof typeof LENS_INTERFACE] === v)
+}
+/** The binding a deployed lens reports: the release's directory, vault and network. Throws `deployment`. */
+export function checkLensBinding(binding: Binding, release: Binding): void {
+  if (!sameBinding(binding, release)) throw new LensFailure('deployment', 'Lens deployment binding mismatch')
+}
+/** The interface a deployed lens reports: lens v1's, with the pool's bounds. Throws `deployment`. */
+export function checkLensInterface(face: Record<keyof typeof LENS_INTERFACE, number>): void {
+  if (!lensInterfaceMatches(face)) throw new LensFailure('deployment', 'Unsupported lens interface')
+}
 /**
  * The code hash of the short-name release policy once planned for launch: the v1 policy's pricing for 3
  * or more characters, and 1- and 2-character roots `Denied` until its operator opens their release
@@ -167,7 +248,12 @@ const evidence = (message: string): never => {
 
 /** What a reply's evidence is checked against: the client's own release and refusals. */
 export interface EvidenceContext {
-  release: LoadedRelease
+  /** The release's network and contracts, and the verified drivers a policy's evidence is checked with. */
+  release: {
+    manifest: { network: number }
+    contracts: ReadonlyMap<string, ReleaseContract>
+    drivers: ReadonlyMap<string, DataDriver>
+  }
   refused: { has(id: string): boolean }
   /** Code and init hashes the client verified a contract with, compared again here. */
   known: (id: string) => { codeHash?: string; initHash?: string } | undefined
@@ -177,6 +263,27 @@ export interface EvidenceContext {
   storeMark: number
   directoryId: string
   vaultId: string
+}
+/**
+ * Store ordinals a client saw, each with the height it saw it at: heights and ordinals rising.
+ * Admissions are never removed, so a reply lists every store seen at or below its height.
+ */
+export class StoreMarks {
+  private readonly marks: { height: bigint; ordinal: number }[] = []
+  /** The highest store ordinal seen at or below `height`, or -1. */
+  at(height: bigint): number {
+    let mark = -1
+    for (const m of this.marks) if (m.height <= height && m.ordinal > mark) mark = m.ordinal
+    return mark
+  }
+  /** Keep that `ordinal` was admitted by `height`, dropping what it makes redundant. */
+  saw(height: bigint, ordinal: number): void {
+    if (this.at(height) >= ordinal) return
+    for (let i = this.marks.length - 1; i >= 0; i--)
+      if (this.marks[i].height >= height && this.marks[i].ordinal <= ordinal) this.marks.splice(i, 1)
+    this.marks.push({ height, ordinal })
+    this.marks.sort((a, b) => (a.height < b.height ? -1 : a.height > b.height ? 1 : 0))
+  }
 }
 /** The binding every contract of the release names: its directory, vault and network. */
 export function releaseBinding(ctx: EvidenceContext): Binding {
@@ -362,19 +469,28 @@ export function lensOutput<T>(driver: DataDriver, method: LensMethod, bytes: Uin
   return r.Ok
 }
 
-/** A primary every `verifyPrimary` check accepts (client.ts `VerifiedPrimary`). */
-interface Primary {
+/** A primary name `verifyPrimary` verified: its store, the mapping, the forward record and the height. */
+export interface VerifiedPrimary {
+  /** The store holding the mapping and its name. */
   store: string
+  /** The mapping, its name and the spelling. */
   primary: PrimaryView
+  /** The name's `moonlight_address` record, which is the endpoint. */
   record: RecordValue
+  /** The height it was verified at. */
   height: bigint
 }
 /** A name at its home, with records by key: `getName` plus each key's `resolve_record`, at one height. */
 export interface Resolved {
+  /** The name's home: the store holding its root, or the directory's newest store when no store does. */
   store: string
+  /** The home's answer: the name, or `Absent`. */
   value: Located<NameView>
+  /** The forwards followed to the home. */
   forwards: Forward[]
+  /** The height it was read at. */
   height: bigint
+  /** The name's lifecycle there, from the store's `active` and `renewable` flags. */
   status: NameLifecycle
   /** One per requested key, in order: the home's `resolve_record`, null unless the name is active and holds it. */
   records: (RecordValue | null)[]
@@ -390,7 +506,7 @@ export interface NamePage {
   /** Every record (`read_records`), for a name some store holds. */
   records: RecordsView | null
   /** The primary of the name's own `moonlight_address` endpoint; `error` when its verification failed. */
-  primary: { endpoint: number[] | null; verified: Primary | null; isPrimary: boolean; error: unknown }
+  primary: { endpoint: number[] | null; verified: VerifiedPrimary | null; isPrimary: boolean; error: unknown }
   /** For a root some store holds: what its renewal quote reads, to show prices by years. */
   renewal: RenewalInputs | null
 }
@@ -420,7 +536,7 @@ const local = (name: Located<NameView>): NameView | undefined =>
   typeof name === 'object' && 'Local' in name ? name.Local : undefined
 const sameKey = (a: NameKey, b: NameKey) => equalBytes(a.root, b.root) && equalBytes(a.node, b.node)
 /** A primary the lens verified, checked against the endpoint and the store list. */
-function verifiedPrimary(stores: readonly string[], p: LensVerifiedPrimary, endpoint: number[], height: bigint): Primary {
+function verifiedPrimary(stores: readonly string[], p: LensVerifiedPrimary, endpoint: number[], height: bigint): VerifiedPrimary {
   const store = contractId(p.store)
   if (!stores.includes(store)) evidence('Lens primary is at a store outside its evidence')
   let spelled: NameKey | undefined
@@ -438,6 +554,18 @@ function verifiedPrimary(stores: readonly string[], p: LensVerifiedPrimary, endp
     evidence('Lens primary does not match its endpoint')
   return { store, primary: p.primary, record: p.record, height }
 }
+/** A copy of `resolve`'s record keys: at most 16 distinct keys of 1 to 64 bytes, or it throws. */
+export function validRecordKeys(recordKeys: readonly string[]): string[] {
+  const keys = [...recordKeys],
+    encoder = new TextEncoder()
+  if (
+    keys.length > 16 ||
+    new Set(keys).size !== keys.length ||
+    keys.some((k) => typeof k !== 'string' || !k || encoder.encode(k).length > 64)
+  )
+    throw new Error('Expected at most 16 distinct record keys of 1 to 64 bytes')
+  return keys
+}
 /** `resolve`: the route, lifecycle and records of `key`, and the resolver they were read from. */
 export function checkResolution(ctx: EvidenceContext, r: LensResolution, key: NameKey, keys: readonly string[]): Resolved {
   const stores = checkStores(ctx, r.consulted.stores)
@@ -454,7 +582,7 @@ export function checkResolution(ctx: EvidenceContext, r: LensResolution, key: Na
   return { store, value: r.name, forwards: r.forwards, height: r.height, status: r.status, records: r.records }
 }
 /** `reverse`: the verified primary of `endpoint`, if any, and the resolver its record was read from. */
-export function checkReverse(ctx: EvidenceContext, r: LensReverse, endpoint: number[]): Primary | null {
+export function checkReverse(ctx: EvidenceContext, r: LensReverse, endpoint: number[]): VerifiedPrimary | null {
   const stores = checkStores(ctx, r.consulted.stores)
   checkResolvers(ctx, r.consulted.resolvers, [])
   if (!equalBytes(r.endpoint, endpoint)) evidence('Lens reply is for another endpoint')
@@ -472,7 +600,7 @@ export function checkNamePage(ctx: EvidenceContext, r: LensNamePage, key: NameKe
     p = r.primary
   // A refused primary is part of the reply: the whole page is read directly instead.
   if (p.refused) throw new LensFailure('refused', `Lens name_page refused its primary: ${p.refused.code}`, { refusal: p.refused })
-  let verified: Primary | null = null
+  let verified: VerifiedPrimary | null = null
   if (!view) {
     if (r.records || r.renewal || p.endpoint || p.verified || p.is_primary) evidence('Lens page of an absent name has content')
   } else {

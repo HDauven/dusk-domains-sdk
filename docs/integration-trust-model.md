@@ -383,6 +383,62 @@ per-contract read scopes never use the lens (as `quoteRenewal`, `locate`,
 `quoteRegistration` and `prepareRegistration` do not), or a client created with
 `useLens: false`.
 
+### The light reader
+
+`createLensReader` (`@duskdomains/sdk/lens-reader`) answers `resolve` and `verifyPrimary`, and
+`resolveMoonlightAccount` from `resolve`, through the lens alone. It fetches the lens driver and no
+other, sends one lens query per read to the node and reads no tip. It makes the client's lens checks
+with the same code:
+
+- the release, as `validateReleaseManifest` checks it, with contract IDs and commitments from it only:
+  no `resolveContract`, no manifest read at runtime;
+- the lens driver's size, digests and lens v1 schema, and `initHash` as the init commitment of
+  `InitLens { directory }` over the release's directory;
+- the deployed lens's `binding` and `lens_interface` against the release's directory, vault and network
+  and lens v1, read once beside the first query, which is used only once they pass, and read again by a
+  later read while that check has not passed. A lens that failed the check is held off for 10 minutes,
+  as the client holds it off: every read then throws that failure and sends nothing;
+- each reply decoded strictly, then `checkResolution` or `checkReverse`, as above: every store
+  admission and the resolvers the reply rests on are contracts the release lists in that role, at
+  interface version 1, with its code and init hashes, and routes and records hold;
+- a reply, or a refusal, that shows an older state than the reader showed, below a height it answered
+  at or without a store it saw by that height, is asked for again after 1 s, three times. The client
+  reads such a reply again between tip reads, and so reads a node whose tip went back at that tip; the
+  reader cannot read a tip, so a node that keeps answering so, one that lags or went back after a
+  reverted block, has its last answer used (a refusal is thrown), as a fresh reader would use it, and
+  later replies are held to that one. A refusal's height holds later replies as an answer's does. An ask
+  that fails leaves the answer in hand. A balancer's lagging backend costs a read a second or more;
+  nothing stays stuck.
+
+It verifies nothing directly, so the release's commitments are all it compares evidence with: it
+refuses a release whose lens, stores or resolvers lack `codeHash` or `initHash`, which the full client
+can verify from the directory's records instead. As the client, it compares the lens's `initHash` only:
+no read returns a contract's code, and the lens's ID derives from the WASM its `codeHash` pins. It skips
+what needs another contract's driver:
+
+- the directory's own `interface_version` and `binding`. The lens's `init` read both, required the
+  directory interface, the directory's own ID and this chain, and kept that binding, which `binding`
+  reports; the directory's interface is its code's and its binding is set once, at init, and the init
+  commitment check binds this lens to the release's directory. So the reader checks the same facts,
+  as the lens read them at deployment rather than now. The node vouches for both reads alike;
+- the code and init hashes, and the policy selections, a client also compares replies with from its
+  own direct reads: the reader has none, as a client that verified nothing directly, and none of its
+  reads rests on a policy.
+
+It reads no other way. A refusal, a reply that does not decode or check, or a failed query throws a
+`LensReaderError` whose `reason` says which, and so does a read past `timeoutMs` (15 s by default,
+for its creation too); arguments the client refuses throw an `Error` first, as the client's do. A
+rate-limited query is sent again as the client's are, three times a read, the deployment check it
+starts included, and a read that joined another read's deployment check checks again with its own
+when that one could not be read. A store or resolver the directory admits after the release fails
+every reply that names it, and every reply names every store: the reader then fails each read until the
+app pins a release that lists it, where the full client can admit it through `resolveContract`. The
+deployment check and the heights and store marks it holds replies to are per reader, never kept in a
+`verificationCache`. `resolveMoonlightAccount` gives an account only for an active name whose
+`moonlight_address` has a compressed key's shape (96 bytes, not the identity, coordinates in the
+field); it runs no curve check, which `isMoonlightEndpoint` in the root does, so a wallet validates the
+key as it validates any address.
+
 ### Batched reads
 
 The client sends the contract reads it makes in one tick, before the next task runs, as one

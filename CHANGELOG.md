@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.4 (2026-10-22)
+
+- Add `@duskdomains/sdk/lens-reader`: `createLensReader` resolves names and verifies primaries through the lens alone, fetching only its driver.
+
 ## 0.5.3 (2026-10-21)
 
 - `launchPolicyConfig()` and `LAUNCH_NAME_POLICY` follow the launch release: roots from 1 character, at 1,000, 400, 150, 50 and 10 DUSK a year.

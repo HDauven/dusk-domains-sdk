@@ -1,6 +1,6 @@
-# Public surface in 0.5.3
+# Public surface in 0.5.4
 
-The npm and JSR export maps contain the same eight entrypoints. npm resolves
+The npm and JSR export maps contain the same nine entrypoints. npm resolves
 runtime imports to compiled JavaScript and types to declarations in `dist`; its
 `event-catalog` export uses the generated standalone `.mjs` catalog. Plain Node
 consumers need no TypeScript loader. JSR continues to export TypeScript sources.
@@ -15,6 +15,7 @@ consumers need no TypeScript loader. JSR continues to export TypeScript sources.
 | `@duskdomains/sdk/projection`      | Receipt journals, projection, projected reads, digest helpers and event catalog                                                                                                             |
 | `@duskdomains/sdk/indexer`         | Projection HTTP response types, `createDuskDomainsIndexerClient`, `createIndexerClientFromManifest`, `collectIndexerPages`, `waitForIndexerWrite`                                           |
 | `@duskdomains/sdk/chain-addresses` | Ethereum, Bitcoin and Solana address validators; retained as public                                                                                                                         |
+| `@duskdomains/sdk/lens-reader`     | `createLensReader`, `LensReader`, `LensReaderError`, `MoonlightAccount`: `resolve`, `verifyPrimary` and `resolveMoonlightAccount` through the release's lens alone, with its driver only |
 
 `./internal` and `./write-proof` are removed with the legacy clients. The old
 `*_runtime` names, router/core/treasury presets, hand-written legacy wire shapes,
