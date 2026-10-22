@@ -1,6 +1,6 @@
 {
   "name": "@duskdomains/sdk",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -39,6 +39,10 @@
     "./indexer": {
       "types": "./dist/indexer.d.ts",
       "import": "./dist/indexer.js"
+    },
+    "./lens-reader": {
+      "types": "./dist/lens-reader.d.ts",
+      "import": "./dist/lens-reader.js"
     }
   },
   "files": [

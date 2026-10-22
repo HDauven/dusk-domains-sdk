@@ -69,7 +69,7 @@ The lens fixtures come from the deployed testnet lens, not from this repository:
   deployment handoff's SDK `lens` entry and `init`, `initArchive` and `initHash`.
 
 The tests decode every golden with the real driver, recompute the init commitment, and run
-the SDK's evidence checks and a client on the real replies.
+the SDK's evidence checks, a client and the light reader on the real replies.
 
 ## Renewal exactness
 

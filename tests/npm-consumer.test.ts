@@ -89,7 +89,7 @@ it('imports every runtime entrypoint from an npm tarball in plain Node without a
         timeout: 30_000,
       }),
     )
-    expect(imported).toHaveLength(8)
+    expect(imported).toHaveLength(9)
     expect(imported).toEqual(specifiers)
     for (const entry of Object.values(manifest.exports) as {
       types: string

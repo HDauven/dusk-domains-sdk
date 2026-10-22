@@ -47,22 +47,32 @@ import {
   type VerifiedContract,
 } from './trust.ts'
 import {
+  LENS_OFF_MS,
+  LENS_RETRIES,
+  LENS_RETRY_MS,
   LensFailure,
+  StoreMarks,
   checkAvailability,
   checkBootstrap,
   checkNamePage,
   checkPricing,
   checkResolution,
   checkReverse,
-  lensInitCommitment,
+  checkLensBinding,
+  checkLensEntry,
+  checkLensInterface,
+  evidenceFailure,
   lensInput,
+  lensInterfaceMatches,
   lensOutput,
+  lensRetry,
   lifecycle,
   replyStores,
   moonlightEndpoint,
   pageRenewalQuote,
   renewalInputs,
   sameBinding,
+  validRecordKeys,
   type Bootstrap,
   type EvidenceContext,
   type LensAvailability,
@@ -77,6 +87,7 @@ import {
   type Pricing,
   type RenewalInputs,
   type Resolved,
+  type VerifiedPrimary,
 } from './lens.ts'
 import { LENS_INTERFACE, type LensMethod } from './lens-schema.ts'
 import type { DataDriver } from './driver.ts'
@@ -94,7 +105,6 @@ import type {
   NameKey,
   NameView,
   MemberKind,
-  PrimaryView,
   RecordValue,
   RegistrationQuote,
   QuoteRegistration,
@@ -112,7 +122,7 @@ import type {
 export { ContractRefusedError, UnverifiedContractError, UnverifiedQuoteError } from './trust.ts'
 export { MULTICALL_CONTRACT_ID } from './multicall.ts'
 export type { MulticallFallback } from './batching.ts'
-export type { Bootstrap, LensFallbackReason, NameLifecycle, NamePage, Pricing, RenewalInputs, Resolved } from './lens.ts'
+export type { Bootstrap, LensFallbackReason, NameLifecycle, NamePage, Pricing, RenewalInputs, Resolved, VerifiedPrimary } from './lens.ts'
 /** A read that fell back from the release's lens to direct reads, and why. */
 export interface LensFallback {
   /** The client method, such as `getName`. */
@@ -144,11 +154,7 @@ function settle<T>(check: () => T): T {
   try {
     return check()
   } catch (error) {
-    throw heightIndependent(
-      error instanceof LensFailure
-        ? error
-        : new LensFailure('evidence', `Lens evidence does not check: ${error instanceof Error ? error.message : String(error)}`),
-    )
+    throw heightIndependent(evidenceFailure(error))
   }
 }
 const policyAdmissionMismatch = () =>
@@ -271,12 +277,6 @@ interface Observed {
 }
 /** How long a method reads directly after a lens refusal for lack of resources (`GasBudget`, `ReadFailed`). */
 const LENS_BACKOFF_MS = 30_000
-/** How long a tripped method, or a deployment that failed its check, is held off, also in later clients. */
-const LENS_OFF_MS = 600_000
-/** Rate-limit retries per lens call, the wait when the node names none, and the longest wait taken. */
-const LENS_RETRIES = 3
-const LENS_RETRY_MS = 1_000
-const LENS_RETRY_MAX_MS = 10_000
 /** How long a lens health read or write of the cache may take before the client stops using it for that. */
 const LENS_CACHE_MS = 1_000
 /** The reply checks' version: lens health is kept per version and release. Bump it when they change. */
@@ -369,13 +369,6 @@ export interface Routed<T> {
   store: string
   value: Located<T>
   forwards: Forward[]
-  height: bigint
-}
-/** A primary name `verifyPrimary` verified: its store, the mapping, the forward record and the height. */
-export interface VerifiedPrimary {
-  store: string
-  primary: PrimaryView
-  record: RecordValue
   height: bigint
 }
 /** What `discover()` returns: the directory's configuration and admitted stores and resolvers at one height. */
@@ -505,7 +498,7 @@ export class FrozenClient {
    * height it saw each at: heights and ordinals rising. Admissions are never removed, so a lens reply
    * lists every store seen at or below its height.
    */
-  private readonly storeMarks: { height: bigint; ordinal: number }[] = []
+  private readonly storeMarks = new StoreMarks()
   /** Policy selections this client read directly, by selection version; '' where two reads disagree. */
   private readonly selectionsSeen = new Map<string, string>()
   /** What an attempt read about stores and selections, kept only if the attempt commits. */
@@ -1326,20 +1319,6 @@ export class FrozenClient {
     }
     throw new Error('Directory membership exceeds frozen bound')
   }
-  /** The highest store ordinal this client saw at or below `height`. */
-  private storeMark(height: bigint): number {
-    let mark = -1
-    for (const m of this.storeMarks) if (m.height <= height && m.ordinal > mark) mark = m.ordinal
-    return mark
-  }
-  /** Keep that `ordinal` was admitted by `height`, dropping what it makes redundant. */
-  private sawStores(height: bigint, ordinal: number): void {
-    if (this.storeMark(height) >= ordinal) return
-    for (let i = this.storeMarks.length - 1; i >= 0; i--)
-      if (this.storeMarks[i].height >= height && this.storeMarks[i].ordinal <= ordinal) this.storeMarks.splice(i, 1)
-    this.storeMarks.push({ height, ordinal })
-    this.storeMarks.sort((a, b) => (a.height < b.height ? -1 : a.height > b.height ? 1 : 0))
-  }
   /** Stage what a directory read shows about stores and the policy selection, for `at`'s commit. */
   private observe(at: Attempt, method: string, args: unknown, value: unknown): void {
     if (!['member', 'members', 'registration_context', 'config'].includes(method)) return
@@ -1367,7 +1346,7 @@ export class FrozenClient {
   private commitObserved(at: Attempt): void {
     const seen = this.observed.get(at)
     if (!seen) return
-    if (seen.prefix >= 0) this.sawStores(at.height, Math.max(seen.prefix, seen.single))
+    if (seen.prefix >= 0) this.storeMarks.saw(at.height, Math.max(seen.prefix, seen.single))
     for (const [version, policy] of seen.selections) {
       const known = this.selectionsSeen.get(version)
       this.selectionsSeen.set(version, known === undefined || known === policy ? policy : '')
@@ -1882,7 +1861,7 @@ export class FrozenClient {
     return Promise.race([Promise.resolve(op), late]).finally(stop)
   }
   /** A lens read: one the node rate-limits is sent again after its wait while `budget` lasts, never after one over 10 s. */
-  private async lensRead(
+  private lensRead(
     at: Attempt | undefined,
     id: string,
     method: LensMethod,
@@ -1890,18 +1869,8 @@ export class FrozenClient {
     budget: LensBudget,
     info?: { batched?: boolean; alone?: boolean; ownHeight?: boolean },
   ): Promise<Uint8Array> {
-    for (;;) {
-      try {
-        return await this.sharing.read(at, id, method, input, true, info)
-      } catch (error) {
-        const wait = rateLimit(error, LENS_RETRY_MS)
-        if (wait === undefined) throw error
-        // A rate limit says nothing about the height: no snapshot reads it again at another.
-        if (budget.retries <= 0 || wait > LENS_RETRY_MAX_MS) throw heightIndependent(error)
-        budget.retries--
-        await new Promise((resolve) => setTimeout(resolve, wait))
-      }
-    }
+    // A rate limit says nothing about the height: no snapshot reads it again at another.
+    return lensRetry(() => this.sharing.read(at, id, method, input, true, info), budget, heightIndependent)
   }
   /**
    * A lens query's reply. One a multicall answered that refuses for want of gas, which the lens's share of
@@ -1979,7 +1948,7 @@ export class FrozenClient {
     }
     // As a committed snapshot at the reply's height would: the stores it lists, from ordinal 0, are seen.
     const stores = replyStores(reply).length - 1
-    if (stores >= 0) this.sawStores(reply.height, stores)
+    if (stores >= 0) this.storeMarks.saw(reply.height, stores)
     if (this.lensTop === undefined || reply.height > this.lensTop) this.lensTop = reply.height
     return { value: checked }
   }
@@ -2037,16 +2006,8 @@ export class FrozenClient {
       id = contractId(contract.contractId)
     // Its replies rest on the directory: they are used only through one this client verified.
     await this.verify('directory', this.directoryId, undefined, false)
-    const off = (message: string): never => {
-      throw new LensFailure('deployment', message)
-    }
-    if (contract.codeHash === undefined || contract.initHash === undefined)
-      off('The release lens has no code or init commitment')
-    if (lensInitCommitment(driver, this.directoryId) !== contract.initHash)
-      off("The release lens entry's init commitment is not bound to the release's directory")
-    const sound = (facts: LensFacts) =>
-      sameBinding(facts.binding, this.directoryBinding()) &&
-      Object.entries(LENS_INTERFACE).every(([k, v]) => facts.face[k as keyof LensFacts['face']] === v)
+    checkLensEntry(contract, driver, this.directoryId)
+    const sound = (facts: LensFacts) => sameBinding(facts.binding, this.directoryBinding()) && lensInterfaceMatches(facts.face)
     const key = this.factsKey('lens', id, contract),
       kept = await this.cachedLensFacts(key)
     if (kept && sound(kept)) return this.lensChecked()
@@ -2059,10 +2020,9 @@ export class FrozenClient {
     const bindingRead = read<Binding>('binding', ahead?.binding),
       faceRead = read<typeof LENS_INTERFACE>('lens_interface', ahead?.face)
     const binding = await bindingRead()
-    if (!sameBinding(binding, this.directoryBinding())) off('Lens deployment binding mismatch')
+    checkLensBinding(binding, this.directoryBinding())
     const face = await faceRead()
-    if (Object.entries(LENS_INTERFACE).some(([k, v]) => face[k as keyof typeof face] !== v))
-      off('Unsupported lens interface')
+    checkLensInterface(face)
     this.keepLensFacts(key, { binding, face })
     this.lensChecked()
   }
@@ -2148,7 +2108,7 @@ export class FrozenClient {
           seen = this.selectionsSeen.get(u64(version).toString())
         return quoted !== undefined && seen !== undefined && quoted !== seen ? '' : (quoted ?? seen)
       },
-      storeMark: this.storeMark(height),
+      storeMark: this.storeMarks.at(height),
       directoryId: this.directoryId,
       vaultId: this.vaultId,
     }
@@ -2184,14 +2144,7 @@ export class FrozenClient {
    */
   async resolve(spelling: string, recordKeys: readonly string[], homeHint?: string): Promise<Resolved> {
     const key = nameKey(spelling),
-      keys = [...recordKeys]
-    const encoder = new TextEncoder()
-    if (
-      keys.length > 16 ||
-      new Set(keys).size !== keys.length ||
-      keys.some((k) => typeof k !== 'string' || !k || encoder.encode(k).length > 64)
-    )
-      throw new Error('Expected at most 16 distinct record keys of 1 to 64 bytes')
+      keys = validRecordKeys(recordKeys)
     const lens = await this.viaLens('resolve', 'resolve', { name: spelling, record_keys: keys, hint: lensHint(homeHint) },
       (r: LensResolution, ctx) => checkResolution(ctx, r, key, keys))
     if (lens) return lens.value

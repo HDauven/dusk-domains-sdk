@@ -2,7 +2,7 @@
 
 TypeScript SDK for the ADR 0004 frozen layer: directory, store shards,
 registry-qualified resolvers, vault, replaceable policy and marketplace v1.
-Version **0.5.3** targets a fresh frozen deployment. The 0.2 router/core/treasury
+Version **0.5.4** targets a fresh frozen deployment. The 0.2 router/core/treasury
 clients and legacy events have been removed.
 
 ## Quickstart
@@ -73,6 +73,35 @@ historical-state proof. The node is a
 trust root for reads; the chain still enforces what a signed call pays
 ([trust model](docs/integration-trust-model.md#what-the-node-can-and-cannot-do)).
 Unavailable dependencies throw; they are never interpreted as absence.
+
+## Light reader
+
+A wallet or explorer that only resolves names can import `@duskdomains/sdk/lens-reader`. It reads
+through the release's lens alone, so it fetches the lens driver (364 KB) instead of all seven drivers
+(9.7 MB):
+
+```ts
+import { createLensReader } from '@duskdomains/sdk/lens-reader'
+
+// `release`: the pinned release object, with chainId, network, contracts and lens;
+// `moonlightKey`: a 96-byte Moonlight public key.
+const reader = await createLensReader(release, {
+  nodeUrl: 'https://nodes.dusk.network/',
+  artifactBaseUrl: 'https://dusk.domains/',
+})
+const { status, account } = await reader.resolveMoonlightAccount('example.dusk')
+if (status === 'Active' && account) console.log('send to', account) // Base58; validate it as any address
+const resolved = await reader.resolve('example.dusk', ['moonlight_address', 'website'])
+const primary = await reader.verifyPrimary(moonlightKey) // 96 bytes; VerifiedPrimary or null
+```
+
+It makes the full client's lens checks: the lens's init commitment, `binding` and `lens_interface`
+once, and every reply's evidence against the release, and it asks again for a reply older than one
+it gave. It never reads directly instead: a refusal, a failed check or query, or a read past
+`timeoutMs` (15 s by default) throws a `LensReaderError` with its `reason`. The release must give
+the lens and every store and resolver both `codeHash` and `initHash`, and a store or resolver the
+directory admits later is read only by a release that lists it
+([trust model](docs/integration-trust-model.md#the-light-reader)).
 
 ## Manifest
 
