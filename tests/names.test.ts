@@ -2,11 +2,11 @@ import { expect, it } from 'vitest'
 import {
   normalizeNameInput,
   validateName,
-  analyzeName,
   rootLabelStatus,
   LAUNCH_NAME_POLICY,
   RESERVED_LABELS,
 } from '../src/core/names.ts'
+import { analyzeName } from '../src/core/name-status.ts'
 import { namehashHex, nameKey } from '../src/frozen/bytes.ts'
 import { sample } from './helpers.ts'
 const reserved = [

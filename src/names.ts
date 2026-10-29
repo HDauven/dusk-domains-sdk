@@ -21,11 +21,13 @@ export {
   isDuskName,
   nameProblem,
   nameToShow,
-  normalizeNameInput,
   toDuskName,
+  type NameProblem,
+} from './core/name-rules.ts'
+export {
+  normalizeNameInput,
   validateName,
   type NameIssue,
-  type NameProblem,
   type NameValidationResult,
   type NormalizedName,
   type RootEligibilityPolicy,

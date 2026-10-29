@@ -6,7 +6,8 @@
  * @module
  */
 import { nameKey } from './bytes.ts'
-import { encodeBase58, hasClaimableReferrerShape } from '../core/principal.ts'
+import { encodeBase58 } from '../core/base58.ts'
+import { hasClaimableReferrerShape } from '../core/key-shape.ts'
 import { fetchDriver, validateReleaseManifest } from './manifest.ts'
 import { createHttpTransport, type ReadTransport } from './transport.ts'
 import { elapsed } from './sharing.ts'

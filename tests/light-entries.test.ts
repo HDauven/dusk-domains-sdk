@@ -1,8 +1,8 @@
 /**
  * The light entries run where an app cannot load the rest of the SDK, such as an extension's service
  * worker: importing one reaches only these modules, from the sources' own imports, and nothing it
- * reaches uses the DOM or storage, imports at run time or awaits at the top level. `./accounts` adds
- * the curve code its key check needs, and no reader: an app passes its own.
+ * reaches uses the DOM or storage, imports at run time or awaits at the top level. `./names` hashes
+ * nothing; `./accounts` adds the curve its key check needs, and no reader: an app passes its own.
  */
 import { expect, it } from 'vitest'
 import { readFileSync } from 'node:fs'
@@ -27,10 +27,10 @@ const code = (module: string) =>
   readFileSync(new URL(module, src), 'utf8').replace(/\/\*[\s\S]*?\*\//gu, '').replace(/^\s*\/\/.*$/gmu, '')
 
 it.each([
-  ['names.ts', ['@noble/hashes/blake2.js', 'core/names.ts', 'frozen/bytes.ts', 'frozen/json.ts', 'names.ts']],
-  ['call-facts.ts', ['@noble/hashes/blake2.js', 'call-facts.ts', 'core/base58.ts', 'core/call-facts.ts', 'core/releases.ts', 'frozen/bytes.ts']],
+  ['names.ts', ['core/name-rules.ts', 'core/names.ts', 'names.ts']],
+  ['call-facts.ts', ['@noble/hashes/blake2.js', 'call-facts.ts', 'core/base58.ts', 'core/call-facts.ts', 'core/name-rules.ts', 'core/releases.ts', 'frozen/bytes.ts']],
   ['releases.ts', ['core/releases.ts', 'releases.ts']],
-  ['accounts.ts', ['@noble/curves/bls12-381.js', '@noble/hashes/blake2.js', 'accounts.ts', 'core/accounts.ts', 'core/base58.ts', 'core/principal.ts', 'frozen/bytes.ts']],
+  ['accounts.ts', ['@noble/curves/bls12-381.js', 'accounts.ts', 'core/accounts.ts', 'core/base58.ts', 'core/endpoint.ts', 'core/key-shape.ts']],
 ])('./%s reaches only its own few modules, safe in a service worker', (entry, modules) => {
   const all = reached(entry)
   expect(all).toEqual(modules)
@@ -38,4 +38,10 @@ it.each([
     expect(code(module), module).not.toMatch(/\b(?:window|document|localStorage|sessionStorage|indexedDB)\b|\bimport\s*\(/u)
     expect(code(module), module).not.toMatch(/^(?:export\s+)?(?:const|let|var)\s[^\n]*=\s*await\b|^await\b/mu)
   }
+})
+
+it('./lens-reader reaches no curve: only ./accounts and the root load it', () => {
+  const modules = reached('lens-reader.ts')
+  expect(modules).toContain('frozen/lens-reader.ts')
+  expect(modules.filter((m) => m.startsWith('@noble/curves') || ['core/endpoint.ts', 'core/principal.ts'].includes(m))).toEqual([])
 })

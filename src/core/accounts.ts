@@ -1,6 +1,6 @@
 /** What a `.dusk` name points to: its public account, checked as a valid key, and its shielded address. @module */
 import { decodeBase58, encodeBase58 } from './base58.ts'
-import { isMoonlightEndpoint } from './principal.ts'
+import { isMoonlightEndpoint } from './endpoint.ts'
 import type { LensReader } from '../frozen/lens-reader.ts'
 import type { NameLifecycle, Resolved } from '../frozen/lens.ts'
 /** What a name points to, as `resolveAccounts` reads it. */

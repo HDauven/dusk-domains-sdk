@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.1 (2026-10-30)
+
+- Keep the curve out of `./lens-reader` and hashing out of `./names` in apps that split code.
+
 ## 0.6.0 (2026-10-29)
 
 - Add `@duskdomains/sdk/names`: `isDuskName`, `toDuskName`, `nameProblem`, `asDuskName`, `closeDuskName` and `nameToShow`, also in the root.

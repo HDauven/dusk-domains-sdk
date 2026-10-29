@@ -1,6 +1,6 @@
 {
   "name": "@duskdomains/sdk",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -86,6 +86,7 @@
     "@dusk/connect": "npm:@jsr/dusk__connect@^0.2.0",
     "@types/node": "^24.12.3",
     "fast-check": "^4.10.2",
+    "rolldown": "^1.1.4",
     "typescript": "~6.0.2",
     "vitest": "^4.1.9"
   }
