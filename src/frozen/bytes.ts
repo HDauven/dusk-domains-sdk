@@ -1,5 +1,6 @@
 /** Byte and frozen identity helpers. @module */
 import { blake2b } from '@noble/hashes/blake2.js'
+import { validateLabel } from '../core/name-rules.ts'
 import type {
   Authority,
   Digest,
@@ -63,11 +64,7 @@ export function hash(
   }
   return Array.from(blake2b(bytes, { dkLen: 32 }))
 }
-/** Throw unless `label` is canonical: 1 to 63 lowercase ASCII letters, digits and inner hyphens. */
-export function validateLabel(label: string): void {
-  if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u.test(label))
-    throw new Error('Expected a canonical 1–63 byte ASCII label')
-}
+export { validateLabel }
 /** Node of `label` under `parent`: `hash(parent, hash(label))`. */
 export function childNode(parent: Node, label: string): Node {
   if (parent.length !== 32) throw new Error('Invalid parent node')

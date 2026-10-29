@@ -2,7 +2,7 @@
 
 TypeScript SDK for the ADR 0004 frozen layer: directory, store shards,
 registry-qualified resolvers, vault, replaceable policy and marketplace v1.
-Version **0.6.0** targets a fresh frozen deployment. The 0.2 router/core/treasury
+Version **0.6.1** targets a fresh frozen deployment. The 0.2 router/core/treasury
 clients and legacy events have been removed.
 
 ## Quickstart
@@ -100,9 +100,10 @@ const resolved = await reader.resolve('example.dusk', ['moonlight_address', 'web
 
 `resolveAccounts` (`@duskdomains/sdk/accounts`) gives an active name's public account only when its
 `moonlight_address` record is a valid Moonlight key, on the curve as the protocol checks a key, and its
-shielded address only when the `phoenix_payment_endpoint` record is exactly one, as text. Its curve check
-adds about 70 KB (25 KB gzipped) to an app beside the reader, which is why it has an entry of its own;
-`./lens-reader` carries none of it.
+shielded address only when the `phoenix_payment_endpoint` record is exactly one, as text. Its curve
+check is why it has an entry of its own: built with Vite 8, an app that loads `./lens-reader` and
+`./accounts` on demand loads the curve, 67 KB (24 KB gzipped), only with `./accounts`, and the reader's
+138 KB (32 KB gzipped) carries none of it.
 
 It makes the full client's lens checks: the lens's init commitment, `binding` and `lens_interface`
 once, and every reply's evidence against the release, and it asks again for a reply older than one
@@ -117,7 +118,9 @@ directory admits later is read only by a release that lists it
 Three small entrypoints run synchronously wherever an app runs, an extension's service worker
 included: they use no DOM, storage, dynamic import or top-level await, and load nothing else of the
 SDK. Bundled and minified, `./names` is 3 KB, `./releases` 7 KB and `./call-facts`, with the releases
-and BLAKE2b, 19 KB (1.6, 2.1 and 7.3 KB gzipped).
+and BLAKE2b, 19 KB (1.6, 2.1 and 7.3 KB gzipped). That holds where an app splits code: built with
+Vite 8, a page that imports `./names` and loads `./lens-reader` on demand loads 2.4 KB of the SDK up
+front and no hashing, and `./call-facts` stays one chunk for a service worker.
 
 ```ts
 import { asDuskName, closeDuskName, isDuskName, nameProblem, toDuskName } from '@duskdomains/sdk/names'

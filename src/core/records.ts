@@ -14,7 +14,8 @@ import type {
   RecordValue,
   RecordMutation,
 } from '../frozen/types.ts'
-import { decodeBase58, isMoonlightEndpoint } from './principal.ts'
+import { decodeBase58 } from './base58.ts'
+import { isMoonlightEndpoint } from './endpoint.ts'
 /** Most records one name can hold. */
 export const MAX_RECORDS_PER_NAME = 16
 /** Most mutations one `mutate_records` call can apply. */

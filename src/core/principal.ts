@@ -1,9 +1,12 @@
 /** Typed frozen principals. Phoenix has no holder/claim authority in v1. @module */
-import { bls12_381 } from '@noble/curves/bls12-381.js'
 import { authority, contractId, fromHex, hex } from '../frozen/bytes.ts'
 import { decodeBase58 } from './base58.ts'
+import { isMoonlightEndpoint } from './endpoint.ts'
+import { hasClaimableReferrerShape } from './key-shape.ts'
 import type { TypedPrincipal } from '../frozen/types.ts'
 export { decodeBase58, encodeBase58 } from './base58.ts'
+export { isMoonlightEndpoint } from './endpoint.ts'
+export { hasClaimableReferrerShape } from './key-shape.ts'
 /** Same as `TypedPrincipal`. */
 export type DuskPrincipal = TypedPrincipal
 /** Result of `typedPrincipalFromWalletAccount`: the principal and its source, or why the account was refused. */
@@ -18,46 +21,6 @@ export type DuskPrincipalResult =
 export type ContractPrincipalResult =
   | { ok: true; principal: string; source: 'moonlight_account' | 'contract_id' }
   | { ok: false; reason: 'empty' | 'invalid_account' | 'ambiguous_principal' }
-/** Mirrors the cheap referrer check in principals.rs; not a curve or subgroup proof. */
-export function hasClaimableReferrerShape(
-  p: TypedPrincipal | null | undefined,
-): boolean {
-  if (!p || !p.bytes.every((b) => Number.isInteger(b) && b >= 0 && b <= 255))
-    return false
-  if (p.kind === 'Contract')
-    return p.bytes.length === 32 && p.bytes.some((b) => b !== 0)
-  if (
-    p.kind !== 'Moonlight' ||
-    p.bytes.length !== 96 ||
-    (p.bytes[0] & 0xc0) !== 0x80
-  )
-    return false
-  const modulus = BigInt(
-    '0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab',
-  )
-  const first = [...p.bytes.slice(0, 48)]
-  first[0] &= 0x1f
-  return (
-    BigInt(`0x${hex(first)}`) < modulus &&
-    BigInt(`0x${hex(p.bytes.slice(48))}`) < modulus
-  )
-}
-/** Full canonical compressed BLS endpoint check, matching validate_endpoint. */
-export function isMoonlightEndpoint(
-  bytes: readonly number[] | Uint8Array,
-): boolean {
-  if (
-    !hasClaimableReferrerShape({ kind: 'Moonlight', bytes: Array.from(bytes) })
-  )
-    return false
-  try {
-    const point = bls12_381.G2.Point.fromBytes(Uint8Array.from(bytes))
-    point.assertValidity()
-    return !point.is0() && point.toBytes().every((b, i) => b === bytes[i])
-  } catch {
-    return false
-  }
-}
 /**
  * Whether `p` can collect referral rewards: a nonzero contract ID, or a canonical, non-identity
  * compressed BLS Moonlight key.
