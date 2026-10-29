@@ -78,6 +78,14 @@ it('imports every runtime entrypoint from an npm tarball in plain Node without a
       assert.equal(typeof projection.projectReceipt, 'function');
       const addresses = await import('@duskdomains/sdk/chain-addresses');
       assert.deepEqual(addresses.validateEthereumAddress('0x0000000000000000000000000000000000000000'), []);
+      const names = await import('@duskdomains/sdk/names');
+      assert.equal(names.toDuskName(' Alice.dusk '), 'alice.dusk');
+      const releases = await import('@duskdomains/sdk/releases');
+      const store = releases.PINNED_RELEASES.testnet.contracts.find((c) => c.role === 'store').contractId;
+      const facts = await import('@duskdomains/sdk/call-facts');
+      assert.deepEqual(facts.nameCall({ contractId: store, fnName: 'renew' }, 'testnet'), { role: 'store', kind: 'renewal' });
+      const accounts = await import('@duskdomains/sdk/accounts');
+      assert.deepEqual(await accounts.resolveAccounts({ resolve: async () => ({ status: 'Absent', height: 1n, records: [] }) }, 'a.dusk'), { status: 'Absent', height: 1n });
       console.log(JSON.stringify(${JSON.stringify(specifiers)}));
     `,
     )
@@ -89,7 +97,7 @@ it('imports every runtime entrypoint from an npm tarball in plain Node without a
         timeout: 30_000,
       }),
     )
-    expect(imported).toHaveLength(9)
+    expect(imported).toHaveLength(13)
     expect(imported).toEqual(specifiers)
     for (const entry of Object.values(manifest.exports) as {
       types: string
