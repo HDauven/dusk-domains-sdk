@@ -110,7 +110,11 @@ export interface LensReader {
   resolve(name: string, recordKeys?: readonly string[]): Promise<Resolved>
   /** The verified primary name of a 96-byte Moonlight key, or null, as `client.verifyPrimary` returns it. */
   verifyPrimary(endpoint: readonly number[] | Uint8Array): Promise<VerifiedPrimary | null>
-  /** `resolve(name)`, reduced to the name's lifecycle and, when it is active, its Moonlight account. */
+  /**
+   * `resolve(name)`, reduced to the name's lifecycle and, when it is active, its Moonlight account.
+   * @deprecated It checks the key's shape only; `resolveAccounts` in `./accounts` checks that it is
+   * a valid key.
+   */
   resolveMoonlightAccount(name: string): Promise<MoonlightAccount>
 }
 

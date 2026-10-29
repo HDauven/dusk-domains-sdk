@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0 (2026-10-29)
+
+- Add `@duskdomains/sdk/names`: `isDuskName`, `toDuskName`, `nameProblem`, `asDuskName`, `closeDuskName` and `nameToShow`, also in the root.
+- Add `@duskdomains/sdk/call-facts`: `nameCall` reads what a call to Dusk Domains does and which name it registers; `revealsReservation` matches a reservation to its registration.
+- Add `@duskdomains/sdk/releases`: the release mainnet and testnet run (`PINNED_RELEASES`), `releaseFor` and `contractRole`.
+- Add `@duskdomains/sdk/accounts`: `resolveAccounts`, a name's public account, checked as a valid key, and its shielded address; deprecate `resolveMoonlightAccount`.
+- Export `decodeBase58` and `encodeBase58` from `./lens-reader`.
+
 ## 0.5.4 (2026-10-22)
 
 - Add `@duskdomains/sdk/lens-reader`: `createLensReader` resolves names and verifies primaries through the lens alone, fetching only its driver.

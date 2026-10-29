@@ -1,6 +1,6 @@
-# Public surface in 0.5.4
+# Public surface in 0.6.0
 
-The npm and JSR export maps contain the same nine entrypoints. npm resolves
+The npm and JSR export maps contain the same thirteen entrypoints. npm resolves
 runtime imports to compiled JavaScript and types to declarations in `dist`; its
 `event-catalog` export uses the generated standalone `.mjs` catalog. Plain Node
 consumers need no TypeScript loader. JSR continues to export TypeScript sources.
@@ -15,7 +15,11 @@ consumers need no TypeScript loader. JSR continues to export TypeScript sources.
 | `@duskdomains/sdk/projection`      | Receipt journals, projection, projected reads, digest helpers and event catalog                                                                                                             |
 | `@duskdomains/sdk/indexer`         | Projection HTTP response types, `createDuskDomainsIndexerClient`, `createIndexerClientFromManifest`, `collectIndexerPages`, `waitForIndexerWrite`                                           |
 | `@duskdomains/sdk/chain-addresses` | Ethereum, Bitcoin and Solana address validators; retained as public                                                                                                                         |
-| `@duskdomains/sdk/lens-reader`     | `createLensReader`, `LensReader`, `LensReaderError`, `MoonlightAccount`: `resolve`, `verifyPrimary` and `resolveMoonlightAccount` through the release's lens alone, with its driver only |
+| `@duskdomains/sdk/lens-reader`     | `createLensReader`, `LensReader`, `LensReaderError`, `MoonlightAccount`: `resolve`, `verifyPrimary` and `resolveMoonlightAccount` (deprecated) through the release's lens alone, with its driver only; `decodeBase58`, `encodeBase58` |
+| `@duskdomains/sdk/accounts`        | `resolveAccounts`, `NameAccounts`: what a name points to, read with a light reader, its account checked as a valid key on the curve and its shielded address |
+| `@duskdomains/sdk/names`           | `isDuskName`, `toDuskName`, `nameProblem`, `asDuskName`, `closeDuskName`, `nameToShow`, with `validateName` and `normalizeNameInput`: names as people type them, also in the root |
+| `@duskdomains/sdk/call-facts`      | `nameCall`, `revealsReservation`, `NameCall`, `NameCallKind`, `ContractCall`: what a call to a network's Dusk Domains contract does, a registration's name and the reservation it reveals |
+| `@duskdomains/sdk/releases`        | `PINNED_RELEASES`, `releaseFor`, `contractRole`, `PinnedRelease`, `PinnedContract`: the release mainnet and testnet run, and a contract's role in it |
 
 `./internal` and `./write-proof` are removed with the legacy clients. The old
 `*_runtime` names, router/core/treasury presets, hand-written legacy wire shapes,
@@ -109,7 +113,7 @@ All of these are also exported from the root entrypoint:
 
 | Family        | Helpers / types                                                                                                                                                                                                      |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Names         | `normalizeNameInput`, `validateName`, `analyzeName`, `NameResult`, `NameStatus`, `namehashHex`, `rootLabelStatus`, `RESERVED_LABELS`                                                                                 |
+| Names         | `normalizeNameInput`, `validateName`, `analyzeName`, `NameResult`, `NameStatus`, `namehashHex`, `rootLabelStatus`, `RESERVED_LABELS`, and `./names`'s typed-input rules                                            |
 | Pricing       | `quoteRegistration` (store/selected policy), `estimateRegistrationQuote`, `launchPolicyConfig`, `registrationPremiumSchedule`, `PREMIUM_WINDOW_DAYS`, `estimateRenewalQuote`, `referralRewardLux`, `formatLuxAsDusk` |
 | Lifecycle     | `createRegistrationLifecycle`, `renewRegistrationLifecycle`, `registrationLifecycleStatus`, `blockHeightToUnixSeconds`, `blocksForSeconds`, block constants                                                          |
 | Commit/reveal | `createRegistrationSecret`, `registrationCommitmentHex`, `registrationCommitWindow`, reveal-window constants                                                                                                         |

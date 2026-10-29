@@ -4,8 +4,9 @@
  * Import the root for the client and the core API: `createClientFromManifest` and
  * `FrozenClient` for verified reads, the frozen wire types, lossless JSON, helpers for
  * names, commitments, pricing and records, the write builders and the indexer client.
- * `./writes`, `./marketplace` and `./indexer` are narrower imports of parts of it;
- * `./connect-app`, `./projection`, `./event-catalog` and `./chain-addresses` hold the rest.
+ * `./writes`, `./marketplace`, `./indexer` and `./names` are narrower imports of parts of it;
+ * `./connect-app`, `./projection`, `./event-catalog`, `./chain-addresses`, `./lens-reader`,
+ * `./accounts`, `./call-facts` and `./releases` hold the rest.
  *
  * @module
  */

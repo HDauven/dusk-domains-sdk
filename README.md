@@ -2,7 +2,7 @@
 
 TypeScript SDK for the ADR 0004 frozen layer: directory, store shards,
 registry-qualified resolvers, vault, replaceable policy and marketplace v1.
-Version **0.5.4** targets a fresh frozen deployment. The 0.2 router/core/treasury
+Version **0.6.0** targets a fresh frozen deployment. The 0.2 router/core/treasury
 clients and legacy events have been removed.
 
 ## Quickstart
@@ -81,19 +81,28 @@ through the release's lens alone, so it fetches the lens driver (364 KB) instead
 (9.7 MB):
 
 ```ts
-import { createLensReader } from '@duskdomains/sdk/lens-reader'
+import { createLensReader, decodeBase58 } from '@duskdomains/sdk/lens-reader'
+import { resolveAccounts } from '@duskdomains/sdk/accounts'
+import { PINNED_RELEASES } from '@duskdomains/sdk/releases'
 
-// `release`: the pinned release object, with chainId, network, contracts and lens;
-// `moonlightKey`: a 96-byte Moonlight public key.
+const release = PINNED_RELEASES.mainnet
 const reader = await createLensReader(release, {
   nodeUrl: 'https://nodes.dusk.network/',
-  artifactBaseUrl: 'https://dusk.domains/',
+  artifactBaseUrl: release.artifactBaseUrl,
 })
-const { status, account } = await reader.resolveMoonlightAccount('example.dusk')
-if (status === 'Active' && account) console.log('send to', account) // Base58; validate it as any address
+const to = await resolveAccounts(reader, 'example.dusk') // { status, height, account?, address? }
+if (to.account) {
+  console.log('send to', to.account) // a valid key, in Base58
+  const primary = await reader.verifyPrimary(decodeBase58(to.account)!) // VerifiedPrimary or null
+}
 const resolved = await reader.resolve('example.dusk', ['moonlight_address', 'website'])
-const primary = await reader.verifyPrimary(moonlightKey) // 96 bytes; VerifiedPrimary or null
 ```
+
+`resolveAccounts` (`@duskdomains/sdk/accounts`) gives an active name's public account only when its
+`moonlight_address` record is a valid Moonlight key, on the curve as the protocol checks a key, and its
+shielded address only when the `phoenix_payment_endpoint` record is exactly one, as text. Its curve check
+adds about 70 KB (25 KB gzipped) to an app beside the reader, which is why it has an entry of its own;
+`./lens-reader` carries none of it.
 
 It makes the full client's lens checks: the lens's init commitment, `binding` and `lens_interface`
 once, and every reply's evidence against the release, and it asks again for a reply older than one
@@ -102,6 +111,38 @@ it gave. It never reads directly instead: a refusal, a failed check or query, or
 the lens and every store and resolver both `codeHash` and `initHash`, and a store or resolver the
 directory admits later is read only by a release that lists it
 ([trust model](docs/integration-trust-model.md#the-light-reader)).
+
+## Names, calls and releases for apps
+
+Three small entrypoints run synchronously wherever an app runs, an extension's service worker
+included: they use no DOM, storage, dynamic import or top-level await, and load nothing else of the
+SDK. Bundled and minified, `./names` is 3 KB, `./releases` 7 KB and `./call-facts`, with the releases
+and BLAKE2b, 19 KB (1.6, 2.1 and 7.3 KB gzipped).
+
+```ts
+import { asDuskName, closeDuskName, isDuskName, nameProblem, toDuskName } from '@duskdomains/sdk/names'
+import { nameCall, revealsReservation } from '@duskdomains/sdk/call-facts'
+import { contractRole, releaseFor } from '@duskdomains/sdk/releases'
+
+isDuskName(typed) // meant as a name: ends in .dusk and is not a dusk: link
+toDuskName(' Alice.dusk ') // 'alice.dusk'; null unless it is a valid name
+nameProblem('bad_name.dusk') // 'characters'; the app words it
+asDuskName('alice') // 'alice.dusk', for "Did you mean alice.dusk?"
+closeDuskName('alcie.dusk', knownNames) // the closest known name, one or two edits away
+contractRole(contractId, 'testnet') // 'store', …, 'lens', or undefined for other contracts
+releaseFor(2)?.site // 'https://testnet.dusk.domains'
+const call = nameCall({ contractId, fnName, args }, 'testnet', sender) // { role, kind, name?, reservation? }
+revealsReservation(call, nameCall(commit, 'testnet')) // the registration reveals that reservation
+```
+
+`nameCall` says what a call to Dusk Domains does (`reservation`, `registration`, `renewal`, `issue`,
+`subname`, `records`, `primary-set`, `primary-cleared` or `other`), only for a contract of the given
+network's release. A registration's `name` is read from its arguments as the store checks it: a
+canonical label whose node is the one the call names. Its `reservation` is the commitment it reveals
+when `sender`, the account that sent it, is the one it commits to; `revealsReservation` tells whether
+a reservation and a later registration from the same account are for that name. `nameToShow` tells
+whether a verified name may be shown beside an account. `PINNED_RELEASES` is the release mainnet and
+testnet run, which `releaseFor` finds by network name or chain ID and `createLensReader` takes as it is.
 
 ## Manifest
 

@@ -1,6 +1,6 @@
 {
   "name": "@duskdomains/sdk",
-  "version": "0.5.4",
+  "version": "0.6.0",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
@@ -43,6 +43,22 @@
     "./lens-reader": {
       "types": "./dist/lens-reader.d.ts",
       "import": "./dist/lens-reader.js"
+    },
+    "./names": {
+      "types": "./dist/names.d.ts",
+      "import": "./dist/names.js"
+    },
+    "./call-facts": {
+      "types": "./dist/call-facts.d.ts",
+      "import": "./dist/call-facts.js"
+    },
+    "./releases": {
+      "types": "./dist/releases.d.ts",
+      "import": "./dist/releases.js"
+    },
+    "./accounts": {
+      "types": "./dist/accounts.d.ts",
+      "import": "./dist/accounts.js"
     }
   },
   "files": [

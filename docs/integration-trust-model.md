@@ -434,10 +434,12 @@ when that one could not be read. A store or resolver the directory admits after 
 every reply that names it, and every reply names every store: the reader then fails each read until the
 app pins a release that lists it, where the full client can admit it through `resolveContract`. The
 deployment check and the heights and store marks it holds replies to are per reader, never kept in a
-`verificationCache`. `resolveMoonlightAccount` gives an account only for an active name whose
-`moonlight_address` has a compressed key's shape (96 bytes, not the identity, coordinates in the
-field); it runs no curve check, which `isMoonlightEndpoint` in the root does, so a wallet validates the
-key as it validates any address.
+`verificationCache`. `resolveAccounts(reader, name)`, in `./accounts`, gives an account only for an
+active name whose `moonlight_address` is a valid key, as `isMoonlightEndpoint` checks it (canonical,
+compressed, not the identity, on the curve and in its subgroup), and a shielded address only where
+`phoenix_payment_endpoint` is exactly the text of one, a Base58 string of 64 bytes; a wallet still
+checks either as it checks any address. The deprecated `resolveMoonlightAccount` checks the key's shape
+only (96 bytes, not the identity, coordinates in the field).
 
 ### Batched reads
 
